@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PayrollRecord, Employee } from '../types';
 import { 
   DollarSign, 
@@ -57,6 +57,24 @@ export default function PayrollManagement({
     return String(idx + 1).padStart(2, '0');
   };
 
+  const generateVoucherNo = (year: number, month: string, period: string, employeeId: string) => {
+    const mNum = getMonthCode(month);
+    let dayStr = '15';
+    if (period !== '1-15') {
+      const monthIdx = THAI_MONTHS.indexOf(month);
+      if (monthIdx !== -1) {
+        const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+        dayStr = String(lastDay).padStart(2, '0');
+      } else {
+        dayStr = '30';
+      }
+    }
+    const datePart = `${year}${mNum}${dayStr}`;
+    const cleanEmpId = employeeId.replace(/^EMP-/i, '').trim();
+    const suffix = period === '1-15' ? `115${cleanEmpId}` : `21631${cleanEmpId}`;
+    return `PV-${datePart}-${suffix}`;
+  };
+
   // Filters
   const [monthFilter, setMonthFilter] = useState('มิถุนายน');
   const [yearFilter, setYearFilter] = useState<number>(2026);
@@ -104,6 +122,13 @@ export default function PayrollManagement({
     return () => clearTimeout(timer);
   };
 
+  // Auto-update Voucher No in "Add" mode when inputs change
+  useEffect(() => {
+    if (formMode === 'add' && formEmployeeId) {
+      setFormVoucherNo(generateVoucherNo(formYear, formMonth, formPeriod, formEmployeeId));
+    }
+  }, [formEmployeeId, formMonth, formYear, formPeriod, formMode]);
+
   // Auto calculate values on salary change
   const handleEmployeeChange = (empId: string) => {
     setFormEmployeeId(empId);
@@ -123,8 +148,7 @@ export default function PayrollManagement({
       setFormSocialSecurity(sso);
       
       // Auto-generate voucher number
-      const dateSuffix = Date.now().toString().slice(-4);
-      setFormVoucherNo(`PV-${yearFilter}${getMonthCode(monthFilter)}-${dateSuffix}`);
+      setFormVoucherNo(generateVoucherNo(yearFilter, monthFilter, formPeriod, empId));
     }
   };
 
@@ -197,7 +221,7 @@ export default function PayrollManagement({
         socialSecurity: sso,
         status: 'pending',
         period: periodFilter === 'all' ? '1-15' : periodFilter,
-        voucherNo: `PV-${yearFilter}${mCode}-${randSuffix}`
+        voucherNo: generateVoucherNo(yearFilter, monthFilter, periodFilter === 'all' ? '1-15' : periodFilter, emp.id)
       });
 
       totalAmount += Math.max(0, net);
@@ -259,7 +283,7 @@ export default function PayrollManagement({
     setFormDeductions(record.deductions);
     setFormTax(record.tax);
     setFormSocialSecurity(record.socialSecurity);
-    setFormVoucherNo(record.voucherNo || `PV-${record.year}${getMonthCode(record.month)}-${record.id.split('-')[1] || '001'}`);
+    setFormVoucherNo(record.voucherNo || generateVoucherNo(record.year, record.month, record.period || '1-15', record.employeeId));
     setFormStatus(record.status);
     setIsFormOpen(true);
   };
@@ -285,7 +309,7 @@ export default function PayrollManagement({
       socialSecurity: formSocialSecurity,
       status: formStatus,
       period: formPeriod,
-      voucherNo: formVoucherNo || `PV-${formYear}${getMonthCode(formMonth)}-${Math.floor(Math.random() * 9000 + 1000)}`
+      voucherNo: formVoucherNo || generateVoucherNo(formYear, formMonth, formPeriod, formEmployeeId)
     };
 
     if (formMode === 'add') {
@@ -377,9 +401,7 @@ export default function PayrollManagement({
   // Helper to generate a default voucher number for view if not present
   const getVoucherNo = (p: PayrollRecord) => {
     if (p.voucherNo) return p.voucherNo;
-    const mNum = getMonthCode(p.month);
-    const idPart = p.id.split('-')[1] || '001';
-    return `PV-${p.year}${mNum}-${idPart}`;
+    return generateVoucherNo(p.year, p.month, p.period || '1-15', p.employeeId);
   };
 
   return (
@@ -919,107 +941,234 @@ export default function PayrollManagement({
             <div id="print-envelope" className="p-6 border-4 border-slate-200 rounded-sm bg-slate-50/20 font-sans text-xs text-slate-700">
               
               {modalViewType === 'payslip' ? (
-                /* PAYSLIP VIEW */
-                <div className="space-y-6">
-                  {/* Slip Header */}
-                  <div className="text-center space-y-1 pb-4 border-b border-slate-200">
-                    <h1 className="text-base font-extrabold text-slate-900 tracking-wide">ใบแจ้งยอดเงินเดือนและรายได้พนักงาน (Payslip)</h1>
-                    <h2 className="text-xs font-semibold text-slate-500 uppercase">สยาม ดีเวลลอปเปอร์ สตาร์ทอัพ จำกัด (สำนักงานใหญ่)</h2>
-                    <p className="text-[10px] text-slate-400 font-mono">
-                      รอบเดือน: {selectedRecord.month} / ปี {selectedRecord.year} ({getPeriodLabel(selectedRecord.period)})
-                    </p>
-                  </div>
-
-                  {/* Identity details */}
-                  <div className="grid grid-cols-2 gap-4 py-4 border-b border-dashed border-slate-200 text-slate-600">
-                    <div className="space-y-1.5">
-                      <p><strong>ชื่อ-นามสกุล:</strong> {selectedRecord.employeeName}</p>
-                      <p><strong>รหัสพนักงาน:</strong> {selectedRecord.employeeId}</p>
-                      <p><strong>บัญชีธนาคาร:</strong> {
-                        employees.find(e => e.id === selectedRecord.employeeId)?.bankAccount || 'กสิกรไทย 123-X-XXXXX-X'
-                      }</p>
+                /* PAYSLIP VIEW - 2 COPIES ON ONE PAGE */
+                <div className="space-y-8">
+                  
+                  {/* SET 1: EMPLOYEE COPY */}
+                  <div className="relative border border-dashed border-blue-250 p-5 rounded-sm bg-white shadow-2xs">
+                    <div className="absolute top-3 right-3 px-2 py-0.5 bg-blue-50 text-blue-700 text-[9px] font-bold rounded uppercase tracking-wider no-print">
+                      ส่วนของพนักงาน / Employee Copy
                     </div>
-                    <div className="space-y-1.5 text-right">
-                      <p><strong>ฝ่าย/แผนก:</strong> {
-                        employees.find(e => e.id === selectedRecord.employeeId)?.department || 'Engineering'
-                      }</p>
-                      <p><strong>เลขที่ใบสำคัญจ่าย:</strong> <span className="font-mono font-bold text-slate-900">{getVoucherNo(selectedRecord)}</span></p>
-                      <p><strong>สถานะเอกสาร:</strong> <span className={`font-bold uppercase ${selectedRecord.status === 'paid' ? 'text-emerald-600' : 'text-amber-500'}`}>
-                        {selectedRecord.status === 'paid' ? 'PAID (ชำระเงินแล้ว)' : 'PENDING (รอจ่ายเงิน)'}
-                      </span></p>
-                    </div>
-                  </div>
+                    
+                    <div className="space-y-5">
+                      {/* Slip Header */}
+                      <div className="text-center space-y-1 pb-3 border-b border-slate-200">
+                        <h1 className="text-sm font-extrabold text-slate-900 tracking-wide">ใบแจ้งยอดเงินเดือนและรายได้พนักงาน (Payslip)</h1>
+                        <h2 className="text-[11px] font-semibold text-slate-500 uppercase">บริษัทอภิวัฒน์เครื่องครัวจำกัด (สำนักงานใหญ่)</h2>
+                        <p className="text-[9px] text-slate-400 font-mono">
+                          รอบเดือน: {selectedRecord.month} / ปี {selectedRecord.year} ({getPeriodLabel(selectedRecord.period)}) - <span className="text-blue-600 font-bold">ส่วนของพนักงาน</span>
+                        </p>
+                      </div>
 
-                  {/* Earnings & Deductions grid layout */}
-                  <div className="grid grid-cols-2 gap-0 border-b border-slate-200">
-                    {/* Earnings (รายได้) */}
-                    <div className="border-r border-slate-200 p-4 space-y-3.5">
-                      <span className="font-extrabold text-slate-900 block text-xs border-b border-slate-100 pb-1 uppercase tracking-wide">รายได้ / Earnings</span>
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between">
-                          <span>เงินเดือนฐาน (Base Salary)</span>
-                          <span className="font-mono">฿{selectedRecord.baseSalary.toLocaleString()}</span>
+                      {/* Identity details */}
+                      <div className="grid grid-cols-2 gap-4 py-2 border-b border-dashed border-slate-200 text-slate-650 text-[11px]">
+                        <div className="space-y-1">
+                          <p><strong>ชื่อ-นามสกุล:</strong> {selectedRecord.employeeName}</p>
+                          <p><strong>รหัสพนักงาน:</strong> {selectedRecord.employeeId}</p>
+                          <p><strong>บัญชีธนาคาร:</strong> {
+                            employees.find(e => e.id === selectedRecord.employeeId)?.bankAccount || 'กสิกรไทย 123-X-XXXXX-X'
+                          }</p>
                         </div>
-                        <div className="flex justify-between">
-                          <span>ค่าวิชาชีพ / สวัสดิการพิเศษ</span>
-                          <span className="font-mono">฿{selectedRecord.allowances.toLocaleString()}</span>
+                        <div className="space-y-1 text-right">
+                          <p><strong>ฝ่าย/แผนก:</strong> {
+                            employees.find(e => e.id === selectedRecord.employeeId)?.department || 'Engineering'
+                          }</p>
+                          <p><strong>เลขที่ใบสำคัญจ่าย:</strong> <span className="font-mono font-bold text-slate-900">{getVoucherNo(selectedRecord)}</span></p>
+                          <p><strong>สถานะเอกสาร:</strong> <span className={`font-bold uppercase ${selectedRecord.status === 'paid' ? 'text-emerald-600' : 'text-amber-500'}`}>
+                            {selectedRecord.status === 'paid' ? 'PAID (ชำระเงินแล้ว)' : 'PENDING (รอจ่ายเงิน)'}
+                          </span></p>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Deductions (รายการหัก) */}
-                    <div className="p-4 space-y-3.5 bg-slate-50/40">
-                      <span className="font-extrabold text-slate-900 block text-xs border-b border-slate-100 pb-1 uppercase tracking-wide">รายการหัก / Deductions</span>
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between">
-                          <span>ภาษีเงินได้ หัก ณ ที่จ่าย</span>
-                          <span className="font-mono text-rose-500">-฿{selectedRecord.tax.toLocaleString()}</span>
+                      {/* Earnings & Deductions grid layout */}
+                      <div className="grid grid-cols-2 gap-0 border-b border-slate-200 text-[11px]">
+                        {/* Earnings (รายได้) */}
+                        <div className="border-r border-slate-200 p-3 space-y-2">
+                          <span className="font-extrabold text-slate-900 block text-xs border-b border-slate-100 pb-1 uppercase tracking-wide">รายได้ / Earnings</span>
+                          <div className="space-y-1">
+                            <div className="flex justify-between">
+                              <span>เงินเดือนฐาน (Base Salary)</span>
+                              <span className="font-mono">฿{selectedRecord.baseSalary.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>ค่าวิชาชีพ / สวัสดิการพิเศษ</span>
+                              <span className="font-mono">฿{selectedRecord.allowances.toLocaleString()}</span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span>เงินประกันสังคม (Social Security)</span>
-                          <span className="font-mono text-rose-500">-฿{selectedRecord.socialSecurity.toLocaleString()}</span>
+
+                        {/* Deductions (รายการหัก) */}
+                        <div className="p-3 space-y-2 bg-slate-50/40">
+                          <span className="font-extrabold text-slate-900 block text-xs border-b border-slate-100 pb-1 uppercase tracking-wide">รายการหัก / Deductions</span>
+                          <div className="space-y-1">
+                            <div className="flex justify-between">
+                              <span>ภาษีเงินได้ หัก ณ ที่จ่าย</span>
+                              <span className="font-mono text-rose-500">-฿{selectedRecord.tax.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>เงินประกันสังคม (Social Security)</span>
+                              <span className="font-mono text-rose-500">-฿{selectedRecord.socialSecurity.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>กองทุนสำรองชีพ (Provident Fund)</span>
+                              <span className="font-mono text-rose-500">-฿{selectedRecord.deductions.toLocaleString()}</span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span>กองทุนสำรองชีพ (Provident Fund)</span>
-                          <span className="font-mono text-rose-500">-฿{selectedRecord.deductions.toLocaleString()}</span>
+                      </div>
+
+                      {/* Calculation Summary Sheet */}
+                      <div className="p-3.5 bg-slate-900 text-white rounded-sm space-y-2.5">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="text-[9px] text-slate-400 block uppercase tracking-wide font-mono">รายจ่ายรวมของบริษัทสุทธิ</span>
+                            <span className="text-sm font-extrabold font-mono">฿{(selectedRecord.baseSalary + selectedRecord.allowances).toLocaleString()}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[9px] text-blue-400 block uppercase tracking-wide font-mono">รายรับสุทธิพนักงาน (Net Salary Payout)</span>
+                            <span className="text-base font-extrabold font-mono text-blue-400">฿{selectedRecord.netSalary.toLocaleString()}</span>
+                          </div>
+                        </div>
+                        <div className="border-t border-slate-800 pt-1.5 flex flex-col sm:flex-row justify-between text-[9px] font-medium tracking-wide">
+                          <div className="text-slate-400">
+                            รายจ่ายบริษัทตัวอักษร: <span className="text-slate-200">({convertToThaiBahtText(selectedRecord.baseSalary + selectedRecord.allowances)})</span>
+                          </div>
+                          <div className="text-right text-blue-400">
+                            เงินสุทธิพนักงานตัวอักษร: <span className="text-blue-200">({convertToThaiBahtText(selectedRecord.netSalary)})</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Signatures */}
+                      <div className="grid grid-cols-2 gap-4 text-center mt-4 pt-4 border-t border-slate-200 text-[10px] text-slate-400">
+                        <div className="space-y-6">
+                          <p className="border-b border-slate-200 pb-1 mx-8"></p>
+                          <p>( ลงชื่อตัวแทนผู้สั่งจ่ายเงินเดือน / HR Director )</p>
+                        </div>
+                        <div className="space-y-6">
+                          <p className="border-b border-slate-200 pb-1 mx-8"></p>
+                          <p>( ลายมือชื่อพนักงานผู้รับเงิน / Employee Signature )</p>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Calculation Summary Sheet */}
-                  <div className="p-4 bg-slate-900 text-white rounded-b-sm space-y-3">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <span className="text-[10px] text-slate-400 block uppercase tracking-wide font-mono">รายจ่ายรวมของบริษัทสุทธิ</span>
-                        <span className="text-base font-extrabold font-mono">฿{(selectedRecord.baseSalary + selectedRecord.allowances).toLocaleString()}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[10px] text-blue-400 block uppercase tracking-wide font-mono">รายรับสุทธิพนักงาน (Net Salary Payout)</span>
-                        <span className="text-lg font-extrabold font-mono text-blue-400">฿{selectedRecord.netSalary.toLocaleString()}</span>
-                      </div>
+                  {/* TEAR ALONG LINE DIVIDER */}
+                  <div className="relative my-6 border-t-2 border-dashed border-slate-350 flex justify-center items-center py-2 select-none">
+                    <span className="absolute bg-slate-100 px-4 py-1 text-[10px] text-slate-500 font-bold tracking-wider flex items-center gap-1.5 border border-slate-200 rounded-full shadow-3xs">
+                      ✂️ ฉีกตามรอยประ (Tear Line) ----------------------------------------------------
+                    </span>
+                  </div>
+
+                  {/* SET 2: COMPANY COPY */}
+                  <div className="relative border border-dashed border-emerald-250 p-5 rounded-sm bg-white shadow-2xs">
+                    <div className="absolute top-3 right-3 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[9px] font-bold rounded uppercase tracking-wider no-print">
+                      ส่วนของบริษัท / Company Copy
                     </div>
-                    <div className="border-t border-slate-800 pt-2 flex flex-col sm:flex-row justify-between text-[10px] font-medium tracking-wide">
-                      <div className="text-slate-400">
-                        รายจ่ายบริษัทตัวอักษร: <span className="text-slate-200">({convertToThaiBahtText(selectedRecord.baseSalary + selectedRecord.allowances)})</span>
+                    
+                    <div className="space-y-5">
+                      {/* Slip Header */}
+                      <div className="text-center space-y-1 pb-3 border-b border-slate-200">
+                        <h1 className="text-sm font-extrabold text-slate-900 tracking-wide">ใบแจ้งยอดเงินเดือนและรายได้พนักงาน (Payslip)</h1>
+                        <h2 className="text-[11px] font-semibold text-slate-500 uppercase">บริษัทอภิวัฒน์เครื่องครัวจำกัด (สำนักงานใหญ่)</h2>
+                        <p className="text-[9px] text-slate-400 font-mono">
+                          รอบเดือน: {selectedRecord.month} / ปี {selectedRecord.year} ({getPeriodLabel(selectedRecord.period)}) - <span className="text-emerald-600 font-bold">ส่วนของบริษัท</span>
+                        </p>
                       </div>
-                      <div className="text-right text-blue-400">
-                        เงินสุทธิพนักงานตัวอักษร: <span className="text-blue-200">({convertToThaiBahtText(selectedRecord.netSalary)})</span>
+
+                      {/* Identity details */}
+                      <div className="grid grid-cols-2 gap-4 py-2 border-b border-dashed border-slate-200 text-slate-650 text-[11px]">
+                        <div className="space-y-1">
+                          <p><strong>ชื่อ-นามสกุล:</strong> {selectedRecord.employeeName}</p>
+                          <p><strong>รหัสพนักงาน:</strong> {selectedRecord.employeeId}</p>
+                          <p><strong>บัญชีธนาคาร:</strong> {
+                            employees.find(e => e.id === selectedRecord.employeeId)?.bankAccount || 'กสิกรไทย 123-X-XXXXX-X'
+                          }</p>
+                        </div>
+                        <div className="space-y-1 text-right">
+                          <p><strong>ฝ่าย/แผนก:</strong> {
+                            employees.find(e => e.id === selectedRecord.employeeId)?.department || 'Engineering'
+                          }</p>
+                          <p><strong>เลขที่ใบสำคัญจ่าย:</strong> <span className="font-mono font-bold text-slate-900">{getVoucherNo(selectedRecord)}</span></p>
+                          <p><strong>สถานะเอกสาร:</strong> <span className={`font-bold uppercase ${selectedRecord.status === 'paid' ? 'text-emerald-600' : 'text-amber-500'}`}>
+                            {selectedRecord.status === 'paid' ? 'PAID (ชำระเงินแล้ว)' : 'PENDING (รอจ่ายเงิน)'}
+                          </span></p>
+                        </div>
+                      </div>
+
+                      {/* Earnings & Deductions grid layout */}
+                      <div className="grid grid-cols-2 gap-0 border-b border-slate-200 text-[11px]">
+                        {/* Earnings (รายได้) */}
+                        <div className="border-r border-slate-200 p-3 space-y-2">
+                          <span className="font-extrabold text-slate-900 block text-xs border-b border-slate-100 pb-1 uppercase tracking-wide">รายได้ / Earnings</span>
+                          <div className="space-y-1">
+                            <div className="flex justify-between">
+                              <span>เงินเดือนฐาน (Base Salary)</span>
+                              <span className="font-mono">฿{selectedRecord.baseSalary.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>ค่าวิชาชีพ / สวัสดิการพิเศษ</span>
+                              <span className="font-mono">฿{selectedRecord.allowances.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Deductions (รายการหัก) */}
+                        <div className="p-3 space-y-2 bg-slate-50/40">
+                          <span className="font-extrabold text-slate-900 block text-xs border-b border-slate-100 pb-1 uppercase tracking-wide">รายการหัก / Deductions</span>
+                          <div className="space-y-1">
+                            <div className="flex justify-between">
+                              <span>ภาษีเงินได้ หัก ณ ที่จ่าย</span>
+                              <span className="font-mono text-rose-500">-฿{selectedRecord.tax.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>เงินประกันสังคม (Social Security)</span>
+                              <span className="font-mono text-rose-500">-฿{selectedRecord.socialSecurity.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>กองทุนสำรองชีพ (Provident Fund)</span>
+                              <span className="font-mono text-rose-500">-฿{selectedRecord.deductions.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Calculation Summary Sheet */}
+                      <div className="p-3.5 bg-slate-900 text-white rounded-sm space-y-2.5">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="text-[9px] text-slate-400 block uppercase tracking-wide font-mono">รายจ่ายรวมของบริษัทสุทธิ</span>
+                            <span className="text-sm font-extrabold font-mono">฿{(selectedRecord.baseSalary + selectedRecord.allowances).toLocaleString()}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[9px] text-blue-400 block uppercase tracking-wide font-mono">รายรับสุทธิพนักงาน (Net Salary Payout)</span>
+                            <span className="text-base font-extrabold font-mono text-blue-400">฿{selectedRecord.netSalary.toLocaleString()}</span>
+                          </div>
+                        </div>
+                        <div className="border-t border-slate-800 pt-1.5 flex flex-col sm:flex-row justify-between text-[9px] font-medium tracking-wide">
+                          <div className="text-slate-400">
+                            รายจ่ายบริษัทตัวอักษร: <span className="text-slate-200">({convertToThaiBahtText(selectedRecord.baseSalary + selectedRecord.allowances)})</span>
+                          </div>
+                          <div className="text-right text-blue-400">
+                            เงินสุทธิพนักงานตัวอักษร: <span className="text-blue-200">({convertToThaiBahtText(selectedRecord.netSalary)})</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Signatures */}
+                      <div className="grid grid-cols-2 gap-4 text-center mt-4 pt-4 border-t border-slate-200 text-[10px] text-slate-400">
+                        <div className="space-y-6">
+                          <p className="border-b border-slate-200 pb-1 mx-8"></p>
+                          <p>( ลงชื่อตัวแทนผู้สั่งจ่ายเงินเดือน / HR Director )</p>
+                        </div>
+                        <div className="space-y-6">
+                          <p className="border-b border-slate-200 pb-1 mx-8"></p>
+                          <p>( ลายมือชื่อพนักงานผู้รับเงิน / Employee Signature )</p>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Signatures */}
-                  <div className="grid grid-cols-2 gap-4 text-center mt-8 pt-6 border-t border-slate-200 text-[10px] text-slate-400">
-                    <div className="space-y-8">
-                      <p className="border-b border-slate-200 pb-2 mx-8"></p>
-                      <p>( ลงชื่อตัวแทนผู้สั่งจ่ายเงินเดือน / HR Director )</p>
-                    </div>
-                    <div className="space-y-8">
-                      <p className="border-b border-slate-200 pb-2 mx-8"></p>
-                      <p>( ลายมือชื่อพนักงานผู้รับเงิน / Employee Signature )</p>
-                    </div>
-                  </div>
                 </div>
               ) : (
                 /* PAYMENT VOUCHER VIEW */

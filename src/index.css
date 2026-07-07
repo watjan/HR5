@@ -12,3 +12,20 @@
     100% { transform: translate3d(-30%, 0, 0); }
   }
 }
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body, html {
+    background: white !important;
+    color: black !important;
+  }
+  #print-envelope {
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+}
