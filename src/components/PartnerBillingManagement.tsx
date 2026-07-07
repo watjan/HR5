@@ -1,0 +1,3741 @@
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { safeStorage } from '../lib/safeStorage';
+import { PartnerBilling, PartnerCompany } from '../types';
+import { 
+  FileText, Plus, Search, Filter, Edit3, Trash2, 
+  CheckCircle, AlertCircle, X, HelpCircle, Phone, 
+  User, DollarSign, Calendar, RefreshCw, Eye, ClipboardList,
+  Building2, Mail, MapPin, PlusCircle, Check, ChevronRight,
+  TrendingUp, Activity, Sparkles, Layers, Award, ShieldCheck,
+  ArrowRight, ChevronDown, Workflow, Users, Percent, BarChart3, Coins,
+  Volume2, VolumeX
+} from 'lucide-react';
+
+interface PartnerBillingManagementProps {
+  billings: PartnerBilling[];
+  onAddBilling: (newBilling: PartnerBilling) => void;
+  onUpdateBilling: (updatedBilling: PartnerBilling) => void;
+  onDeleteBilling: (id: string) => void;
+  partners: PartnerCompany[];
+  onAddPartner: (newPartner: PartnerCompany) => void;
+  onUpdatePartner: (updatedPartner: PartnerCompany) => void;
+  onDeletePartner: (id: string) => void;
+}
+
+export default function PartnerBillingManagement({
+  billings,
+  onAddBilling,
+  onUpdateBilling,
+  onDeleteBilling,
+  partners = [],
+  onAddPartner,
+  onUpdatePartner,
+  onDeletePartner
+}: PartnerBillingManagementProps) {
+  // Navigation / Filter States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [docTypeFilter, setDocTypeFilter] = useState<string>('All');
+  const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'documents' | 'partners'>('dashboard');
+  const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
+  const [selectedPartnerDashboard, setSelectedPartnerDashboard] = useState<string>('All');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+
+  // Audio configuration & states
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    try {
+      const saved = safeStorage.getItem('hr_sound_enabled');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  // Web Audio API custom notification chime player
+  const playNotificationSound = useCallback(() => {
+    if (!soundEnabled) return;
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const now = audioCtx.currentTime;
+      
+      // Dual-tone high frequency alert sound (G5 then C6)
+      const osc1 = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(783.99, now); // G5
+      gain1.gain.setValueAtTime(0.08, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      osc1.connect(gain1);
+      gain1.connect(audioCtx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.3);
+
+      const osc2 = audioCtx.createOscillator();
+      const gain2 = audioCtx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1046.50, now + 0.12); // C6
+      gain2.gain.setValueAtTime(0.08, now + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+      osc2.connect(gain2);
+      gain2.connect(audioCtx.destination);
+      osc2.start(now + 0.12);
+      osc2.stop(now + 0.42);
+    } catch (e) {
+      console.warn("Web Audio API is blocked or unsupported", e);
+    }
+  }, [soundEnabled]);
+
+  // Date Filters State (Day, Month, Year)
+  const [filterDay, setFilterDay] = useState<string>('All');
+  const [filterMonth, setFilterMonth] = useState<string>('All');
+  const [filterYear, setFilterYear] = useState<string>('All');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 10;
+
+  // Sync sound preference from local storage changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      try {
+        const saved = safeStorage.getItem('hr_sound_enabled');
+        if (saved !== null) {
+          setSoundEnabled(JSON.parse(saved));
+        }
+      } catch (e) {}
+    };
+    window.addEventListener('storage', handleStorageChange);
+    // Interval check as fallback since local changes on same window don't trigger storage event
+    const interval = setInterval(handleStorageChange, 1000);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Filter bills that are billed but unpaid (status === 'billed')
+  const unPaidBilledBillings = useMemo(() => {
+    return billings.filter(b => b.status === 'billed');
+  }, [billings]);
+
+  // Sound triggers on notifications alert state
+  useEffect(() => {
+    if (isNotificationOpen && unPaidBilledBillings.length > 0) {
+      playNotificationSound();
+    }
+  }, [isNotificationOpen, unPaidBilledBillings.length, playNotificationSound]);
+
+  const handleMarkAsPaid = (item: PartnerBilling) => {
+    playNotificationSound();
+    const updatedRecord: PartnerBilling = {
+      ...item,
+      status: 'paid'
+    };
+    onUpdateBilling(updatedRecord);
+    showSuccess(`บันทึกชำระเงินเรียบร้อยสำหรับเอกสารเลขที่ ${item.docNumber}`);
+  };
+
+  const showSuccess = (msg: string) => {
+    setSuccessMessage(msg);
+    setTimeout(() => {
+      setSuccessMessage(null);
+    }, 3000);
+  };
+
+  // Modals
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingBilling, setEditingBilling] = useState<PartnerBilling | null>(null);
+  const [billingToDelete, setBillingToDelete] = useState<PartnerBilling | null>(null);
+  const [viewingDetails, setViewingDetails] = useState<PartnerBilling | null>(null);
+
+  // Partner Modals
+  const [isAddPartnerOpen, setIsAddPartnerOpen] = useState(false);
+  const [editingPartner, setEditingPartner] = useState<PartnerCompany | null>(null);
+  const [partnerToDelete, setPartnerToDelete] = useState<PartnerCompany | null>(null);
+
+  // Partner Form States
+  const [pName, setPName] = useState('');
+  const [pTaxId, setPTaxId] = useState('');
+  const [pAddress, setPAddress] = useState('');
+  const [pContactPerson, setPContactPerson] = useState('');
+  const [pPhone, setPPhone] = useState('');
+  const [pEmail, setPEmail] = useState('');
+  const [pNotes, setPNotes] = useState('');
+
+  // Form States (for Add / Edit)
+  const [partnerName, setPartnerName] = useState('');
+  const [docType, setDocType] = useState<string>('delivery');
+  const [docNumber, setDocNumber] = useState('');
+
+  // Custom Document Types list (เพื่อความยืดหยุ่นในการเพิ่มเอกสารคู่ค้าและลบประเภทเอกสาร)
+  const [docTypes, setDocTypes] = useState<{ key: string; label: string }[]>(() => {
+    try {
+      const saved = safeStorage.getItem('hr_doc_types_list');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      { key: 'delivery', label: 'ใบส่งของ (Delivery Order)' },
+      { key: 'billing', label: 'ใบวางบิล (Billing Statement)' },
+      { key: 'invoice_receipt', label: 'ใบเสร็จรับเงิน/ใบกำกับภาษี (Receipt)' },
+      { key: 'partner_doc', label: 'เอกสารคู่ค้า (Partner Document)' }
+    ];
+  });
+  const [newDocTypeLabel, setNewDocTypeLabel] = useState('');
+  const [isAddingNewDocType, setIsAddingNewDocType] = useState(false);
+  const [amount, setAmount] = useState<number>(0);
+  const [issueDate, setIssueDate] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [status, setStatus] = useState<'pending' | 'billed' | 'paid' | 'cancelled'>('pending');
+  const [notes, setNotes] = useState('');
+  const [contactPerson, setContactPerson] = useState('');
+  const [phone, setPhone] = useState('');
+
+  // Form States for custom added fields
+  const [deliveryDocNumber, setDeliveryDocNumber] = useState('');
+  const [billingDocNumber, setBillingDocNumber] = useState('');
+  const [cnDocNumber, setCnDocNumber] = useState('');
+  const [cnAmount, setCnAmount] = useState<number | ''>('');
+  const [bookNumber, setBookNumber] = useState('');
+  const [pageNumber, setPageNumber] = useState('');
+  const [transportCarrier, setTransportCarrier] = useState('');
+  
+  // Custom Carrier selection list
+  const [carriers, setCarriers] = useState<string[]>(() => {
+    try {
+      const saved = safeStorage.getItem('hr_carriers_list');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return ['Kerry Express', 'Flash Express', 'J&T Express', 'ไปรษณีย์ไทย (EMS)', 'รถขนส่งบริษัท', 'ขนส่งเอกชนทั่วไป'];
+  });
+  const [newCarrierInput, setNewCarrierInput] = useState('');
+  const [isAddingNewCarrier, setIsAddingNewCarrier] = useState(false);
+
+  // Dynamic list of years present in the documents
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    billings.forEach(item => {
+      const parts = (item.issueDate || '').split('-');
+      if (parts[0] && parts[0].length === 4) {
+        years.add(parts[0]);
+      }
+    });
+    if (years.size === 0) {
+      years.add(new Date().getFullYear().toString());
+    }
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [billings]);
+
+  // Search and Filter logic
+  const filteredBillings = useMemo(() => {
+    return billings.filter(item => {
+      const matchesSearch = 
+        item.partnerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.docNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.contactPerson && item.contactPerson.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (item.notes && item.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const matchesType = docTypeFilter === 'All' || item.docType === docTypeFilter;
+      const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
+
+      // Extract day, month, year from issueDate (format: YYYY-MM-DD)
+      const dateParts = (item.issueDate || '').split('-');
+      const itemYear = dateParts[0] || '';
+      const itemMonth = dateParts[1] || '';
+      const itemDay = dateParts[2] || '';
+
+      const matchesYear = filterYear === 'All' || itemYear === filterYear;
+      const matchesMonth = filterMonth === 'All' || itemMonth === filterMonth;
+      const matchesDay = filterDay === 'All' || itemDay === filterDay;
+
+      return matchesSearch && matchesType && matchesStatus && matchesYear && matchesMonth && matchesDay;
+    });
+  }, [billings, searchQuery, docTypeFilter, statusFilter, filterYear, filterMonth, filterDay]);
+
+  // Reset page when search or filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, docTypeFilter, statusFilter, filterYear, filterMonth, filterDay]);
+
+  const totalItems = filteredBillings.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedBillings = useMemo(() => {
+    return filteredBillings.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredBillings, startIndex]);
+
+  // Calculations for Summary Dashboard Cards
+  const stats = useMemo(() => {
+    let totalDeliveryAmount = 0;
+    let deliveryCount = 0;
+    let totalBilledAmount = 0;
+    let billedCount = 0;
+    let totalPaidAmount = 0;
+    let paidCount = 0;
+    let totalPendingAmount = 0;
+    let pendingCount = 0;
+
+    billings.forEach(item => {
+      if (item.status === 'cancelled') return;
+
+      if (item.docType === 'delivery') {
+        totalDeliveryAmount += item.amount;
+        deliveryCount++;
+      } else if (item.docType === 'billing') {
+        totalBilledAmount += item.amount;
+        billedCount++;
+      }
+
+      if (item.status === 'paid') {
+        totalPaidAmount += item.amount;
+        paidCount++;
+      } else if (item.status === 'pending') {
+        totalPendingAmount += item.amount;
+        pendingCount++;
+      } else if (item.status === 'billed') {
+        totalPendingAmount += item.amount; // Billed is also outstanding/pending payment
+        pendingCount++;
+      }
+    });
+
+    return {
+      deliveryCount,
+      totalDeliveryAmount,
+      billedCount,
+      totalBilledAmount,
+      paidCount,
+      totalPaidAmount,
+      pendingCount,
+      totalPendingAmount
+    };
+  }, [billings]);
+
+  // Calculations for Endlessloop Dashboard filtered by selectedPartnerDashboard
+  const dashboardStats = useMemo(() => {
+    let totalDeliveryAmount = 0;
+    let deliveryCount = 0;
+    let totalBilledAmount = 0;
+    let billedCount = 0;
+    let totalPaidAmount = 0;
+    let paidCount = 0;
+    let totalPendingAmount = 0;
+    let pendingCount = 0;
+
+    billings.forEach(item => {
+      if (selectedPartnerDashboard !== 'All' && item.partnerName !== selectedPartnerDashboard) return;
+      if (item.status === 'cancelled') return;
+
+      if (item.docType === 'delivery') {
+        totalDeliveryAmount += item.amount;
+        deliveryCount++;
+      } else if (item.docType === 'billing') {
+        totalBilledAmount += item.amount;
+        billedCount++;
+      }
+
+      if (item.status === 'paid') {
+        totalPaidAmount += item.amount;
+        paidCount++;
+      } else if (item.status === 'pending') {
+        totalPendingAmount += item.amount;
+        pendingCount++;
+      } else if (item.status === 'billed') {
+        totalPendingAmount += item.amount; // Billed is also outstanding/pending payment
+        pendingCount++;
+      }
+    });
+
+    return {
+      deliveryCount,
+      totalDeliveryAmount,
+      billedCount,
+      totalBilledAmount,
+      paidCount,
+      totalPaidAmount,
+      pendingCount,
+      totalPendingAmount
+    };
+  }, [billings, selectedPartnerDashboard]);
+
+  const unpaidBilledItems = useMemo(() => {
+    return billings.filter(item => item.status === 'billed');
+  }, [billings]);
+
+  const filteredPartners = useMemo(() => {
+    return partners.filter(p => {
+      const q = partnerSearchQuery.toLowerCase();
+      return (
+        p.name.toLowerCase().includes(q) ||
+        (p.contactPerson && p.contactPerson.toLowerCase().includes(q)) ||
+        (p.phone && p.phone.toLowerCase().includes(q)) ||
+        (p.taxId && p.taxId.toLowerCase().includes(q)) ||
+        (p.address && p.address.toLowerCase().includes(q))
+      );
+    });
+  }, [partners, partnerSearchQuery]);
+
+  // Open Add Modal
+  const handleOpenAdd = () => {
+    setPartnerName('');
+    setDocType('delivery');
+    setDocNumber('');
+    setDeliveryDocNumber('');
+    setBillingDocNumber('');
+    setCnDocNumber('');
+    setCnAmount('');
+    setBookNumber('');
+    setPageNumber('');
+    setTransportCarrier('');
+    setAmount(0);
+    setIssueDate(new Date().toISOString().split('T')[0]);
+    // Default due date to 30 days from now
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 30);
+    setDueDate(futureDate.toISOString().split('T')[0]);
+    setStatus('pending');
+    setNotes('');
+    setContactPerson('');
+    setPhone('');
+    setIsAddOpen(true);
+  };
+
+  // Open Add Partner Modal
+  const handleOpenAddPartner = () => {
+    setPName('');
+    setPTaxId('');
+    setPAddress('');
+    setPContactPerson('');
+    setPPhone('');
+    setPEmail('');
+    setPNotes('');
+    setIsAddPartnerOpen(true);
+  };
+
+  // Open Edit Partner Modal
+  const handleOpenEditPartner = (item: PartnerCompany) => {
+    setEditingPartner(item);
+    setPName(item.name);
+    setPTaxId(item.taxId || '');
+    setPAddress(item.address || '');
+    setPContactPerson(item.contactPerson || '');
+    setPPhone(item.phone || '');
+    setPEmail(item.email || '');
+    setPNotes(item.notes || '');
+  };
+
+  // Submit Add Partner
+  const handleAddPartnerSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pName.trim()) return;
+
+    const newPartner: PartnerCompany = {
+      id: `PTN-${Date.now().toString().slice(-4)}`,
+      name: pName.trim(),
+      taxId: pTaxId.trim() || undefined,
+      address: pAddress.trim() || undefined,
+      contactPerson: pContactPerson.trim() || undefined,
+      phone: pPhone.trim() || undefined,
+      email: pEmail.trim() || undefined,
+      notes: pNotes.trim() || undefined,
+    };
+
+    onAddPartner(newPartner);
+    setPartnerName(pName.trim());
+    if (pContactPerson.trim()) {
+      setContactPerson(pContactPerson.trim());
+    }
+    if (pPhone.trim()) {
+      setPhone(pPhone.trim());
+    }
+    setIsAddPartnerOpen(false);
+    showSuccess(`ลงทะเบียนและเลือกคู่ค้า "${pName.trim()}" ในใบวางบิลสำเร็จ`);
+  };
+
+  // Submit Edit Partner
+  const handleEditPartnerSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPartner || !pName.trim()) return;
+
+    const updatedPartner: PartnerCompany = {
+      id: editingPartner.id,
+      name: pName.trim(),
+      taxId: pTaxId.trim() || undefined,
+      address: pAddress.trim() || undefined,
+      contactPerson: pContactPerson.trim() || undefined,
+      phone: pPhone.trim() || undefined,
+      email: pEmail.trim() || undefined,
+      notes: pNotes.trim() || undefined,
+    };
+
+    onUpdatePartner(updatedPartner);
+    setEditingPartner(null);
+  };
+
+  // Delete Partner Confirm
+  const handleDeletePartnerConfirm = () => {
+    if (!partnerToDelete) return;
+    onDeletePartner(partnerToDelete.id);
+    setPartnerToDelete(null);
+  };
+
+  // Open Edit Modal
+  const handleOpenEdit = (item: PartnerBilling) => {
+    setEditingBilling(item);
+    setPartnerName(item.partnerName);
+    setDocType(item.docType);
+    setDocNumber(item.docNumber);
+    setDeliveryDocNumber(item.deliveryDocNumber || '');
+    setBillingDocNumber(item.billingDocNumber || '');
+    setCnDocNumber(item.cnDocNumber || '');
+    setCnAmount(item.cnAmount !== undefined ? item.cnAmount : '');
+    setBookNumber(item.bookNumber || '');
+    setPageNumber(item.pageNumber || '');
+    setTransportCarrier(item.transportCarrier || '');
+    setAmount(item.amount);
+    setIssueDate(item.issueDate);
+    setDueDate(item.dueDate);
+    setStatus(item.status);
+    setNotes(item.notes || '');
+    setContactPerson(item.contactPerson || '');
+    setPhone(item.phone || '');
+  };
+
+  // Submit Add
+  const handleAddSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!partnerName.trim() || amount <= 0) return;
+
+    const finalDocNumber = docNumber.trim() || deliveryDocNumber.trim() || billingDocNumber.trim() || `DOC-${Date.now().toString().slice(-4)}`;
+
+    const newRecord: PartnerBilling = {
+      id: `BILL-${Date.now().toString().slice(-4)}`,
+      partnerName: partnerName.trim(),
+      docType,
+      docNumber: finalDocNumber,
+      deliveryDocNumber: deliveryDocNumber.trim() || undefined,
+      billingDocNumber: billingDocNumber.trim() || undefined,
+      cnDocNumber: cnDocNumber.trim() || undefined,
+      cnAmount: cnAmount !== '' ? Number(cnAmount) : undefined,
+      bookNumber: bookNumber.trim() || undefined,
+      pageNumber: pageNumber.trim() || undefined,
+      transportCarrier: transportCarrier.trim() || undefined,
+      amount,
+      issueDate,
+      dueDate,
+      status,
+      notes: notes.trim() || undefined,
+      contactPerson: contactPerson.trim() || undefined,
+      phone: phone.trim() || undefined
+    };
+
+    onAddBilling(newRecord);
+    setIsAddOpen(false);
+  };
+
+  // Submit Edit
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBilling || !partnerName.trim() || amount <= 0) return;
+
+    const finalDocNumber = docNumber.trim() || deliveryDocNumber.trim() || billingDocNumber.trim() || editingBilling.docNumber;
+
+    const updatedRecord: PartnerBilling = {
+      ...editingBilling,
+      partnerName: partnerName.trim(),
+      docType,
+      docNumber: finalDocNumber,
+      deliveryDocNumber: deliveryDocNumber.trim() || undefined,
+      billingDocNumber: billingDocNumber.trim() || undefined,
+      cnDocNumber: cnDocNumber.trim() || undefined,
+      cnAmount: cnAmount !== '' ? Number(cnAmount) : undefined,
+      bookNumber: bookNumber.trim() || undefined,
+      pageNumber: pageNumber.trim() || undefined,
+      transportCarrier: transportCarrier.trim() || undefined,
+      amount,
+      issueDate,
+      dueDate,
+      status,
+      notes: notes.trim() || undefined,
+      contactPerson: contactPerson.trim() || undefined,
+      phone: phone.trim() || undefined
+    };
+
+    onUpdateBilling(updatedRecord);
+    setEditingBilling(null);
+  };
+
+  // Reset filter values
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setDocTypeFilter('All');
+    setStatusFilter('All');
+    setFilterDay('All');
+    setFilterMonth('All');
+    setFilterYear('All');
+  };
+
+  // Thai document labels
+  const getDocTypeLabel = (type: string) => {
+    const matched = docTypes.find(d => d.key === type);
+    if (matched) {
+      // Return the label, stripping out any English suffix like " (Delivery Order)"
+      return matched.label.split(' (')[0];
+    }
+    switch (type) {
+      case 'delivery': return 'ใบส่งของ';
+      case 'billing': return 'ใบวางบิล';
+      case 'invoice_receipt': return 'ใบเสร็จ/ใบกำกับภาษี';
+      case 'partner_doc': return 'เอกสารคู่ค้า';
+      default: return type;
+    }
+  };
+
+  const getDocTypeBadge = (type: string) => {
+    const matched = docTypes.find(d => d.key === type);
+    const label = matched ? matched.label.split(' (')[0] : type;
+    
+    let emoji = '📁';
+    let colorClass = 'bg-slate-50 text-slate-700 border-slate-200';
+    
+    if (type === 'delivery') {
+      emoji = '📦';
+      colorClass = 'bg-blue-50 text-blue-700 border-blue-200';
+    } else if (type === 'billing') {
+      emoji = '📝';
+      colorClass = 'bg-indigo-50 text-indigo-700 border-indigo-200';
+    } else if (type === 'invoice_receipt') {
+      emoji = '🧾';
+      colorClass = 'bg-teal-50 text-teal-700 border-teal-200';
+    } else if (type === 'partner_doc') {
+      emoji = '🤝';
+      colorClass = 'bg-purple-50 text-purple-700 border-purple-200';
+    } else {
+      // Custom type styling
+      colorClass = 'bg-amber-50 text-amber-700 border-amber-200';
+    }
+    
+    return (
+      <span className={`px-2 py-0.5 border text-[11px] font-semibold rounded-sm inline-flex items-center gap-1 ${colorClass}`}>
+        {emoji} {label}
+      </span>
+    );
+  };
+
+  // Thai status labels
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'pending': return 'รอดำเนินการ / รอวางบิล';
+      case 'billed': return 'วางบิลแล้ว / รอชำระเงิน';
+      case 'paid': return 'ชำระเงินเสร็จสิ้น';
+      case 'cancelled': return 'ยกเลิกเอกสาร';
+      default: return status;
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return (
+          <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-semibold rounded-sm inline-flex items-center gap-1">
+            <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span> รอวางบิล
+          </span>
+        );
+      case 'billed':
+        return (
+          <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-semibold rounded-sm inline-flex items-center gap-1 animate-pulse">
+            <AlertCircle className="w-3 h-3 text-rose-500" /> วางบิลแล้ว/รอชำระ
+          </span>
+        );
+      case 'paid':
+        return (
+          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold rounded-sm inline-flex items-center gap-1">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> ชำระเงินแล้ว
+          </span>
+        );
+       case 'cancelled':
+        return (
+          <span className="px-2 py-0.5 bg-slate-50 text-slate-700 border border-slate-200 text-[11px] font-semibold rounded-sm inline-flex items-center gap-1">
+            <span className="w-1.5 h-1.5 bg-slate-500 rounded-full"></span> ยกเลิกแล้ว
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="space-y-6 relative">
+      
+      {/* Floating Success Toast */}
+      {successMessage && (
+        <div className="fixed bottom-5 right-5 z-50 bg-emerald-600 text-white px-4 py-3 rounded-sm shadow-xl flex items-center gap-2 border border-emerald-500 animate-bounce no-print">
+          <CheckCircle className="w-4 h-4 text-white" />
+          <span className="text-xs font-bold font-sans">{successMessage}</span>
+        </div>
+      )}
+      
+      {/* ─── PERSISTENT TOP HEADER (REAL-TIME FILTERABLE) ─── */}
+      <div className="bg-white border border-slate-200 rounded-sm shadow-xs p-4 flex flex-col md:flex-row items-center justify-between gap-4 no-print">
+        {/* Brand Logo */}
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-500 flex items-center justify-center text-white shadow-sm">
+            <Building2 className="w-4.5 h-4.5 text-white" strokeWidth={2.5} />
+          </div>
+          <div>
+            <span className="text-lg font-black text-slate-900 tracking-tight font-sans block">
+              Partner<span className="text-blue-600">Hub</span>
+            </span>
+            <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+              Campaign & Billing Management
+            </span>
+          </div>
+        </div>
+
+        {/* Real-time Partner Filter Dropdown */}
+        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-full px-4 py-1.5 shadow-xs transition-colors">
+          <Building2 className="w-3.5 h-3.5 text-violet-500" />
+          <span className="text-[10px] text-slate-400 font-bold uppercase font-mono tracking-wider">Partner:</span>
+          <select
+            value={selectedPartnerDashboard}
+            onChange={(e) => {
+              setSelectedPartnerDashboard(e.target.value);
+              showSuccess(`อัพเดตตัวกรองสำหรับ: ${e.target.value === 'All' ? 'ทุกคู่ค้าในระบบ' : e.target.value}`);
+            }}
+            className="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer pr-1 border-none focus:ring-0 py-0"
+          >
+            <option value="All">บริษัทคู่ค้าทั้งหมด (All Companies)</option>
+            {partners.map(p => (
+              <option key={p.id} value={p.name}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* User Identity Info */}
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <p className="text-xs font-black text-slate-800 font-sans tracking-tight">JASON WOOD</p>
+            <p className="text-[9px] font-mono font-bold text-violet-600 uppercase tracking-widest">Financial Director</p>
+          </div>
+          <div className="relative">
+            <img 
+              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150" 
+              alt="Jason Wood" 
+              className="w-10 h-10 rounded-full ring-2 ring-violet-500 ring-offset-2 object-cover shadow-xs"
+              referrerPolicy="no-referrer"
+            />
+            <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full animate-pulse"></span>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── PERSISTENT SUB-TAB TOOLBAR (BOARD, REPORT) ─── */}
+      <div className="bg-white border border-slate-200 rounded-sm shadow-xs p-3 flex flex-col md:flex-row items-center justify-between gap-4 no-print">
+        {/* Left Side: Project/Category select + Active Subtabs */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          {/* Tab row */}
+          <div className="flex items-center gap-1.5 p-0.5 bg-slate-50 border border-slate-100 rounded-sm w-full sm:w-auto">
+            {/* DASHBOARD TAB (Dashboard) */}
+            <button
+              onClick={() => setActiveSubTab('dashboard')}
+              className={`flex-1 sm:flex-initial px-4 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
+                activeSubTab === 'dashboard'
+                  ? 'bg-white text-blue-600 shadow-xs border border-slate-200/50'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/50'
+              }`}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${activeSubTab === 'dashboard' ? 'text-blue-600 animate-spin-slow' : 'text-slate-400'}`} />
+              <span>สรุปยอดคู่ค้า (Dashboard)</span>
+            </button>
+
+            {/* BOARD TAB (Billing Documents List) */}
+            <button
+              onClick={() => setActiveSubTab('documents')}
+              className={`flex-1 sm:flex-initial px-4 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
+                activeSubTab === 'documents'
+                  ? 'bg-white text-blue-600 shadow-xs border border-slate-200/50'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/50'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5 text-blue-500" />
+              <span>Board (ใบส่งของ/วางบิล)</span>
+              <span className="ml-1 px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded-full text-[9px] font-mono font-bold">
+                {billings.length}
+              </span>
+            </button>
+
+            {/* REPORT TAB (Partner Directory) */}
+            <button
+              onClick={() => setActiveSubTab('partners')}
+              className={`flex-1 sm:flex-initial px-4 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
+                activeSubTab === 'partners'
+                  ? 'bg-white text-emerald-600 shadow-xs border border-slate-200/50'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/50'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Report (ทำเนียบคู่ค้า)</span>
+              <span className="ml-1 px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded-full text-[9px] font-mono font-bold">
+                {partners.length}
+              </span>
+            </button>
+
+            {/* NOTIFICATION TAB (แจ้งเตือนวางบิลค้างชำระ) */}
+            <button
+              type="button"
+              onClick={() => setIsNotificationOpen(true)}
+              className={`flex-1 sm:flex-initial px-4 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5 relative cursor-pointer ${
+                unPaidBilledBillings.length > 0
+                  ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100/60 font-black'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/50'
+              }`}
+            >
+              <span className="relative inline-block">
+                <AlertCircle className={`w-3.5 h-3.5 ${unPaidBilledBillings.length > 0 ? 'animate-bounce text-rose-600' : 'text-slate-400'}`} />
+                {unPaidBilledBillings.length > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-600"></span>
+                  </span>
+                )}
+              </span>
+              <span>แจ้งเตือนค้างจ่าย ({unPaidBilledBillings.length})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Right Side: Quick Action + Config Dropdowns */}
+        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+          {/* Contextual Action Button */}
+          {activeSubTab === 'documents' && (
+            <button
+              onClick={handleOpenAdd}
+              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center gap-1 shadow-xs cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" /> บันทึกเอกสาร
+            </button>
+          )}
+          {activeSubTab === 'partners' && (
+            <button
+              onClick={handleOpenAddPartner}
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center gap-1 shadow-xs cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" /> เพิ่มคู่ค้า
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ─── SUB-TAB RENDER LOGIC ─── */}
+
+      {/* 1. ENDLESSLOOP PREMIUM DASHBOARD TAB */}
+      {activeSubTab === 'dashboard' && (
+        <div className="space-y-6 animate-fade-in">
+          
+          {/* 1.0 ALERT WIDGET FOR BILLING OUTSTANDING */}
+          {unPaidBilledBillings.length > 0 && (
+            <div className="bg-rose-50 border border-rose-200 rounded-sm p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs animate-fade-in no-print">
+              <div className="flex gap-3">
+                <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0 animate-pulse">
+                  <AlertCircle className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-rose-900 font-sans uppercase tracking-wide flex items-center gap-1.5">
+                    ตรวจพบเอกสารค้างชำระ (วางบิลแล้วแต่ยังไม่ชำระเงิน)
+                  </h4>
+                  <p className="text-[11px] text-rose-700 font-medium font-sans mt-0.5">
+                    มีจำนวน <strong className="text-rose-900 text-xs font-black font-mono">{unPaidBilledBillings.length}</strong> รายการที่วางบิลแล้วแต่ยังไม่ได้รับการบันทึกชำระเงิน กรุณาตรวจสอบและปรับปรุงสถานะเมื่อได้รับเงิน/จ่ายเงินแล้ว
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNotificationOpen(true)}
+                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-sm text-[11px] font-black font-sans uppercase transition flex items-center gap-1.5 cursor-pointer shadow-xs border-0"
+              >
+                <span>เปิดดูรายการค้างจ่าย</span>
+                <ArrowRight className="w-3.5 h-3.5 text-white" />
+              </button>
+            </div>
+          )}
+          
+          {/* 1.1 THE 5 PIPELINE COLUMNS (KANBAN FLOW TRACKS) */}
+          <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div className="min-w-[1100px] grid grid-cols-5 gap-3.5 items-start">
+              
+              {/* Column 1: Unaware (รอจัดเตรียม/รอจัดส่ง) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-md p-3.5 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 bg-violet-400 rounded-full shadow-xs animate-ping"></span>
+                    <span className="w-2.5 h-2.5 bg-violet-500 rounded-full shadow-xs absolute"></span>
+                    <h3 className="text-[11px] font-mono font-bold uppercase text-slate-500 tracking-wider">Unaware</h3>
+                  </div>
+                  <span className="px-1.5 py-0.5 bg-violet-100 text-violet-700 font-mono font-black text-[10px] rounded-sm">
+                    {billings.filter(b => b.status === 'pending' && b.docType === 'delivery').length}
+                  </span>
+                </div>
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-800">รอส่งมอบสินค้า</h4>
+                  <p className="text-[10px] text-slate-400 mt-1 italic leading-relaxed">
+                    "สั่งของและอะไหล่รอบใหม่แล้ว... รอใบขนส่งสินค้าเข้าโกดัง"
+                  </p>
+                </div>
+                <div className="space-y-2 pt-1">
+                  {billings.filter(b => b.status === 'pending' && b.docType === 'delivery').length === 0 ? (
+                    <div className="border border-dashed border-slate-200 rounded-sm p-3 text-center text-[10px] text-slate-400">
+                      ไม่มีใบค้างส่งมอบสินค้า
+                    </div>
+                  ) : (
+                    billings.filter(b => b.status === 'pending' && b.docType === 'delivery').slice(0, 3).map(item => (
+                      <div key={item.id} className="bg-white p-2.5 border border-slate-200 rounded-sm shadow-2xs space-y-1.5 hover:border-violet-300 transition">
+                        <span className="font-extrabold text-[11px] text-slate-800 block truncate">{item.partnerName}</span>
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-[9px] font-mono text-slate-400">{item.docNumber}</span>
+                          <span className="text-xs font-black text-slate-900 font-mono">฿{item.amount.toLocaleString()}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                          <div className="bg-violet-500 h-full w-2/5 rounded-full"></div>
+                        </div>
+                        <div className="flex justify-between items-center pt-0.5">
+                          <span className="text-[8px] font-mono text-slate-400">นัด: {item.dueDate}</span>
+                          <div className="flex -space-x-1.5">
+                            <span className="p-0.5 bg-violet-50 text-violet-500 border border-violet-100 rounded-full"><Phone className="w-2 h-2" /></span>
+                            <span className="p-0.5 bg-slate-50 text-slate-500 border border-slate-100 rounded-full"><User className="w-2 h-2" /></span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Column 2: Problem Aware (ใบส่งของรอดำเนินการ) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-md p-3.5 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 bg-amber-400 rounded-full shadow-xs animate-pulse"></span>
+                    <span className="w-2.5 h-2.5 bg-amber-500 rounded-full shadow-xs absolute"></span>
+                    <h3 className="text-[11px] font-mono font-bold uppercase text-slate-500 tracking-wider">Problem Aware</h3>
+                  </div>
+                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 font-mono font-black text-[10px] rounded-sm">
+                    {billings.filter(b => b.docType === 'delivery' && b.status !== 'pending' && b.status !== 'cancelled').length}
+                  </span>
+                </div>
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-800">ตรวจรับใบส่งของแล้ว</h4>
+                  <p className="text-[10px] text-slate-400 mt-1 italic leading-relaxed">
+                    "รับของเสร็จนับครบถ้วน... เตรียมนำเข้ารอบวางบิลสิ้นเดือน"
+                  </p>
+                </div>
+                <div className="space-y-2 pt-1">
+                  {billings.filter(b => b.docType === 'delivery' && b.status !== 'pending' && b.status !== 'cancelled').length === 0 ? (
+                    <div className="border border-dashed border-slate-200 rounded-sm p-3 text-center text-[10px] text-slate-400">
+                      ไม่มีใบตรวจของรอกระบวนการ
+                    </div>
+                  ) : (
+                    billings.filter(b => b.docType === 'delivery' && b.status !== 'pending' && b.status !== 'cancelled').slice(0, 3).map(item => (
+                      <div key={item.id} className="bg-white p-2.5 border border-slate-200 rounded-sm shadow-2xs space-y-1.5 hover:border-amber-300 transition">
+                        <span className="font-extrabold text-[11px] text-slate-800 block truncate">{item.partnerName}</span>
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-[9px] font-mono text-slate-400">{item.docNumber}</span>
+                          <span className="text-xs font-black text-slate-900 font-mono">฿{item.amount.toLocaleString()}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                          <div className="bg-amber-500 h-full w-3/5 rounded-full"></div>
+                        </div>
+                        <div className="flex justify-between items-center pt-0.5">
+                          <span className="text-[8px] font-mono text-slate-400">เสร็จ: {item.issueDate}</span>
+                          <div className="flex -space-x-1.5">
+                            <span className="p-0.5 bg-amber-50 text-amber-500 border border-amber-100 rounded-full"><MapPin className="w-2 h-2" /></span>
+                            <span className="p-0.5 bg-slate-50 text-slate-500 border border-slate-100 rounded-full"><User className="w-2 h-2" /></span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Column 3: Solution Aware (ตรวจสอบความถูกต้อง/เตรียมวางบิล) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-md p-3.5 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 bg-pink-400 rounded-full shadow-xs animate-pulse"></span>
+                    <span className="w-2.5 h-2.5 bg-pink-500 rounded-full shadow-xs absolute"></span>
+                    <h3 className="text-[11px] font-mono font-bold uppercase text-slate-500 tracking-wider">Solution Aware</h3>
+                  </div>
+                  <span className="px-1.5 py-0.5 bg-pink-100 text-pink-700 font-mono font-black text-[10px] rounded-sm">
+                    {billings.filter(b => b.docType === 'billing' && b.status === 'pending').length}
+                  </span>
+                </div>
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-800">ใบวางบิลค้างตรวจสอบ</h4>
+                  <p className="text-[10px] text-slate-400 mt-1 italic leading-relaxed">
+                    "ตรวจความถูกต้องของเอกสาร... รอยืนยันเพื่อตัดวงจรชำระ"
+                  </p>
+                </div>
+                <div className="space-y-2 pt-1">
+                  {billings.filter(b => b.docType === 'billing' && b.status === 'pending').length === 0 ? (
+                    <div className="border border-dashed border-slate-200 rounded-sm p-3 text-center text-[10px] text-slate-400">
+                      ไม่มีใบวางบิลค้างตรวจ
+                    </div>
+                  ) : (
+                    billings.filter(b => b.docType === 'billing' && b.status === 'pending').slice(0, 3).map(item => (
+                      <div key={item.id} className="bg-white p-2.5 border border-slate-200 rounded-sm shadow-2xs space-y-1.5 hover:border-pink-300 transition">
+                        <span className="font-extrabold text-[11px] text-slate-800 block truncate">{item.partnerName}</span>
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-[9px] font-mono text-slate-400">{item.docNumber}</span>
+                          <span className="text-xs font-black text-slate-900 font-mono">฿{item.amount.toLocaleString()}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                          <div className="bg-pink-500 h-full w-4/5 rounded-full"></div>
+                        </div>
+                        <div className="flex justify-between items-center pt-0.5">
+                          <span className="text-[8px] font-mono text-slate-400">รอบ: {item.dueDate}</span>
+                          <div className="flex -space-x-1.5">
+                            <span className="p-0.5 bg-pink-50 text-pink-500 border border-pink-100 rounded-full"><Mail className="w-2 h-2" /></span>
+                            <span className="p-0.5 bg-slate-50 text-slate-500 border border-slate-100 rounded-full"><User className="w-2 h-2" /></span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Column 4: Product Aware (วางบิลแล้ว/รอครบกำหนดชำระ) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-md p-3.5 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 bg-blue-400 rounded-full shadow-xs animate-pulse"></span>
+                    <span className="w-2.5 h-2.5 bg-blue-500 rounded-full shadow-xs absolute"></span>
+                    <h3 className="text-[11px] font-mono font-bold uppercase text-slate-500 tracking-wider">Product Aware</h3>
+                  </div>
+                  <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 font-mono font-black text-[10px] rounded-sm">
+                    {billings.filter(b => b.status === 'billed').length}
+                  </span>
+                </div>
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-800">วางบิลแล้ว/รอนัดชำระ</h4>
+                  <p className="text-[10px] text-slate-400 mt-1 italic leading-relaxed">
+                    "ตัดจ่ายรอบเงินสดในระบบแล้ว... อยู่ระหว่างรอนัดรับเช็คคู่ค้า"
+                  </p>
+                </div>
+                <div className="space-y-2 pt-1">
+                  {billings.filter(b => b.status === 'billed').length === 0 ? (
+                    <div className="border border-dashed border-slate-200 rounded-sm p-3 text-center text-[10px] text-slate-400">
+                      ไม่มีรายการรอบชำระที่ค้าง
+                    </div>
+                  ) : (
+                    billings.filter(b => b.status === 'billed').slice(0, 3).map(item => (
+                      <div key={item.id} className="bg-white p-2.5 border border-slate-200 rounded-sm shadow-2xs space-y-1.5 hover:border-blue-300 transition">
+                        <span className="font-extrabold text-[11px] text-slate-800 block truncate">{item.partnerName}</span>
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-[9px] font-mono text-slate-400">{item.docNumber}</span>
+                          <span className="text-xs font-black text-slate-900 font-mono">฿{item.amount.toLocaleString()}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                          <div className="bg-blue-500 h-full w-[95%] rounded-full animate-pulse"></div>
+                        </div>
+                        <div className="flex justify-between items-center pt-0.5">
+                          <span className="text-[8px] font-mono text-slate-400">นัดจ่าย: {item.dueDate}</span>
+                          <div className="flex -space-x-1.5">
+                            <span className="p-0.5 bg-blue-50 text-blue-500 border border-blue-100 rounded-full"><Calendar className="w-2 h-2" /></span>
+                            <span className="p-0.5 bg-slate-50 text-slate-500 border border-slate-100 rounded-full"><User className="w-2 h-2" /></span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Column 5: Highly Aware (ชำระเสร็จสมบูรณ์) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-md p-3.5 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full shadow-xs"></span>
+                    <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-xs absolute"></span>
+                    <h3 className="text-[11px] font-mono font-bold uppercase text-slate-500 tracking-wider">Highly Aware</h3>
+                  </div>
+                  <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 font-mono font-black text-[10px] rounded-sm">
+                    {billings.filter(b => b.status === 'paid').length}
+                  </span>
+                </div>
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-800">ชำระเสร็จสิ้นและออกใบเสร็จ</h4>
+                  <p className="text-[10px] text-slate-400 mt-1 italic leading-relaxed">
+                    "ชำระตรงเวลา... ประสิทธิภาพการบริหารงานเป็นที่น่าพอใจมาก"
+                  </p>
+                </div>
+                <div className="space-y-2 pt-1">
+                  {billings.filter(b => b.status === 'paid').length === 0 ? (
+                    <div className="border border-dashed border-slate-200 rounded-sm p-3 text-center text-[10px] text-slate-400">
+                      ไม่มีรายการตัดจ่ายเสร็จสมบูรณ์
+                    </div>
+                  ) : (
+                    billings.filter(b => b.status === 'paid').slice(0, 3).map(item => (
+                      <div key={item.id} className="bg-white p-2.5 border border-slate-200 rounded-sm shadow-2xs space-y-1.5 hover:border-emerald-300 transition">
+                        <span className="font-extrabold text-[11px] text-slate-800 block truncate">{item.partnerName}</span>
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-[9px] font-mono text-slate-400">{item.docNumber}</span>
+                          <span className="text-xs font-black text-slate-900 font-mono">฿{item.amount.toLocaleString()}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                          <div className="bg-emerald-500 h-full w-full rounded-full"></div>
+                        </div>
+                        <div className="flex justify-between items-center pt-0.5">
+                          <span className="text-[8px] font-mono text-slate-400">ตัดยอด: {item.issueDate}</span>
+                          <div className="flex -space-x-1.5">
+                            <span className="p-0.5 bg-emerald-50 text-emerald-500 border border-emerald-100 rounded-full"><Check className="w-2 h-2" /></span>
+                            <span className="p-0.5 bg-slate-50 text-slate-500 border border-slate-100 rounded-full"><User className="w-2 h-2" /></span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* 1.2 THE 5 LARGE STATS CARDS (ENDLESSLOOP aesthetic) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            
+            {/* Card 1: Deliveries Amount */}
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition duration-300">
+              <div className="flex justify-between items-start">
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Delivery Amount</span>
+                <span className="px-1.5 py-0.5 bg-violet-50 text-violet-600 font-mono text-[9px] font-black rounded-sm uppercase">Active DO</span>
+              </div>
+              <div className="space-y-1">
+                <p className="text-2xl font-black text-violet-600 font-mono tracking-tight">
+                  ฿{dashboardStats.totalDeliveryAmount.toLocaleString()}
+                </p>
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>เฉลี่ย/ใบ:</span>
+                  <span className="font-mono font-bold text-slate-700">
+                    ฿{dashboardStats.deliveryCount ? Math.round(dashboardStats.totalDeliveryAmount / dashboardStats.deliveryCount).toLocaleString() : '0'}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="w-full bg-violet-50 h-1.5 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-violet-600 h-full rounded-full transition-all duration-500" 
+                    style={{ width: `${dashboardStats.deliveryCount ? Math.min(100, (dashboardStats.deliveryCount / billings.length) * 100) : 0}%` }}
+                  ></div>
+                </div>
+                <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 pt-1 border-t border-slate-100">
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-violet-500 rounded-full inline-block"></span> {dashboardStats.deliveryCount} ฉบับ</span>
+                  <div className="flex gap-1">
+                    <span className="w-3.5 h-3.5 rounded-full bg-slate-100 flex items-center justify-center text-[8px]"><Building2 className="w-2.5 h-2.5 text-slate-500" /></span>
+                    <span className="w-3.5 h-3.5 rounded-full bg-slate-100 flex items-center justify-center text-[8px]"><User className="w-2.5 h-2.5 text-slate-500" /></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Billed Amount */}
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition duration-300">
+              <div className="flex justify-between items-start">
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Billed Amount</span>
+                <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 font-mono text-[9px] font-black rounded-sm uppercase">Active BI</span>
+              </div>
+              <div className="space-y-1">
+                <p className="text-2xl font-black text-indigo-600 font-mono tracking-tight">
+                  ฿{dashboardStats.totalBilledAmount.toLocaleString()}
+                </p>
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>เฉลี่ย/ใบ:</span>
+                  <span className="font-mono font-bold text-slate-700">
+                    ฿{dashboardStats.billedCount ? Math.round(dashboardStats.totalBilledAmount / dashboardStats.billedCount).toLocaleString() : '0'}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="w-full bg-indigo-50 h-1.5 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-indigo-600 h-full rounded-full transition-all duration-500" 
+                    style={{ width: `${dashboardStats.billedCount ? Math.min(100, (dashboardStats.billedCount / billings.length) * 100) : 0}%` }}
+                  ></div>
+                </div>
+                <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 pt-1 border-t border-slate-100">
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-indigo-500 rounded-full inline-block"></span> {dashboardStats.billedCount} ฉบับ</span>
+                  <div className="flex gap-1">
+                    <span className="w-3.5 h-3.5 rounded-full bg-slate-100 flex items-center justify-center text-[8px]"><Mail className="w-2.5 h-2.5 text-slate-500" /></span>
+                    <span className="w-3.5 h-3.5 rounded-full bg-slate-100 flex items-center justify-center text-[8px]"><User className="w-2.5 h-2.5 text-slate-500" /></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Pending Payments */}
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition duration-300">
+              <div className="flex justify-between items-start">
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Outstanding Debt</span>
+                <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 font-mono text-[9px] font-black rounded-sm uppercase">Pending</span>
+              </div>
+              <div className="space-y-1">
+                <p className="text-2xl font-black text-amber-500 font-mono tracking-tight">
+                  ฿{dashboardStats.totalPendingAmount.toLocaleString()}
+                </p>
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>อัตราส่วนค้าง:</span>
+                  <span className="font-mono font-bold text-amber-600">
+                    {dashboardStats.totalPendingAmount && (dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount)
+                      ? ((dashboardStats.totalPendingAmount / (dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount)) * 100).toFixed(1) + '%'
+                      : '0%'
+                    }
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="w-full bg-amber-50 h-1.5 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-amber-500 h-full rounded-full transition-all duration-500" 
+                    style={{ width: `${dashboardStats.totalPendingAmount && (dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount) ? Math.min(100, (dashboardStats.totalPendingAmount / (dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount)) * 100) : 0}%` }}
+                  ></div>
+                </div>
+                <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 pt-1 border-t border-slate-100">
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-amber-500 rounded-full inline-block"></span> {dashboardStats.pendingCount} รายการ</span>
+                  <div className="flex gap-1">
+                    <span className="w-3.5 h-3.5 rounded-full bg-slate-100 flex items-center justify-center text-[8px]"><Calendar className="w-2.5 h-2.5 text-slate-500" /></span>
+                    <span className="w-3.5 h-3.5 rounded-full bg-slate-100 flex items-center justify-center text-[8px]"><User className="w-2.5 h-2.5 text-slate-500" /></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Paid Amount */}
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition duration-300">
+              <div className="flex justify-between items-start">
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Paid Finished</span>
+                <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 font-mono text-[9px] font-black rounded-sm uppercase">Success</span>
+              </div>
+              <div className="space-y-1">
+                <p className="text-2xl font-black text-emerald-600 font-mono tracking-tight">
+                  ฿{dashboardStats.totalPaidAmount.toLocaleString()}
+                </p>
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>อัตราส่วนชำระ:</span>
+                  <span className="font-mono font-bold text-emerald-600">
+                    {dashboardStats.totalPaidAmount && (dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount)
+                      ? ((dashboardStats.totalPaidAmount / (dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount)) * 100).toFixed(1) + '%'
+                      : '0%'
+                    }
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="w-full bg-emerald-50 h-1.5 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                    style={{ width: `${dashboardStats.totalPaidAmount && (dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount) ? Math.min(100, (dashboardStats.totalPaidAmount / (dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount)) * 100) : 0}%` }}
+                  ></div>
+                </div>
+                <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 pt-1 border-t border-slate-100">
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full inline-block"></span> {dashboardStats.paidCount} สำเร็จ</span>
+                  <div className="flex gap-1">
+                    <span className="w-3.5 h-3.5 rounded-full bg-slate-100 flex items-center justify-center text-[8px]"><Check className="w-2.5 h-2.5 text-slate-500" /></span>
+                    <span className="w-3.5 h-3.5 rounded-full bg-slate-100 flex items-center justify-center text-[8px]"><User className="w-2.5 h-2.5 text-slate-500" /></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 5: Total Transactions */}
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition duration-300">
+              <div className="flex justify-between items-start">
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Total Transaction</span>
+                <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 font-mono text-[9px] font-black rounded-sm uppercase">Summary</span>
+              </div>
+              <div className="space-y-1">
+                <p className="text-2xl font-black text-slate-900 font-mono tracking-tight">
+                  ฿{(dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount).toLocaleString()}
+                </p>
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>ความพึงพอใจคู่ค้า:</span>
+                  <span className="font-sans font-bold text-violet-600 flex items-center gap-0.5"><Award className="w-3 h-3" /> 99.8%</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-gradient-to-r from-violet-500 to-indigo-600 h-full w-[85%] rounded-full"></div>
+                </div>
+                <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 pt-1 border-t border-slate-100">
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-slate-900 rounded-full inline-block"></span> รวม {billings.filter(b => selectedPartnerDashboard === 'All' || b.partnerName === selectedPartnerDashboard).length} รายการ</span>
+                  <div className="flex gap-1">
+                    <span className="w-3.5 h-3.5 rounded-full bg-slate-100 flex items-center justify-center text-[8px]"><ShieldCheck className="w-2.5 h-2.5 text-slate-500" /></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* 1.3 VISUAL CHARTS GRID (CONCENTRIC FUNNELS AND SVG CIRCLES) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* 1.3.1 LEFT MODULE: SUPPLIER ACTIVE CONTRACT LIST */}
+            <div className="bg-white border border-slate-200 rounded-md p-4 lg:col-span-7 shadow-xs space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <div className="space-y-0.5">
+                  <h3 className="text-xs font-black text-slate-900 font-sans uppercase tracking-wider flex items-center gap-1.5">
+                    <TrendingUp className="w-4 h-4 text-violet-600" /> วิเคราะห์รายรับและการทำธุรกรรมของบริษัทคู่ค้าหลัก
+                  </h3>
+                  <p className="text-[10px] text-slate-400">สรุปข้อมูลเปรียบเทียบมูลค่าธุรกรรมและเอกสารค้างชำระในรอบเดือน</p>
+                </div>
+                <span className="px-2 py-0.5 bg-slate-50 border border-slate-200 text-slate-500 font-mono text-[9px] font-bold rounded-full">
+                  Real-time Data
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/50 text-slate-400 text-[9px] font-mono font-bold uppercase tracking-wider border-b border-slate-100">
+                      <th className="py-2.5 px-3">ชื่อบริษัทคู่ค้า</th>
+                      <th className="py-2.5 px-3 text-right">ใบส่งของ (DO)</th>
+                      <th className="py-2.5 px-3 text-right">ใบวางบิล (BI)</th>
+                      <th className="py-2.5 px-3 text-right">ชำระแล้ว (PAID)</th>
+                      <th className="py-2.5 px-3 text-center">ดัชนีประสิทธิภาพ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {partners.map(p => {
+                      const pBillings = billings.filter(b => b.partnerName === p.name);
+                      const pDO = pBillings.filter(b => b.docType === 'delivery' && b.status !== 'cancelled').reduce((acc, b) => acc + b.amount, 0);
+                      const pBI = pBillings.filter(b => b.docType === 'billing' && b.status !== 'cancelled').reduce((acc, b) => acc + b.amount, 0);
+                      const pPaid = pBillings.filter(b => b.status === 'paid').reduce((acc, b) => acc + b.amount, 0);
+                      
+                      // Calculate mock efficiency based on speed of paid vs total
+                      const efficiency = pBillings.length > 0 
+                        ? Math.round((pBillings.filter(b => b.status === 'paid').length / pBillings.length) * 100)
+                        : 100;
+
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50/50 transition">
+                          <td className="py-3 px-3 font-semibold text-slate-800">
+                            <span className="block truncate max-w-[200px]" title={p.name}>{p.name}</span>
+                            <span className="text-[9px] font-mono text-slate-400">ID: {p.id} | {p.contactPerson}</span>
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono text-slate-600">
+                            ฿{pDO.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono font-bold text-indigo-600">
+                            ฿{pBI.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono text-emerald-600">
+                            ฿{pPaid.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <div className="inline-flex items-center gap-1.5">
+                              <div className="w-12 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full ${efficiency >= 80 ? 'bg-emerald-500' : efficiency >= 40 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                                  style={{ width: `${efficiency}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-[9px] font-mono font-bold text-slate-500">{efficiency}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 1.3.2 RIGHT MODULES: CONCENTRIC ARC CHARTS (THE ENDLESSLOOP ICONIC LAYOUT) */}
+            <div className="lg:col-span-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-6">
+              
+              {/* Card A: Concentric Ring Funnel (Conversion Funnel) */}
+              <div className="bg-white border border-slate-200 rounded-md p-4 shadow-xs space-y-4 flex flex-col justify-between">
+                <div>
+                  <h3 className="text-xs font-black text-slate-900 font-sans uppercase tracking-wider">
+                    วงจรการรับวางบิลคู่ค้า (CONCENTRIC FUNNEL)
+                  </h3>
+                  <p className="text-[10px] text-slate-400">เปรียบเทียบอัตราส่วนของเอกสารส่งของ ใบวางบิล และสถานะการชำระเงิน</p>
+                </div>
+
+                <div className="relative py-4 flex justify-center items-center">
+                  {/* Concentric Circle SVGs replicating Endlessloop "Leads, Bookings, Customers" style */}
+                  <svg viewBox="0 0 300 300" className="w-full max-w-[200px] h-auto">
+                    {/* Outer circle - Delivery (Leads) */}
+                    <circle cx="150" cy="150" r="120" stroke="#f4f4f5" strokeWidth="12" fill="none" />
+                    <circle 
+                      cx="150" 
+                      cy="150" 
+                      r="120" 
+                      stroke="#8b5cf6" 
+                      strokeWidth="12" 
+                      strokeDasharray="753" 
+                      strokeDashoffset={753 - (753 * 0.85)} 
+                      strokeLinecap="round" 
+                      fill="none" 
+                      className="transition-all duration-1000 origin-center -rotate-90"
+                    />
+
+                    {/* Middle circle - Billed (Booking) */}
+                    <circle cx="150" cy="150" r="95" stroke="#f4f4f5" strokeWidth="12" fill="none" />
+                    <circle 
+                      cx="150" 
+                      cy="150" 
+                      r="95" 
+                      stroke="#ec4899" 
+                      strokeWidth="12" 
+                      strokeDasharray="596" 
+                      strokeDashoffset={596 - (596 * 0.65)} 
+                      strokeLinecap="round" 
+                      fill="none" 
+                      className="transition-all duration-1000 origin-center -rotate-90"
+                    />
+
+                    {/* Inner circle - Paid (Customers) */}
+                    <circle cx="150" cy="150" r="70" stroke="#f4f4f5" strokeWidth="12" fill="none" />
+                    <circle 
+                      cx="150" 
+                      cy="150" 
+                      r="70" 
+                      stroke="#10b981" 
+                      strokeWidth="12" 
+                      strokeDasharray="439" 
+                      strokeDashoffset={439 - (439 * 0.45)} 
+                      strokeLinecap="round" 
+                      fill="none" 
+                      className="transition-all duration-1000 origin-center -rotate-90"
+                    />
+
+                    {/* Center text */}
+                    <text x="150" y="142" textAnchor="middle" className="fill-slate-800 text-2xl font-black font-sans">
+                      {dashboardStats.totalPaidAmount && (dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount)
+                        ? ((dashboardStats.totalPaidAmount / (dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount)) * 100).toFixed(0) + '%'
+                        : '0%'
+                      }
+                    </text>
+                    <text x="150" y="162" textAnchor="middle" className="fill-slate-400 font-mono text-[9px] font-bold uppercase tracking-widest">
+                      CHART RATIO
+                    </text>
+                    <text x="150" y="176" textAnchor="middle" className="fill-violet-600 font-sans text-[8px] font-bold">
+                      "Yes, this is for me!"
+                    </text>
+                  </svg>
+
+                  {/* Funnel annotations */}
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 flex flex-col space-y-2 text-[10px] font-semibold">
+                    <span className="flex items-center gap-1.5 text-violet-600 font-mono">
+                      <span className="w-2.5 h-2.5 rounded-full bg-violet-600 inline-block"></span> 85% Delivery
+                    </span>
+                    <span className="flex items-center gap-1.5 text-pink-600 font-mono">
+                      <span className="w-2.5 h-2.5 rounded-full bg-pink-500 inline-block"></span> 65% Billed
+                    </span>
+                    <span className="flex items-center gap-1.5 text-emerald-600 font-mono">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> 45% Paid
+                    </span>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3 flex justify-between text-[10px] font-mono text-slate-400">
+                  <span className="flex items-center gap-1 font-sans">ประเมินผลวงจรอัตโนมัติ:</span>
+                  <span className="font-extrabold text-violet-600">เสถียรและตรงรอบบัญชี</span>
+                </div>
+              </div>
+
+              {/* Card B: Concentric Semi-Circle Status Target (Target Board) */}
+              <div className="bg-white border border-slate-200 rounded-md p-4 shadow-xs space-y-4 flex flex-col justify-between">
+                <div>
+                  <h3 className="text-xs font-black text-slate-900 font-sans uppercase tracking-wider">
+                    เป้าหมายการประมวลผล (CONCENTRIC ARCH TARGET)
+                  </h3>
+                  <p className="text-[10px] text-slate-400">สถานะของตารางเอกสารทั้งหมดในระบบค้างจ่ายและจ่ายเสร็จสมบูรณ์</p>
+                </div>
+
+                <div className="relative py-2 flex justify-center items-center">
+                  {/* Concentric semi-circles mimicking Endlessloop Done(30), Doing(6), To Do(14), Backlog(28) */}
+                  <svg viewBox="0 0 300 150" className="w-full max-w-[220px] h-auto">
+                    {/* Outer Ring - Paid */}
+                    <path d="M 30,150 A 120,120 0 0,1 270,150" fill="none" stroke="#f4f4f5" strokeWidth="14" strokeLinecap="round" />
+                    <path 
+                      d="M 30,150 A 120,120 0 0,1 270,150" 
+                      fill="none" 
+                      stroke="#7c3aed" 
+                      strokeWidth="14" 
+                      strokeDasharray="377" 
+                      strokeDashoffset={377 - (377 * (dashboardStats.paidCount / Math.max(1, billings.filter(b => selectedPartnerDashboard === 'All' || b.partnerName === selectedPartnerDashboard).length)))} 
+                      strokeLinecap="round" 
+                      className="transition-all duration-1000"
+                    />
+
+                    {/* Second Ring - Billed */}
+                    <path d="M 55,150 A 95,95 0 0,1 245,150" fill="none" stroke="#f4f4f5" strokeWidth="14" strokeLinecap="round" />
+                    <path 
+                      d="M 55,150 A 95,95 0 0,1 245,150" 
+                      fill="none" 
+                      stroke="#ec4899" 
+                      strokeWidth="14" 
+                      strokeDasharray="298" 
+                      strokeDashoffset={298 - (298 * (dashboardStats.billedCount / Math.max(1, billings.filter(b => selectedPartnerDashboard === 'All' || b.partnerName === selectedPartnerDashboard).length)))} 
+                      strokeLinecap="round" 
+                      className="transition-all duration-1000"
+                    />
+
+                    {/* Third Ring - Pending */}
+                    <path d="M 80,150 A 70,70 0 0,1 220,150" fill="none" stroke="#f4f4f5" strokeWidth="14" strokeLinecap="round" />
+                    <path 
+                      d="M 80,150 A 70,70 0 0,1 220,150" 
+                      fill="none" 
+                      stroke="#f59e0b" 
+                      strokeWidth="14" 
+                      strokeDasharray="219" 
+                      strokeDashoffset={219 - (219 * (dashboardStats.pendingCount / Math.max(1, billings.filter(b => selectedPartnerDashboard === 'All' || b.partnerName === selectedPartnerDashboard).length)))} 
+                      strokeLinecap="round" 
+                      className="transition-all duration-1000"
+                    />
+
+                    {/* Center text on bottom edge */}
+                    <text x="150" y="145" textAnchor="middle" className="fill-slate-800 text-lg font-black font-sans">
+                      #{billings.filter(b => selectedPartnerDashboard === 'All' || b.partnerName === selectedPartnerDashboard).length}
+                    </text>
+                    <text x="150" y="125" textAnchor="middle" className="fill-slate-400 font-mono text-[8px] font-bold uppercase tracking-wider">
+                      TOTAL TABLES
+                    </text>
+                  </svg>
+
+                  {/* Arcs description labels inside cards */}
+                  <div className="absolute bottom-1 w-full flex justify-between px-2 text-[8px] font-bold text-slate-500 font-mono">
+                    <span className="text-violet-600">Done ({dashboardStats.paidCount})</span>
+                    <span className="text-pink-600">Doing ({dashboardStats.billedCount})</span>
+                    <span className="text-amber-600">To Do ({dashboardStats.pendingCount})</span>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3 flex items-center justify-between text-[9px] text-slate-400 font-sans">
+                  <span className="flex items-center gap-1">ความเห็นร่วม:</span>
+                  <span className="italic text-violet-600">"I love it, I need to share this"</span>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* 2. MAIN BILLING DOCUMENTS BOARD TAB */}
+      {activeSubTab === 'documents' && (
+        <>
+          {/* Real-time Unpaid Billing Alert Banner */}
+          {unpaidBilledItems.length > 0 && (
+            <div id="unpaid-billing-alert-banner" className="bg-rose-50 border border-rose-200 rounded-sm p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in">
+              <div className="flex items-center gap-3">
+                <span className="p-2 bg-rose-100 text-rose-600 rounded-sm shrink-0 flex items-center justify-center animate-pulse">
+                  <AlertCircle className="w-5 h-5" />
+                </span>
+                <div>
+                  <h4 className="text-xs font-bold text-rose-800 font-sans">แจ้งเตือนวางบิลค้างชำระ (Unpaid Billings Alert)</h4>
+                  <p className="text-[11px] text-rose-600 mt-0.5 font-sans">
+                    มีเอกสารวางบิลที่ผ่านรอบการวางบิลแล้วแต่ยังไม่ได้รับการชำระเงินจำนวน <strong className="text-rose-800 font-mono text-xs">{unpaidBilledItems.length} ฉบับ</strong> รวมมูลค่าค้างจ่ายทั้งสิ้น <strong className="text-rose-800 font-mono text-xs">฿{unpaidBilledItems.reduce((acc, b) => acc + b.amount, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
+                  </p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 bg-rose-100 text-rose-700 text-[10px] font-mono font-bold rounded-sm border border-rose-200 shrink-0 uppercase tracking-wider">
+                Awaiting Payment
+              </span>
+            </div>
+          )}
+
+          {/* Summary Stats Panels */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Deliveries */}
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">ใบส่งของรอดำเนินการ (DO)</span>
+                <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-xs font-mono">{stats.deliveryCount} ฉบับ</span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <p className="text-xl font-black text-slate-950 font-mono">฿{stats.totalDeliveryAmount.toLocaleString()}</p>
+                <span className="text-[10px] text-slate-400">มูลค่ารวมส่งของ</span>
+              </div>
+            </div>
+
+            {/* Card 2: Billed / Outstanding */}
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">ใบวางบิลในระบบ (BI)</span>
+                <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded-xs font-mono">{stats.billedCount} ฉบับ</span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <p className="text-xl font-black text-indigo-600 font-mono">฿{stats.totalBilledAmount.toLocaleString()}</p>
+                <span className="text-[10px] text-slate-400">มูลค่าวางบิล</span>
+              </div>
+            </div>
+
+            {/* Card 3: Pending Payments */}
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400 font-bold text-amber-600">ยอดค้างจ่ายคู่ค้าทั้งหมด</span>
+                <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 text-[10px] font-bold rounded-xs font-mono">{stats.pendingCount} รายการ</span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <p className="text-xl font-black text-amber-600 font-mono">฿{stats.totalPendingAmount.toLocaleString()}</p>
+                <span className="text-[10px] text-slate-400">รอเคลียร์ชำระ</span>
+              </div>
+            </div>
+
+            {/* Card 4: Paid completed */}
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400 font-bold text-emerald-600">ชำระเงินเรียบร้อยแล้ว</span>
+                <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded-xs font-mono">{stats.paidCount} สำเร็จ</span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <p className="text-xl font-black text-emerald-600 font-mono">฿{stats.totalPaidAmount.toLocaleString()}</p>
+                <span className="text-[10px] text-slate-400">จ่ายแล้วสะสม</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Filter and Search Panel */}
+          <div className="bg-white p-4 border border-slate-200 rounded-sm flex flex-col lg:flex-row gap-3 items-center justify-between shadow-xs">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="ค้นหาตามชื่อคู่ค้า, เลขที่เอกสาร, ผู้ติดต่อ หรือรายละเอียด..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-sm text-xs focus:outline-none focus:border-blue-500 bg-white"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2.5 w-full lg:w-auto items-center">
+              {/* Document Type Filter */}
+              <div className="flex items-center gap-1 text-xs text-slate-500 flex-1 sm:flex-initial">
+                <span className="whitespace-nowrap font-sans font-semibold">ประเภท:</span>
+                <select
+                  value={docTypeFilter}
+                  onChange={(e) => setDocTypeFilter(e.target.value)}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-sm text-xs text-slate-700 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="All">ทุกประเภทเอกสาร</option>
+                  {docTypes.map(d => (
+                    <option key={d.key} value={d.key}>{d.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div className="flex items-center gap-1 text-xs text-slate-500 flex-1 sm:flex-initial">
+                <span className="whitespace-nowrap font-sans font-semibold">สถานะ:</span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-sm text-xs text-slate-700 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="All">ทุกสถานะเอกสาร</option>
+                  <option value="pending">รอวางบิล / รอดำเนินการ</option>
+                  <option value="billed">วางบิลแล้ว / รอชำระ</option>
+                  <option value="paid">ชำระเงินเรียบร้อย</option>
+                  <option value="cancelled">ยกเลิกแล้ว</option>
+                </select>
+              </div>
+
+              {/* Day Filter */}
+              <div className="flex items-center gap-1 text-xs text-slate-500 flex-1 sm:flex-initial">
+                <span className="whitespace-nowrap font-sans font-semibold">วัน:</span>
+                <select
+                  value={filterDay}
+                  onChange={(e) => setFilterDay(e.target.value)}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-sm text-xs text-slate-700 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="All">ทุกวัน</option>
+                  {Array.from({ length: 31 }, (_, i) => {
+                    const d = String(i + 1).padStart(2, '0');
+                    return <option key={d} value={d}>{d}</option>;
+                  })}
+                </select>
+              </div>
+
+              {/* Month Filter */}
+              <div className="flex items-center gap-1 text-xs text-slate-500 flex-1 sm:flex-initial">
+                <span className="whitespace-nowrap font-sans font-semibold">เดือน:</span>
+                <select
+                  value={filterMonth}
+                  onChange={(e) => setFilterMonth(e.target.value)}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-sm text-xs text-slate-700 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="All">ทุกเดือน</option>
+                  <option value="01">มกราคม (01)</option>
+                  <option value="02">กุมภาพันธ์ (02)</option>
+                  <option value="03">มีนาคม (03)</option>
+                  <option value="04">เมษายน (04)</option>
+                  <option value="05">พฤษภาคม (05)</option>
+                  <option value="06">มิถุนายน (06)</option>
+                  <option value="07">กรกรฎาคม (07)</option>
+                  <option value="08">สิงหาคม (08)</option>
+                  <option value="09">กันยายน (09)</option>
+                  <option value="10">ตุลาคม (10)</option>
+                  <option value="11">พฤศจิกายน (11)</option>
+                  <option value="12">ธันวาคม (12)</option>
+                </select>
+              </div>
+
+              {/* Year Filter */}
+              <div className="flex items-center gap-1 text-xs text-slate-500 flex-1 sm:flex-initial">
+                <span className="whitespace-nowrap font-sans font-semibold">ปี:</span>
+                <select
+                  value={filterYear}
+                  onChange={(e) => setFilterYear(e.target.value)}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-sm text-xs text-slate-700 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="All">ทุกปี</option>
+                  {availableYears.map(year => (
+                    <option key={year} value={year}>{Number(year) + 543} ({year})</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Reset Filters button */}
+              {(searchQuery || docTypeFilter !== 'All' || statusFilter !== 'All' || filterDay !== 'All' || filterMonth !== 'All' || filterYear !== 'All') && (
+                <button
+                  onClick={handleResetFilters}
+                  className="px-2.5 py-1.5 border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-sm text-xs transition flex items-center gap-1 cursor-pointer font-sans font-bold"
+                >
+                  <RefreshCw className="w-3 h-3" /> รีเซ็ตตัวกรอง
+                </button>
+              )}
+
+              {/* Audio Settings Integration */}
+              <div className="flex items-center gap-1.5 ml-auto border-l border-slate-200 pl-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nv = !soundEnabled;
+                    setSoundEnabled(nv);
+                    safeStorage.setItem('hr_sound_enabled', JSON.stringify(nv));
+                    if (nv) {
+                      setTimeout(() => {
+                        playNotificationSound();
+                      }, 50);
+                    }
+                  }}
+                  className={`p-1.5 rounded-sm border transition flex items-center gap-1 text-xs font-semibold cursor-pointer ${
+                    soundEnabled 
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
+                      : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                  }`}
+                  title={soundEnabled ? "ปิดเสียงแจ้งเตือนระบบ" : "เปิดเสียงแจ้งเตือนระบบ"}
+                >
+                  {soundEnabled ? (
+                    <>
+                      <Volume2 className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                      <span className="text-[10px] hidden sm:inline">เปิดเสียง</span>
+                    </>
+                  ) : (
+                    <>
+                      <VolumeX className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-[10px] hidden sm:inline">ปิดเสียง</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={playNotificationSound}
+                  className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-sm text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                  title="ทดสอบเสียงแจ้งเตือน"
+                >
+                  <span>📢 ทดสอบ</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Billing Table List */}
+          <div className="bg-white border border-slate-200 rounded-sm shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 text-[10px] font-mono font-bold uppercase tracking-wider border-b border-slate-200">
+                    <th className="py-3 px-4">รหัส & คู่ค้า</th>
+                    <th className="py-3 px-4">ประเภทเอกสาร</th>
+                    <th className="py-3 px-4 font-mono">เลขที่เอกสาร</th>
+                    <th className="py-3 px-4 text-right">จำนวนเงิน (บาท)</th>
+                    <th className="py-3 px-4 text-center">วันที่ออกเอกสาร</th>
+                    <th className="py-3 px-4 text-center">ครบกำหนดชำระ</th>
+                    <th className="py-3 px-4 text-center">สถานะ</th>
+                    <th className="py-3 px-4 text-center">จัดการการดำเนินงาน</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedBillings.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-xs text-slate-400 font-sans">
+                        ไม่พบข้อมูลเอกสารคู่ค้าและใบส่งวางบิลตามเงื่อนไขที่ระบุ
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedBillings.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50/50 transition text-xs">
+                        {/* Partner name & details */}
+                        <td className="py-3.5 px-4">
+                          <div>
+                            <span className="font-bold text-slate-800 block">{item.partnerName}</span>
+                            {item.contactPerson && (
+                              <span className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                                <User className="w-3 h-3" /> {item.contactPerson} {item.phone && `(${item.phone})`}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Document Type Badge */}
+                        <td className="py-3.5 px-4">
+                          {getDocTypeBadge(item.docType)}
+                        </td>
+
+                        {/* Document Details (Separated Lines) */}
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-1 text-slate-700 font-sans text-xs">
+                            {item.docType === 'delivery' ? (
+                              <div className="space-y-0.5">
+                                <div className="text-[10px] font-bold text-blue-600 uppercase flex items-center gap-1">
+                                  <span>🚚 ใบส่งของ</span>
+                                </div>
+                                <div className="font-mono">
+                                  <span className="text-slate-400">เลขที่ส่งของ:</span> <span className="font-bold text-slate-900">{item.deliveryDocNumber || item.docNumber}</span>
+                                </div>
+                                <div className="font-mono">
+                                  <span className="text-slate-400">เล่มที่:</span> <span className="text-slate-800 font-semibold">{item.bookNumber || '-'}</span>
+                                </div>
+                                <div className="font-mono">
+                                  <span className="text-slate-400">เลขที่:</span> <span className="text-slate-800 font-semibold">{item.pageNumber || '-'}</span>
+                                </div>
+                                <div className="font-mono">
+                                  <span className="text-slate-400">ราคา:</span> <span className="text-blue-600 font-bold">฿{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                              </div>
+                            ) : item.docType === 'billing' ? (
+                              <div className="space-y-0.5">
+                                <div className="text-[10px] font-bold text-violet-600 uppercase flex items-center gap-1">
+                                  <span>📄 ใบวางบิล</span>
+                                </div>
+                                <div className="font-mono">
+                                  <span className="text-slate-400">เลขที่ใบวางบิล:</span> <span className="font-bold text-slate-900">{item.billingDocNumber || item.docNumber}</span>
+                                </div>
+                                <div className="font-mono">
+                                  <span className="text-slate-400">เล่มที่:</span> <span className="text-slate-800 font-semibold">{item.bookNumber || '-'}</span>
+                                </div>
+                                <div className="font-mono">
+                                  <span className="text-slate-400">เลขที่:</span> <span className="text-slate-800 font-semibold">{item.pageNumber || '-'}</span>
+                                </div>
+                                <div className="font-mono">
+                                  <span className="text-slate-400">ราคาใบวางบิล:</span> <span className="text-violet-600 font-bold">฿{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                                {item.cnDocNumber && (
+                                  <div className="font-mono text-rose-600 flex items-center gap-1">
+                                    <span className="text-rose-400 text-[10px]">เลขที่ CN:</span>
+                                    <span className="font-bold">{item.cnDocNumber}</span>
+                                  </div>
+                                )}
+                                {item.cnAmount !== undefined && item.cnAmount > 0 && (
+                                  <div className="font-mono text-rose-600 flex items-center gap-1">
+                                    <span className="text-rose-400 text-[10px]">ราคา CN:</span>
+                                    <span className="font-bold">-฿{item.cnAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                )}
+                                {item.cnAmount !== undefined && item.cnAmount > 0 && (
+                                  <div className="font-mono text-emerald-600 flex items-center gap-1 border-t border-dashed border-slate-200 pt-0.5 mt-0.5">
+                                    <span className="text-emerald-500 font-bold">ยอดที่ต้องจ่าย:</span>
+                                    <span className="font-black bg-emerald-50 px-1 rounded-xs">฿{(item.amount - item.cnAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="space-y-0.5">
+                                <div className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                                  <span>🧾 ใบเสร็จ/อื่นๆ</span>
+                                </div>
+                                <div className="font-mono">
+                                  <span className="text-slate-400">เลขที่เอกสาร:</span> <span className="font-bold text-slate-900">{item.docNumber}</span>
+                                </div>
+                                <div className="font-mono">
+                                  <span className="text-slate-400">เล่มที่:</span> <span className="text-slate-800 font-semibold">{item.bookNumber || '-'}</span>
+                                </div>
+                                <div className="font-mono">
+                                  <span className="text-slate-400">เลขที่:</span> <span className="text-slate-800 font-semibold">{item.pageNumber || '-'}</span>
+                                </div>
+                                <div className="font-mono">
+                                  <span className="text-slate-400">ราคา:</span> <span className="text-slate-900 font-bold">฿{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Transport Carrier Info if present */}
+                            {item.transportCarrier && (
+                              <div className="text-[10px] text-emerald-700 font-sans flex items-center gap-1 mt-1 bg-emerald-50/50 px-1.5 py-0.5 rounded-sm border border-emerald-100/30 w-max">
+                                <span>🚚 ขนส่ง: {item.transportCarrier}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Amount */}
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="space-y-1 text-right">
+                            <span className="font-mono font-bold text-slate-700 block text-xs">
+                              ฿{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                            {item.cnAmount !== undefined && item.cnAmount > 0 && (
+                              <>
+                                <span className="font-mono text-[10px] text-rose-500 block">
+                                  -฿{item.cnAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (CN)
+                                </span>
+                                <div className="border-t border-slate-100 pt-0.5 mt-0.5 inline-block">
+                                  <span className="font-mono font-extrabold text-emerald-600 block text-xs" title="ยอดที่ต้องจ่าย">
+                                    ฿{(item.amount - item.cnAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                  <span className="text-[9px] text-slate-400 font-sans block">ยอดต้องจ่าย</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Issue Date */}
+                        <td className="py-3.5 px-4 text-center font-mono text-slate-500">
+                          {item.issueDate}
+                        </td>
+
+                        {/* Due Date */}
+                        <td className="py-3.5 px-4 text-center font-mono">
+                          <span className={`${
+                            item.status !== 'paid' && item.status !== 'cancelled' && new Date(item.dueDate) < new Date()
+                              ? 'text-rose-600 font-bold bg-rose-50 px-1 py-0.5 rounded-sm border border-rose-100'
+                              : 'text-slate-500'
+                          }`}>
+                            {item.dueDate}
+                          </span>
+                        </td>
+
+                        {/* Status Badge */}
+                        <td className="py-3.5 px-4 text-center">
+                          {getStatusBadge(item.status)}
+                        </td>
+
+                        {/* Operations Controls */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* View Info button */}
+                            <button
+                              onClick={() => { playNotificationSound(); setViewingDetails(item); }}
+                              className="p-1 hover:bg-slate-100 text-slate-500 rounded-sm transition cursor-pointer"
+                              title="ดูรายละเอียดเอกสาร"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            
+                            {/* Edit button */}
+                            <button
+                              onClick={() => { playNotificationSound(); handleOpenEdit(item); }}
+                              className="p-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-sm transition cursor-pointer"
+                              title="แก้ไขข้อมูลเอกสาร"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Cancel/Void button */}
+                            {item.status !== 'cancelled' ? (
+                              <button
+                                onClick={() => {
+                                  playNotificationSound();
+                                  const updated = { ...item, status: 'cancelled' as const };
+                                  onUpdateBilling(updated);
+                                  showSuccess(`ยกเลิกเอกสารเลขที่ ${item.docNumber} สำเร็จแล้ว`);
+                                }}
+                                className="p-1 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-sm transition cursor-pointer"
+                                title="ยกเลิกเอกสารฉบับนี้ (Void)"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  playNotificationSound();
+                                  const updated = { ...item, status: 'pending' as const };
+                                  onUpdateBilling(updated);
+                                  showSuccess(`กู้คืนเอกสารเลขที่ ${item.docNumber} สู่สถานะรอดำเนินการแล้ว`);
+                                }}
+                                className="p-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-sm transition cursor-pointer"
+                                title="เปิดใช้งานเอกสารนี้อีกครั้ง"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* Delete button (with confirmation warning) */}
+                            <button
+                              onClick={() => { playNotificationSound(); setBillingToDelete(item); }}
+                              className="p-1 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-sm transition cursor-pointer"
+                              title="ลบเอกสารคู่ออกระบบ"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-slate-150 px-4 py-3 bg-white">
+                <div className="flex flex-1 justify-between sm:hidden">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => {
+                      setCurrentPage(prev => Math.max(prev - 1, 1));
+                      playNotificationSound();
+                    }}
+                    className="relative inline-flex items-center px-4 py-2 border border-slate-300 text-xs font-medium rounded-sm text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
+                  >
+                    ก่อนหน้า
+                  </button>
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => {
+                      setCurrentPage(prev => Math.min(prev + 1, totalPages));
+                      playNotificationSound();
+                    }}
+                    className="relative ml-3 inline-flex items-center px-4 py-2 border border-slate-300 text-xs font-medium rounded-sm text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
+                  >
+                    ถัดไป
+                  </button>
+                </div>
+                <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between text-xs font-sans text-slate-500">
+                  <div>
+                    <p>
+                      แสดงรายการที่ <span className="font-bold text-slate-900">{startIndex + 1}</span> ถึง{' '}
+                      <span className="font-bold text-slate-900">{Math.min(startIndex + itemsPerPage, totalItems)}</span> จากทั้งหมด{' '}
+                      <span className="font-bold text-slate-900">{totalItems}</span> รายการ
+                    </p>
+                  </div>
+                  <div>
+                    <nav className="isolate inline-flex -space-x-px rounded-sm shadow-xs" aria-label="Pagination">
+                      <button
+                        disabled={currentPage === 1}
+                        onClick={() => {
+                          setCurrentPage(1);
+                          playNotificationSound();
+                        }}
+                        className="relative inline-flex items-center rounded-l-sm px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                        title="หน้าแรก"
+                      >
+                        «
+                      </button>
+                      <button
+                        disabled={currentPage === 1}
+                        onClick={() => {
+                          setCurrentPage(prev => Math.max(prev - 1, 1));
+                          playNotificationSound();
+                        }}
+                        className="relative inline-flex items-center px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                      >
+                        ‹ ก่อนหน้า
+                      </button>
+                      
+                      {/* Page numbers */}
+                      {Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                        .map((p, idx, arr) => {
+                          const isCurrent = p === currentPage;
+                          return (
+                            <React.Fragment key={p}>
+                              {idx > 0 && arr[idx - 1] !== p - 1 && (
+                                <span className="relative inline-flex items-center px-3 py-2 text-slate-500 ring-1 ring-inset ring-slate-305 bg-white select-none">...</span>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setCurrentPage(p);
+                                  playNotificationSound();
+                                }}
+                                className={`relative inline-flex items-center px-3 py-2 text-xs font-semibold ring-1 ring-inset focus:z-20 focus:outline-offset-0 transition cursor-pointer ${
+                                  isCurrent
+                                    ? 'z-10 bg-blue-600 text-white ring-blue-600'
+                                    : 'text-slate-900 ring-slate-305 hover:bg-slate-50 bg-white'
+                                }`}
+                              >
+                                {p}
+                              </button>
+                            </React.Fragment>
+                          );
+                        })}
+
+                      <button
+                        disabled={currentPage === totalPages}
+                        onClick={() => {
+                          setCurrentPage(prev => Math.min(prev + 1, totalPages));
+                          playNotificationSound();
+                        }}
+                        className="relative inline-flex items-center px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                      >
+                        ถัดไป ›
+                      </button>
+                      <button
+                        disabled={currentPage === totalPages}
+                        onClick={() => {
+                          setCurrentPage(totalPages);
+                          playNotificationSound();
+                        }}
+                        className="relative inline-flex items-center rounded-r-sm px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                        title="หน้าสุดท้าย"
+                      >
+                        »
+                      </button>
+                    </nav>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeSubTab === 'partners' && (
+        <>
+          {/* Partners Filter & Search Panel */}
+          <div className="bg-white p-4 border border-slate-200 rounded-sm flex flex-col lg:flex-row gap-3 items-center justify-between shadow-xs">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="ค้นหาชื่อบริษัทคู่ค้า, เลขประจำตัวผู้เสียภาษี, ชื่อผู้ติดต่อหลัก, เบอร์โทร..."
+                value={partnerSearchQuery}
+                onChange={(e) => setPartnerSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-sm text-xs focus:outline-none focus:border-emerald-500 bg-white"
+              />
+            </div>
+            
+            {partnerSearchQuery && (
+              <button
+                onClick={() => setPartnerSearchQuery('')}
+                className="px-2.5 py-1.5 border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-sm text-xs transition flex items-center gap-1 cursor-pointer font-sans font-bold"
+              >
+                <RefreshCw className="w-3 h-3" /> ล้างการค้นหา
+              </button>
+            )}
+          </div>
+
+          {/* Partner Directory List */}
+          <div className="bg-white border border-slate-200 rounded-sm shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 text-[10px] font-mono font-bold uppercase tracking-wider border-b border-slate-200">
+                    <th className="py-3 px-4">ชื่อบริษัทคู่ค้า / ทะเบียน</th>
+                    <th className="py-3 px-4">เลขประจำตัวผู้เสียภาษี</th>
+                    <th className="py-3 px-4">ที่อยู่ติดต่อ</th>
+                    <th className="py-3 px-4">ผู้ประสานงานหลัก</th>
+                    <th className="py-3 px-4">ช่องทางติดต่อ</th>
+                    <th className="py-3 px-4">บริการ / หมายเหตุ</th>
+                    <th className="py-3 px-4 text-center">จัดการข้อมูล</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredPartners.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-xs text-slate-400 font-sans">
+                        ไม่พบข้อมูลรายชื่อบริษัทคู่ค้าในฐานข้อมูล
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredPartners.map((p) => (
+                      <tr key={p.id} className="hover:bg-slate-50/50 transition">
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className="p-1.5 bg-emerald-50 text-emerald-600 rounded-sm shrink-0">
+                              <Building2 className="w-3.5 h-3.5" />
+                            </span>
+                            <div>
+                              <span className="font-bold text-slate-800 block">{p.name}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">ID: {p.id}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-slate-600">
+                          {p.taxId || <span className="text-slate-300 italic">- ไม่ระบุ -</span>}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600 max-w-xs truncate" title={p.address}>
+                          {p.address || <span className="text-slate-300 italic">- ไม่ระบุ -</span>}
+                        </td>
+                        <td className="py-3.5 px-4 font-semibold text-slate-700">
+                          {p.contactPerson || <span className="text-slate-300 italic">- ไม่ระบุ -</span>}
+                        </td>
+                        <td className="py-3.5 px-4 space-y-1">
+                          {p.phone && (
+                            <div className="flex items-center gap-1 text-slate-600">
+                              <Phone className="w-3 h-3 text-slate-400" />
+                              <span className="font-mono">{p.phone}</span>
+                            </div>
+                          )}
+                          {p.email && (
+                            <div className="flex items-center gap-1 text-slate-600">
+                              <Mail className="w-3.5 h-3.5 text-slate-400" />
+                              <span className="font-sans truncate max-w-[150px]">{p.email}</span>
+                            </div>
+                          )}
+                          {!p.phone && !p.email && <span className="text-slate-300 italic">- ไม่มีข้อมูล -</span>}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-500 italic max-w-xs truncate" title={p.notes}>
+                          {p.notes || <span className="text-slate-300 italic">- ไม่มีบันทึก -</span>}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => handleOpenEditPartner(p)}
+                              className="p-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-sm transition cursor-pointer"
+                              title="แก้ไขข้อมูลคู่ค้า"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setPartnerToDelete(p)}
+                              className="p-1 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-sm transition cursor-pointer"
+                              title="ลบข้อมูลคู่ค้า"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* MODAL: ADD RECORD */}
+      {isAddOpen && (
+        <div id="add-partner-billing-modal" className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-sm border border-slate-200 max-w-lg w-full p-6 shadow-2xl space-y-4">
+            
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide font-sans flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-blue-600" /> เพิ่มข้อมูลเอกสารคู่ค้า & ใบส่งของวางบิล
+              </h3>
+              <button 
+                onClick={() => setIsAddOpen(false)} 
+                className="p-1 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-sm"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSubmit} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <label className="font-semibold text-slate-700 block">ชื่อคู่ค้า / บริษัทพันธมิตร <span className="text-red-500">*</span></label>
+                  <button
+                    type="button"
+                    onClick={handleOpenAddPartner}
+                    className="text-[10px] text-emerald-600 hover:text-emerald-800 font-bold flex items-center gap-1 hover:underline cursor-pointer bg-transparent border-0 outline-none"
+                  >
+                    <Plus className="w-3 h-3" /> ลงทะเบียนคู่ค้าใหม่
+                  </button>
+                </div>
+                
+                <div className="flex gap-2">
+                  <select
+                    value={partners.some(p => p.name === partnerName) ? partnerName : ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val) {
+                        setPartnerName(val);
+                        const matched = partners.find(p => p.name === val);
+                        if (matched) {
+                          setContactPerson(matched.contactPerson || '');
+                          setPhone(matched.phone || '');
+                        }
+                      }
+                    }}
+                    className="flex-1 px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-sans text-xs font-semibold text-slate-800"
+                  >
+                    <option value="">-- เลือกจากคู่ค้าในระบบ --</option>
+                    {partners.map(p => (
+                      <option key={p.id} value={p.name}>
+                        {p.name} {p.taxId ? `(${p.taxId})` : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    type="text"
+                    placeholder="หรือพิมพ์ระบุชื่อด้วยตนเอง..."
+                    value={partnerName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPartnerName(val);
+                      const matched = partners.find(p => p.name.trim().toLowerCase() === val.trim().toLowerCase());
+                      if (matched) {
+                        setContactPerson(matched.contactPerson || '');
+                        setPhone(matched.phone || '');
+                      }
+                    }}
+                    className="w-1/2 px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-sans text-xs"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center mb-0.5">
+                    <label className="font-semibold text-slate-700 block">ประเภทเอกสาร <span className="text-red-500">*</span></label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingNewDocType(!isAddingNewDocType);
+                        playNotificationSound();
+                      }}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 cursor-pointer bg-transparent border-0 outline-none"
+                    >
+                      {isAddingNewDocType ? "« เลือกประเภท" : "+ จัดการประเภท"}
+                    </button>
+                  </div>
+                  
+                  {!isAddingNewDocType ? (
+                    <select
+                      value={docType}
+                      onChange={(e) => setDocType(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white text-xs font-sans"
+                    >
+                      {docTypes.map(d => (
+                        <option key={d.key} value={d.key}>{d.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="space-y-2 border border-blue-100 bg-blue-50/30 p-2 rounded-sm text-[11px]">
+                      {/* Add Doc Type Input */}
+                      <div className="flex gap-1 items-center">
+                        <input
+                          type="text"
+                          value={newDocTypeLabel}
+                          onChange={(e) => setNewDocTypeLabel(e.target.value)}
+                          placeholder="เพิ่มประเภท เช่น ใบเสนอราคา, ใบสั่งซื้อ..."
+                          className="flex-1 px-2 py-1 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-[11px] text-slate-700 bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const label = newDocTypeLabel.trim();
+                            if (label) {
+                              const key = 'custom_' + Date.now();
+                              const updated = [...docTypes, { key, label }];
+                              setDocTypes(updated);
+                              safeStorage.setItem('hr_doc_types_list', JSON.stringify(updated));
+                              setDocType(key);
+                              setNewDocTypeLabel('');
+                              showSuccess(`เพิ่มประเภทเอกสาร "${label}" สำเร็จ`);
+                              playNotificationSound();
+                            }
+                          }}
+                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-sm font-bold text-[11px] cursor-pointer transition shrink-0 border-0"
+                        >
+                          เพิ่ม
+                        </button>
+                      </div>
+
+                      {/* Doc Type List with Delete options */}
+                      <div className="max-h-24 overflow-y-auto space-y-1 pr-1 border-t border-blue-100/50 pt-1">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">ลบประเภทเอกสารที่มีอยู่:</p>
+                        {docTypes.map(d => (
+                          <div key={d.key} className="flex justify-between items-center text-[10px] bg-white border border-slate-100 py-0.5 px-1 rounded-sm">
+                            <span className="font-semibold text-slate-600 truncate max-w-[150px]">{d.label}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = docTypes.filter(item => item.key !== d.key);
+                                setDocTypes(updated);
+                                safeStorage.setItem('hr_doc_types_list', JSON.stringify(updated));
+                                if (docType === d.key) {
+                                  setDocType(updated[0]?.key || 'delivery');
+                                }
+                                showSuccess(`ลบประเภทเอกสาร "${d.label}" แล้ว`);
+                                playNotificationSound();
+                              }}
+                              className="p-0.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xs transition border-0 cursor-pointer bg-transparent"
+                              title="ลบประเภทเอกสารนี้"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">เลขที่เอกสารหลัก/อ้างอิง <span className="text-slate-400 font-normal">(เลือกกรอกแยกด้านล่างได้)</span></label>
+                  <input
+                    type="text"
+                    value={docNumber}
+                    onChange={(e) => setDocNumber(e.target.value)}
+                    placeholder="เช่น DO-9988 / BI-10291"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Separated Delivery Document No. and Billing Document No. */}
+              <div className="grid grid-cols-2 gap-3 bg-slate-50/50 p-2.5 rounded-sm border border-slate-100">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> เลขที่ใบส่งของ
+                  </label>
+                  <input
+                    type="text"
+                    value={deliveryDocNumber}
+                    onChange={(e) => setDeliveryDocNumber(e.target.value)}
+                    placeholder="เช่น DO-2026-001"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-violet-500 rounded-full"></span> เลขที่ใบวางบิล
+                  </label>
+                  <input
+                    type="text"
+                    value={billingDocNumber}
+                    onChange={(e) => setBillingDocNumber(e.target.value)}
+                    placeholder="placeholder เช่น BI-2026-001"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Separated Credit Note (CN) No. & CN Amount/Price */}
+              <div className="grid grid-cols-2 gap-3 bg-rose-50/30 p-2.5 rounded-sm border border-rose-100/40">
+                <div className="space-y-1">
+                  <label className="font-semibold text-rose-700 block flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span> เลขที่ CN (ใบลดหนี้)
+                  </label>
+                  <input
+                    type="text"
+                    value={cnDocNumber}
+                    onChange={(e) => setCnDocNumber(e.target.value)}
+                    placeholder="เช่น CN-2026-001"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-rose-700 block flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span> ราคา/จำนวนเงิน CN (บาท)
+                  </label>
+                  <input
+                    type="number"
+                    value={cnAmount || ''}
+                    onChange={(e) => setCnAmount(e.target.value !== '' ? Number(e.target.value) : '')}
+                    placeholder="0.00"
+                    step="any"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Book No. & Page No. & Price/Amount */}
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">เล่มที่ (Book No.)</label>
+                  <input
+                    type="text"
+                    value={bookNumber}
+                    onChange={(e) => setBookNumber(e.target.value)}
+                    placeholder="เล่มที่"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">เลขที่ (Page No.)</label>
+                  <input
+                    type="text"
+                    value={pageNumber}
+                    onChange={(e) => setPageNumber(e.target.value)}
+                    placeholder="เลขที่ในเล่ม"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">ราคา/จำนวนเงิน <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={amount || ''}
+                      onChange={(e) => setAmount(Number(e.target.value))}
+                      placeholder="0.00"
+                      min={0.01}
+                      step="any"
+                      className="w-full pl-2 pr-6 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono font-bold"
+                      required
+                    />
+                    <span className="absolute right-1.5 top-1.5 text-slate-400 font-semibold text-[10px]">บ.</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Shipping Carrier Selector with Add Feature */}
+              <div className="space-y-1 bg-slate-50/30 p-2.5 rounded-sm border border-slate-100">
+                <div className="flex justify-between items-center mb-1">
+                  <label className="font-semibold text-slate-700 block text-xs">เลือกบริษัทขนส่ง (Carrier)</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingNewCarrier(!isAddingNewCarrier);
+                      playNotificationSound();
+                    }}
+                    className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 cursor-pointer bg-transparent border-0 outline-none"
+                  >
+                    {isAddingNewCarrier ? "« เลือกจากรายการ" : "+ เพิ่มขนส่งใหม่"}
+                  </button>
+                </div>
+                
+                {!isAddingNewCarrier ? (
+                  <select
+                    value={transportCarrier}
+                    onChange={(e) => setTransportCarrier(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-sans text-xs"
+                  >
+                    <option value="">-- ไม่ระบุ / ไม่ใช้ขนส่ง --</option>
+                    {carriers.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      value={newCarrierInput}
+                      onChange={(e) => setNewCarrierInput(e.target.value)}
+                      placeholder="ระบุชื่อขนส่ง เช่น Flash, Kerry, รถโรงงาน..."
+                      className="flex-1 px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = newCarrierInput.trim();
+                        if (trimmed && !carriers.includes(trimmed)) {
+                          const updated = [...carriers, trimmed];
+                          setCarriers(updated);
+                          safeStorage.setItem('hr_carriers_list', JSON.stringify(updated));
+                          setTransportCarrier(trimmed);
+                          setNewCarrierInput('');
+                          setIsAddingNewCarrier(false);
+                          showSuccess(`เพิ่มขนส่ง "${trimmed}" สำเร็จ`);
+                          playNotificationSound();
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm font-bold text-xs cursor-pointer transition shrink-0 border-0"
+                    >
+                      เพิ่ม
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">สถานะเอกสาร <span className="text-red-500">*</span></label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as any)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-sans"
+                  >
+                    <option value="pending">รอวางบิล / รอดำเนินการ</option>
+                    <option value="billed">วางบิลแล้ว / รอชำระเงิน</option>
+                    <option value="paid">ชำระเงินเสร็จสิ้นแล้ว</option>
+                    <option value="cancelled">ยกเลิกฉบับนี้</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">วันที่ออกเอกสาร <span className="text-red-500">*</span></label>
+                  <input
+                    type="date"
+                    value={issueDate}
+                    onChange={(e) => setIssueDate(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">กำหนดชำระ / นัดจ่าย <span className="text-red-500">*</span></label>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-mono"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">ชื่อผู้ติดต่อคู่ค้า</label>
+                  <input
+                    type="text"
+                    value={contactPerson}
+                    onChange={(e) => setContactPerson(e.target.value)}
+                    placeholder="คุณสมชาย ใจดี"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                <div className="space-y-1 col-span-2">
+                  <label className="font-semibold text-slate-700 block">เบอร์โทรศัพท์ผู้ติดต่อ</label>
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="เช่น 08x-xxxxxxx"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 block">รายละเอียดสินค้า / หมายเหตุเพิ่มเติม</label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="ระบุรายละเอียดเพิ่มเติม สินค้าที่จัดส่ง หรือเงื่อนไขชำระเงินอื่นๆ..."
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white"
+                ></textarea>
+              </div>
+
+              <div className="flex gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddOpen(false)}
+                  className="flex-1 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-sm font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-sm font-mono font-bold uppercase tracking-wider shadow-xs transition cursor-pointer"
+                >
+                  บันทึกสำเร็จ
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT RECORD */}
+      {editingBilling && (
+        <div id="edit-partner-billing-modal" className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-sm border border-slate-200 max-w-lg w-full p-6 shadow-2xl space-y-4">
+            
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide font-sans flex items-center gap-1.5">
+                <Edit3 className="w-4 h-4 text-blue-600" /> แก้ไขข้อมูลเอกสารคู่ค้า & ใบส่งของวางบิล
+              </h3>
+              <button 
+                onClick={() => setEditingBilling(null)} 
+                className="p-1 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-sm"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <label className="font-semibold text-slate-700 block">ชื่อคู่ค้า / บริษัทพันธมิตร <span className="text-red-500">*</span></label>
+                  <button
+                    type="button"
+                    onClick={handleOpenAddPartner}
+                    className="text-[10px] text-emerald-600 hover:text-emerald-800 font-bold flex items-center gap-1 hover:underline cursor-pointer bg-transparent border-0 outline-none"
+                  >
+                    <Plus className="w-3 h-3" /> ลงทะเบียนคู่ค้าใหม่
+                  </button>
+                </div>
+                
+                <div className="flex gap-2">
+                  <select
+                    value={partners.some(p => p.name === partnerName) ? partnerName : ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val) {
+                        setPartnerName(val);
+                        const matched = partners.find(p => p.name === val);
+                        if (matched) {
+                          setContactPerson(matched.contactPerson || '');
+                          setPhone(matched.phone || '');
+                        }
+                      }
+                    }}
+                    className="flex-1 px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-sans text-xs font-semibold text-slate-800"
+                  >
+                    <option value="">-- เลือกจากคู่ค้าในระบบ --</option>
+                    {partners.map(p => (
+                      <option key={p.id} value={p.name}>
+                        {p.name} {p.taxId ? `(${p.taxId})` : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    type="text"
+                    placeholder="หรือพิมพ์ระบุชื่อด้วยตนเอง..."
+                    value={partnerName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPartnerName(val);
+                      const matched = partners.find(p => p.name.trim().toLowerCase() === val.trim().toLowerCase());
+                      if (matched) {
+                        setContactPerson(matched.contactPerson || '');
+                        setPhone(matched.phone || '');
+                      }
+                    }}
+                    className="w-1/2 px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-sans text-xs"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center mb-0.5">
+                    <label className="font-semibold text-slate-700 block">ประเภทเอกสาร <span className="text-red-500">*</span></label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingNewDocType(!isAddingNewDocType);
+                        playNotificationSound();
+                      }}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 cursor-pointer bg-transparent border-0 outline-none"
+                    >
+                      {isAddingNewDocType ? "« เลือกประเภท" : "+ จัดการประเภท"}
+                    </button>
+                  </div>
+                  
+                  {!isAddingNewDocType ? (
+                    <select
+                      value={docType}
+                      onChange={(e) => setDocType(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white text-xs font-sans"
+                    >
+                      {docTypes.map(d => (
+                        <option key={d.key} value={d.key}>{d.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="space-y-2 border border-blue-100 bg-blue-50/30 p-2 rounded-sm text-[11px]">
+                      {/* Add Doc Type Input */}
+                      <div className="flex gap-1 items-center">
+                        <input
+                          type="text"
+                          value={newDocTypeLabel}
+                          onChange={(e) => setNewDocTypeLabel(e.target.value)}
+                          placeholder="เพิ่มประเภท เช่น ใบเสนอราคา, ใบสั่งซื้อ..."
+                          className="flex-1 px-2 py-1 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-[11px] text-slate-700 bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const label = newDocTypeLabel.trim();
+                            if (label) {
+                              const key = 'custom_' + Date.now();
+                              const updated = [...docTypes, { key, label }];
+                              setDocTypes(updated);
+                              safeStorage.setItem('hr_doc_types_list', JSON.stringify(updated));
+                              setDocType(key);
+                              setNewDocTypeLabel('');
+                              showSuccess(`เพิ่มประเภทเอกสาร "${label}" สำเร็จ`);
+                              playNotificationSound();
+                            }
+                          }}
+                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-sm font-bold text-[11px] cursor-pointer transition shrink-0 border-0"
+                        >
+                          เพิ่ม
+                        </button>
+                      </div>
+
+                      {/* Doc Type List with Delete options */}
+                      <div className="max-h-24 overflow-y-auto space-y-1 pr-1 border-t border-blue-100/50 pt-1">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">ลบประเภทเอกสารที่มีอยู่:</p>
+                        {docTypes.map(d => (
+                          <div key={d.key} className="flex justify-between items-center text-[10px] bg-white border border-slate-100 py-0.5 px-1 rounded-sm">
+                            <span className="font-semibold text-slate-600 truncate max-w-[150px]">{d.label}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = docTypes.filter(item => item.key !== d.key);
+                                setDocTypes(updated);
+                                safeStorage.setItem('hr_doc_types_list', JSON.stringify(updated));
+                                if (docType === d.key) {
+                                  setDocType(updated[0]?.key || 'delivery');
+                                }
+                                showSuccess(`ลบประเภทเอกสาร "${d.label}" แล้ว`);
+                                playNotificationSound();
+                              }}
+                              className="p-0.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xs transition border-0 cursor-pointer bg-transparent"
+                              title="ลบประเภทเอกสารนี้"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">เลขที่เอกสารหลัก/อ้างอิง <span className="text-slate-400 font-normal">(เลือกกรอกแยกด้านล่างได้)</span></label>
+                  <input
+                    type="text"
+                    value={docNumber}
+                    onChange={(e) => setDocNumber(e.target.value)}
+                    placeholder="เช่น DO-9988 / BI-10291"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Separated Delivery Document No. and Billing Document No. */}
+              <div className="grid grid-cols-2 gap-3 bg-slate-50/50 p-2.5 rounded-sm border border-slate-100">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> เลขที่ใบส่งของ
+                  </label>
+                  <input
+                    type="text"
+                    value={deliveryDocNumber}
+                    onChange={(e) => setDeliveryDocNumber(e.target.value)}
+                    placeholder="เช่น DO-2026-001"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-violet-500 rounded-full"></span> เลขที่ใบวางบิล
+                  </label>
+                  <input
+                    type="text"
+                    value={billingDocNumber}
+                    onChange={(e) => setBillingDocNumber(e.target.value)}
+                    placeholder="เช่น BI-2026-001"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Separated Credit Note (CN) No. & CN Amount/Price */}
+              <div className="grid grid-cols-2 gap-3 bg-rose-50/30 p-2.5 rounded-sm border border-rose-100/40">
+                <div className="space-y-1">
+                  <label className="font-semibold text-rose-700 block flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span> เลขที่ CN (ใบลดหนี้)
+                  </label>
+                  <input
+                    type="text"
+                    value={cnDocNumber}
+                    onChange={(e) => setCnDocNumber(e.target.value)}
+                    placeholder="เช่น CN-2026-001"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-rose-700 block flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span> ราคา/จำนวนเงิน CN (บาท)
+                  </label>
+                  <input
+                    type="number"
+                    value={cnAmount || ''}
+                    onChange={(e) => setCnAmount(e.target.value !== '' ? Number(e.target.value) : '')}
+                    placeholder="0.00"
+                    step="any"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Book No. & Page No. & Price/Amount */}
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">เล่มที่ (Book No.)</label>
+                  <input
+                    type="text"
+                    value={bookNumber}
+                    onChange={(e) => setBookNumber(e.target.value)}
+                    placeholder="เล่มที่"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">เลขที่ (Page No.)</label>
+                  <input
+                    type="text"
+                    value={pageNumber}
+                    onChange={(e) => setPageNumber(e.target.value)}
+                    placeholder="เลขที่ในเล่ม"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">ราคา/จำนวนเงิน <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={amount || ''}
+                      onChange={(e) => setAmount(Number(e.target.value))}
+                      placeholder="0.00"
+                      min={0.01}
+                      step="any"
+                      className="w-full pl-2 pr-6 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono font-bold"
+                      required
+                    />
+                    <span className="absolute right-1.5 top-1.5 text-slate-400 font-semibold text-[10px]">บ.</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Shipping Carrier Selector with Add Feature */}
+              <div className="space-y-1 bg-slate-50/30 p-2.5 rounded-sm border border-slate-100">
+                <div className="flex justify-between items-center mb-1">
+                  <label className="font-semibold text-slate-700 block text-xs">เลือกบริษัทขนส่ง (Carrier)</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingNewCarrier(!isAddingNewCarrier);
+                      playNotificationSound();
+                    }}
+                    className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 cursor-pointer bg-transparent border-0 outline-none"
+                  >
+                    {isAddingNewCarrier ? "« เลือกจากรายการ" : "+ เพิ่มขนส่งใหม่"}
+                  </button>
+                </div>
+                
+                {!isAddingNewCarrier ? (
+                  <select
+                    value={transportCarrier}
+                    onChange={(e) => setTransportCarrier(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-sans text-xs"
+                  >
+                    <option value="">-- ไม่ระบุ / ไม่ใช้ขนส่ง --</option>
+                    {carriers.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      value={newCarrierInput}
+                      onChange={(e) => setNewCarrierInput(e.target.value)}
+                      placeholder="ระบุชื่อขนส่ง เช่น Flash, Kerry, รถโรงงาน..."
+                      className="flex-1 px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = newCarrierInput.trim();
+                        if (trimmed && !carriers.includes(trimmed)) {
+                          const updated = [...carriers, trimmed];
+                          setCarriers(updated);
+                          safeStorage.setItem('hr_carriers_list', JSON.stringify(updated));
+                          setTransportCarrier(trimmed);
+                          setNewCarrierInput('');
+                          setIsAddingNewCarrier(false);
+                          showSuccess(`เพิ่มขนส่ง "${trimmed}" สำเร็จ`);
+                          playNotificationSound();
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm font-bold text-xs cursor-pointer transition shrink-0 border-0"
+                    >
+                      เพิ่ม
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">สถานะเอกสาร <span className="text-red-500">*</span></label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as any)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-sans"
+                  >
+                    <option value="pending">รอวางบิล / รอดำเนินการ</option>
+                    <option value="billed">วางบิลแล้ว / รอชำระเงิน</option>
+                    <option value="paid">ชำระเงินเสร็จสิ้นแล้ว</option>
+                    <option value="cancelled">ยกเลิกฉบับนี้</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">วันที่ออกเอกสาร <span className="text-red-500">*</span></label>
+                  <input
+                    type="date"
+                    value={issueDate}
+                    onChange={(e) => setIssueDate(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">กำหนดชำระ / นัดจ่าย <span className="text-red-500">*</span></label>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-mono"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">ชื่อผู้ติดต่อคู่ค้า</label>
+                  <input
+                    type="text"
+                    value={contactPerson}
+                    onChange={(e) => setContactPerson(e.target.value)}
+                    placeholder="คุณสมชาย ใจดี"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                <div className="space-y-1 col-span-2">
+                  <label className="font-semibold text-slate-700 block">เบอร์โทรศัพท์ผู้ติดต่อ</label>
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="เช่น 08x-xxxxxxx"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 block">รายละเอียดสินค้า / หมายเหตุเพิ่มเติม</label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="ระบุรายละเอียดเพิ่มเติม สินค้าที่จัดส่ง หรือเงื่อนไขชำระเงินอื่นๆ..."
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white"
+                ></textarea>
+              </div>
+
+              <div className="flex gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingBilling(null)}
+                  className="flex-1 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-sm font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-sm font-mono font-bold uppercase tracking-wider shadow-xs transition cursor-pointer"
+                >
+                  บันทึกการแก้ไข
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DETAILS INSPECTOR */}
+      {viewingDetails && (
+        <div id="view-partner-billing-modal" className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-sm border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4">
+            
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest font-mono flex items-center gap-1.5">
+                <ClipboardList className="w-4 h-4 text-slate-400" /> ตรวจสอบรายละเอียดเอกสารคู่ค้า
+              </h3>
+              <button 
+                onClick={() => setViewingDetails(null)} 
+                className="p-1 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-sm"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div className="bg-slate-50 p-4 border border-slate-100 rounded-sm space-y-2">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-[10px] text-slate-400 font-mono">ID: {viewingDetails.id}</span>
+                  {getDocTypeBadge(viewingDetails.docType)}
+                </div>
+                <h4 className="font-extrabold text-sm text-slate-800 font-sans leading-tight mt-1">{viewingDetails.partnerName}</h4>
+              </div>
+
+              <div className="space-y-2 border border-slate-100 p-3.5 rounded-sm">
+                <div className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400">เลขที่เอกสารอ้างอิงหลัก:</span>
+                  <span className="font-mono font-bold text-slate-800">{viewingDetails.docNumber}</span>
+                </div>
+                {viewingDetails.deliveryDocNumber && (
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-400">เลขที่ใบส่งของ:</span>
+                    <span className="font-mono font-bold text-blue-600">{viewingDetails.deliveryDocNumber}</span>
+                  </div>
+                )}
+                {viewingDetails.billingDocNumber && (
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-400">เลขที่ใบวางบิล:</span>
+                    <span className="font-mono font-bold text-violet-600">{viewingDetails.billingDocNumber}</span>
+                  </div>
+                )}
+                {viewingDetails.bookNumber && (
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-400">เล่มที่ (Book No.):</span>
+                    <span className="font-mono font-bold text-slate-800">{viewingDetails.bookNumber}</span>
+                  </div>
+                )}
+                {viewingDetails.pageNumber && (
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-400">เลขที่ (Page No.):</span>
+                    <span className="font-mono font-bold text-slate-800">{viewingDetails.pageNumber}</span>
+                  </div>
+                )}
+                {viewingDetails.transportCarrier && (
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-400">ขนส่ง:</span>
+                    <span className="font-sans font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-xs text-[10px]">{viewingDetails.transportCarrier}</span>
+                  </div>
+                )}
+                {viewingDetails.cnDocNumber && (
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-400">เลขที่ CN (ใบลดหนี้):</span>
+                    <span className="font-mono font-bold text-rose-600">{viewingDetails.cnDocNumber}</span>
+                  </div>
+                )}
+                {viewingDetails.cnAmount !== undefined && (
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-400">จำนวนเงิน/ราคา CN:</span>
+                    <span className="font-mono font-bold text-rose-600">฿{viewingDetails.cnAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                 <div className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400">จำนวนเงิน/ราคา:</span>
+                  <span className="font-mono font-bold text-slate-800 text-sm">฿{viewingDetails.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+                {viewingDetails.cnAmount !== undefined && viewingDetails.cnAmount > 0 && (
+                  <div className="flex justify-between py-1 border-b border-slate-50 bg-emerald-50/50 px-1 rounded-xs">
+                    <span className="text-emerald-700 font-bold">ยอดที่ต้องจ่าย (หัก CN):</span>
+                    <span className="font-mono font-black text-emerald-600 text-sm">฿{(viewingDetails.amount - viewingDetails.cnAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                <div className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400">วันที่ออกเอกสาร:</span>
+                  <span className="font-mono text-slate-700">{viewingDetails.issueDate}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400">กำหนดจ่าย/วางบิล:</span>
+                  <span className="font-mono font-bold text-slate-700">{viewingDetails.dueDate}</span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-slate-400">สถานะปัจจุบัน:</span>
+                  <span>{getStatusBadge(viewingDetails.status)}</span>
+                </div>
+              </div>
+
+              {(viewingDetails.contactPerson || viewingDetails.phone) && (
+                <div className="border border-slate-100 p-3.5 rounded-sm space-y-2 bg-blue-50/25">
+                  <h5 className="font-bold text-slate-700 font-sans">ข้อมูลผู้ติดต่อคู่ค้า</h5>
+                  {viewingDetails.contactPerson && (
+                    <div className="flex items-center gap-1.5 text-slate-600">
+                      <User className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{viewingDetails.contactPerson}</span>
+                    </div>
+                  )}
+                  {viewingDetails.phone && (
+                    <div className="flex items-center gap-1.5 text-slate-600">
+                      <Phone className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="font-mono">{viewingDetails.phone}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {viewingDetails.notes && (
+                <div className="space-y-1.5">
+                  <span className="font-semibold text-slate-400 block">หมายเหตุ / สินค้า / บริการ:</span>
+                  <div className="bg-slate-50 border border-slate-100 rounded-sm p-3 text-slate-700 italic leading-relaxed">
+                    &ldquo;{viewingDetails.notes}&rdquo;
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setViewingDetails(null)}
+                className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-sm text-xs font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SAFETY DELETION WARNING MODAL */}
+      {billingToDelete && (
+        <div id="delete-partner-billing-modal" className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-sm border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4">
+            
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-xs font-bold text-red-600 uppercase tracking-widest font-mono flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-red-600 animate-pulse" /> ยืนยันการลบเอกสารออกจากระบบ
+              </h3>
+              <button 
+                onClick={() => setBillingToDelete(null)} 
+                className="p-1 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-sm"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs text-slate-600">
+              <div className="bg-rose-50 border border-rose-100 rounded-sm p-4 flex gap-3 text-rose-800">
+                <div>
+                  <p className="font-bold">⚠️ คำเตือนความปลอดภัยระบบการเงิน:</p>
+                  <p className="mt-1 leading-relaxed">
+                    คุณกำลังจะลบเอกสาร <strong>{getDocTypeLabel(billingToDelete.docType)}</strong> เลขที่ <strong>{billingToDelete.docNumber}</strong> ของ <strong>{billingToDelete.partnerName}</strong> ออกจากฐานข้อมูลโดยถาวร การดำเนินการนี้ไม่สามารถย้อนคืนได้
+                  </p>
+                </div>
+              </div>
+
+              <div className="border border-slate-100 rounded-sm p-3.5 bg-slate-50/50 space-y-2">
+                <p><strong>ชื่อคู่ค้า:</strong> {billingToDelete.partnerName}</p>
+                <p><strong>ประเภทและเลขที่:</strong> {getDocTypeLabel(billingToDelete.docType)} ({billingToDelete.docNumber})</p>
+                <p><strong>จำนวนเงินสุทธิ:</strong> ฿{billingToDelete.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                <p><strong>วันที่ออกเอกสาร / ครบกำหนด:</strong> {billingToDelete.issueDate} / {billingToDelete.dueDate}</p>
+                <p><strong>สถานะปัจจุบัน:</strong> <span className="font-bold">{getStatusLabel(billingToDelete.status)}</span></p>
+              </div>
+
+              <p className="text-[11px] text-slate-400 text-center">
+                กรุณาตรวจสอบความถูกต้องของรายการ หรือยืนยันเมื่อได้รับอนุมัติจากฝ่ายบัญชีเท่านั้น
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setBillingToDelete(null)}
+                className="flex-1 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-sm text-xs font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteBilling(billingToDelete.id);
+                  setBillingToDelete(null);
+                }}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-sm text-xs font-mono font-bold uppercase tracking-wider shadow-sm transition cursor-pointer"
+              >
+                ยืนยันลบข้อมูลถาวร
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD PARTNER */}
+      {isAddPartnerOpen && (
+        <div id="add-partner-modal" className="fixed inset-0 z-[60] overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-sm border border-slate-200 max-w-lg w-full p-6 shadow-2xl space-y-4">
+            
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide font-sans flex items-center gap-1.5">
+                <Building2 className="w-4 h-4 text-emerald-600" /> เพิ่มข้อมูลบริษัทคู่ค้าใหม่
+              </h3>
+              <button 
+                onClick={() => setIsAddPartnerOpen(false)} 
+                className="p-1 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-sm"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddPartnerSubmit} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 block">ชื่อบริษัทคู่ค้า / ซัพพลายเออร์ <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={pName}
+                  onChange={(e) => setPName(e.target.value)}
+                  placeholder="เช่น บริษัท สยามโลจิสติกส์ จำกัด"
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-sans"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">เลขประจำตัวผู้เสียภาษี (Tax ID)</label>
+                  <input
+                    type="text"
+                    value={pTaxId}
+                    onChange={(e) => setPTaxId(e.target.value)}
+                    placeholder="เลข 13 หลัก"
+                    maxLength={13}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">ผู้ติดต่อหลัก (Contact Person)</label>
+                  <input
+                    type="text"
+                    value={pContactPerson}
+                    onChange={(e) => setPContactPerson(e.target.value)}
+                    placeholder="ชื่อผู้ประสานงานหลัก"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-sans"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">เบอร์โทรศัพท์ติดต่อ</label>
+                  <input
+                    type="text"
+                    value={pPhone}
+                    onChange={(e) => setPPhone(e.target.value)}
+                    placeholder="เช่น 02-123-4567, 089-123-4567"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">อีเมลติดต่อ</label>
+                  <input
+                    type="email"
+                    value={pEmail}
+                    onChange={(e) => setPEmail(e.target.value)}
+                    placeholder="contact@company.com"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-sans"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 block">ที่อยู่สำนักงาน / คลังสินค้า</label>
+                <textarea
+                  value={pAddress}
+                  onChange={(e) => setPAddress(e.target.value)}
+                  placeholder="ระบุที่อยู่จัดส่งและออกใบกำกับภาษี..."
+                  rows={2}
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-sans resize-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 block">รายละเอียดบริการ / หมายเหตุเพิ่มเติม</label>
+                <textarea
+                  value={pNotes}
+                  onChange={(e) => setPNotes(e.target.value)}
+                  placeholder="เช่น ผลิตภัณฑ์ที่สั่งบ่อย, รอบจัดส่ง, เครดิตเทอม"
+                  rows={2}
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-sans resize-none"
+                />
+              </div>
+
+              <div className="flex gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddPartnerOpen(false)}
+                  className="flex-1 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-sm font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm font-mono font-bold uppercase tracking-wider shadow-xs transition cursor-pointer"
+                >
+                  บันทึกข้อมูล
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT PARTNER */}
+      {editingPartner && (
+        <div id="edit-partner-modal" className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-sm border border-slate-200 max-w-lg w-full p-6 shadow-2xl space-y-4">
+            
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide font-sans flex items-center gap-1.5">
+                <Building2 className="w-4 h-4 text-emerald-600" /> แก้ไขข้อมูลบริษัทคู่ค้า
+              </h3>
+              <button 
+                onClick={() => setEditingPartner(null)} 
+                className="p-1 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-sm"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditPartnerSubmit} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 block">ชื่อบริษัทคู่ค้า / ซัพพลายเออร์ <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={pName}
+                  onChange={(e) => setPName(e.target.value)}
+                  placeholder="เช่น บริษัท สยามโลจิสติกส์ จำกัด"
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-sans"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">เลขประจำตัวผู้เสียภาษี (Tax ID)</label>
+                  <input
+                    type="text"
+                    value={pTaxId}
+                    onChange={(e) => setPTaxId(e.target.value)}
+                    placeholder="เลข 13 หลัก"
+                    maxLength={13}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">ผู้ติดต่อหลัก (Contact Person)</label>
+                  <input
+                    type="text"
+                    value={pContactPerson}
+                    onChange={(e) => setPContactPerson(e.target.value)}
+                    placeholder="ชื่อผู้ประสานงานหลัก"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-sans"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">เบอร์โทรศัพท์ติดต่อ</label>
+                  <input
+                    type="text"
+                    value={pPhone}
+                    onChange={(e) => setPPhone(e.target.value)}
+                    placeholder="เช่น 02-123-4567, 089-123-4567"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 block">อีเมลติดต่อ</label>
+                  <input
+                    type="email"
+                    value={pEmail}
+                    onChange={(e) => setPEmail(e.target.value)}
+                    placeholder="contact@company.com"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-sans"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 block">ที่อยู่สำนักงาน / คลังสินค้า</label>
+                <textarea
+                  value={pAddress}
+                  onChange={(e) => setPAddress(e.target.value)}
+                  placeholder="ระบุที่อยู่จัดส่งและออกใบกำกับภาษี..."
+                  rows={2}
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-sans resize-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 block">รายละเอียดบริการ / หมายเหตุเพิ่มเติม</label>
+                <textarea
+                  value={pNotes}
+                  onChange={(e) => setPNotes(e.target.value)}
+                  placeholder="เช่น ผลิตภัณฑ์ที่สั่งบ่อย, รอบจัดส่ง, เครดิตเทอม"
+                  rows={2}
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-emerald-500 text-slate-700 bg-white font-sans resize-none"
+                />
+              </div>
+
+              <div className="flex gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingPartner(null)}
+                  className="flex-1 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-sm font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm font-mono font-bold uppercase tracking-wider shadow-xs transition cursor-pointer"
+                >
+                  บันทึกการแก้ไข
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* SAFETY DELETION WARNING MODAL: PARTNER */}
+      {partnerToDelete && (
+        <div id="delete-partner-modal" className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-sm border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4">
+            
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-xs font-bold text-red-600 uppercase tracking-widest font-mono flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-red-600 animate-pulse" /> ยืนยันการลบข้อมูลบริษัทคู่ค้า
+              </h3>
+              <button 
+                onClick={() => setPartnerToDelete(null)} 
+                className="p-1 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-sm"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs text-slate-600">
+              <div className="bg-rose-50 border border-rose-100 rounded-sm p-4 flex gap-3 text-rose-800">
+                <div>
+                  <p className="font-bold">⚠️ คำเตือนระบบ:</p>
+                  <p className="mt-1 leading-relaxed">
+                    คุณกำลังจะลบข้อมูลของบริษัท <strong>{partnerToDelete.name}</strong> ออกจากระบบทำเนียบคู่ค้าอย่างถาวร ประวัติและเอกสารใบวางบิลใดๆ จะยังคงอยู่แต่ชื่อบริษัทจะไม่ปรากฏให้เลือกอีกต่อไป
+                  </p>
+                </div>
+              </div>
+
+              <div className="border border-slate-100 rounded-sm p-3.5 bg-slate-50/50 space-y-1">
+                <p><strong>ชื่อบริษัทคู่ค้า:</strong> {partnerToDelete.name}</p>
+                {partnerToDelete.taxId && <p><strong>เลขผู้เสียภาษี:</strong> {partnerToDelete.taxId}</p>}
+                {partnerToDelete.contactPerson && <p><strong>ผู้ติดต่อหลัก:</strong> {partnerToDelete.contactPerson}</p>}
+                {partnerToDelete.phone && <p><strong>เบอร์โทรศัพท์:</strong> {partnerToDelete.phone}</p>}
+              </div>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setPartnerToDelete(null)}
+                className="flex-1 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-sm text-xs font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleDeletePartnerConfirm}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-sm text-xs font-mono font-bold uppercase tracking-wider shadow-sm transition cursor-pointer"
+              >
+                ยืนยันลบข้อมูลถาวร
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: BILLINGS PENDING PAYMENT ALERTS */}
+      {isNotificationOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-sm border border-slate-200 max-w-2xl w-full p-6 shadow-2xl space-y-4 animate-fade-in text-xs">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600">
+                  <AlertCircle className="w-4 h-4 animate-pulse text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 font-sans">
+                    รายการแจ้งเตือนเอกสารค้างชำระเงิน
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-sans">
+                    รายการสถานะ "วางบิลแล้ว/รอชำระ" ที่ยังไม่ได้ชำระเงิน
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsNotificationOpen(false)} 
+                className="p-1.5 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-sm cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
+              {unPaidBilledBillings.length === 0 ? (
+                <div className="text-center py-8 px-4 bg-emerald-50 border border-emerald-100 rounded-sm space-y-2">
+                  <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto" />
+                  <p className="text-xs font-bold text-emerald-800">ไม่มีเอกสารค้างชำระในฐานข้อมูล!</p>
+                  <p className="text-[10px] text-emerald-600">เอกสารที่วางบิลทั้งหมดได้รับการชำระเงินเรียบร้อยแล้ว</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <div className="text-[11px] font-semibold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-sm flex justify-between items-center">
+                    <span>ตารางแสดงเอกสารค้างรับ/ค้างจ่าย</span>
+                    <span>พบทั้งหมด {unPaidBilledBillings.length} รายการ</span>
+                  </div>
+                  
+                  {unPaidBilledBillings.map(item => {
+                    // Calculate if overdue
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    const due = new Date(item.dueDate);
+                    due.setHours(0,0,0,0);
+                    const isOverdue = today.getTime() > due.getTime();
+                    const diffTime = Math.abs(today.getTime() - due.getTime());
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    return (
+                      <div key={item.id} className={`p-3.5 border rounded-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3 transition ${
+                        isOverdue 
+                          ? 'bg-rose-50/40 border-rose-200 hover:bg-rose-50/70' 
+                          : 'bg-white border-slate-200 hover:border-slate-350'
+                      }`}>
+                        
+                        {/* Info details */}
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-black text-slate-800 font-sans truncate">{item.partnerName}</span>
+                            {getDocTypeBadge(item.docType)}
+                            {isOverdue ? (
+                              <span className="px-2 py-0.2 bg-red-100 text-red-700 border border-red-200 text-[10px] font-black rounded-sm">
+                                ⚠️ เกินกำหนดชำระ {diffDays} วัน
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.2 bg-blue-50 text-blue-700 border border-blue-150 text-[10px] font-semibold rounded-sm">
+                                📅 อีก {diffDays} วันครบกำหนด
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                            <div>
+                              <span className="font-semibold text-slate-400">เลขที่เอกสาร:</span>{' '}
+                              <span className="font-mono font-bold text-slate-700">{item.docNumber}</span>
+                            </div>
+                            <div>
+                              <span className="font-semibold text-slate-400">วันครบกำหนด:</span>{' '}
+                              <span className="font-mono text-slate-700">{item.dueDate}</span>
+                            </div>
+                            {item.contactPerson && (
+                              <div className="col-span-2 sm:col-span-1 truncate">
+                                <span className="font-semibold text-slate-400">ผู้ติดต่อ:</span>{' '}
+                                <span className="text-slate-700">{item.contactPerson}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Amount & Actions */}
+                        <div className="flex items-center gap-3.5 self-end md:self-auto flex-shrink-0">
+                          <div className="text-right">
+                            <span className="text-[10px] font-mono font-bold text-slate-400 block uppercase">จำนวนเงินสุทธิ</span>
+                            <span className="text-sm font-black text-slate-900 font-mono">฿{item.amount.toLocaleString()}</span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            {/* View Document details button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setViewingDetails(item);
+                                setIsNotificationOpen(false);
+                              }}
+                              className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-700 rounded-sm cursor-pointer transition border border-slate-200"
+                              title="ดูรายละเอียดเอกสาร"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Mark as paid button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleMarkAsPaid(item);
+                              }}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-sm cursor-pointer transition flex items-center gap-1 shadow-2xs"
+                              title="บันทึกว่าชำระเงินแล้ว"
+                            >
+                              <Check className="w-3 h-3 text-white" />
+                              <span>ชำระเงินแล้ว</span>
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-between items-center border-t border-slate-100 pt-3 text-[11px] text-slate-500">
+              <span className="italic">* เมื่อคลิก "ชำระเงินแล้ว" ระบบจะปรับปรุงสถานะและปลดการแจ้งเตือนทันที</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter('billed');
+                  setActiveSubTab('documents');
+                  setIsNotificationOpen(false);
+                }}
+                className="px-3 py-1 bg-slate-150 hover:bg-slate-200 text-slate-700 rounded-sm font-bold transition flex items-center gap-1 cursor-pointer border-0"
+              >
+                <Filter className="w-3.5 h-3.5" />
+                <span>ไปที่บอร์ดเอกสารค้างจ่าย</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

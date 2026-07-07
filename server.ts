@@ -1,0 +1,332 @@
+import express from "express";
+import path from "path";
+import fs from "fs";
+import AdmZip from "adm-zip";
+import { GoogleGenAI } from "@google/genai";
+import dotenv from "dotenv";
+import { execSync } from "child_process";
+import { 
+  getMySQLConfig, 
+  saveMySQLConfig, 
+  getFirebaseConfig, 
+  syncToDualDatabases, 
+  loadFromDualDatabases,
+  clearFirestoreDatabase
+} from "./server/db";
+
+dotenv.config();
+
+const app = express();
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+const PORT = process.env.PORT || "3000";
+const isSocket = isNaN(Number(PORT));
+
+// Initialize Gemini SDK with telemetry header
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
+
+// API endpoint to generate a job description using Gemini AI
+app.post("/api/ai/job-description", async (req, res) => {
+  const { title, department, requirements, tone } = req.body;
+
+  if (!title) {
+    return res.status(400).json({ error: "Job title is required" });
+  }
+
+  try {
+    const prompt = `เขียนคำอธิบายลักษณะงาน (Job Description) ภาษาไทยที่ดึงดูดและเป็นมืออาชีพ สำหรับตำแหน่งงานนี้:
+ตำแหน่ง: ${title}
+แผนก/ฝ่าย: ${department || "ไม่ระบุ"}
+ข้อกำหนดเบื้องต้น/ความสามารถที่ต้องการ: ${requirements || "ทั่วไป"}
+โทนเสียง: ${tone || "สุภาพและเป็นมืออาชีพ"}
+
+ช่วยแบ่งโครงสร้างเป็น 4 ส่วนหลักดังนี้:
+1. ภาพรวมตำแหน่งงาน (Job Summary)
+2. หน้าที่และความรับผิดชอบหลัก (Responsibilities)
+3. คุณสมบัติของผู้สมัคร (Qualifications & Requirements)
+4. สวัสดิการขั้นต้น (Benefits - เขียนสวัสดิการสมมติของบริษัทสตาร์ทอัพเทคโนโลยีชั้นนำ)`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: "คุณเป็นผู้เชี่ยวชาญด้านทรัพยากรบุคคล (HR Specialist) และการสรรหาบุคลากร เขียนข้อความในรูปแบบ Markdown ที่สวยงาม อ่านง่าย มีโครงสร้างหัวข้อชัดเจน ดึงดูดผู้สมัครระดับสูง",
+      }
+    });
+
+    res.json({ text: response.text });
+  } catch (error: any) {
+    console.error("Gemini AI Job Description error:", error);
+    res.status(500).json({ error: error.message || "Failed to generate job description with AI" });
+  }
+});
+
+// API endpoint to draft a performance review using Gemini AI
+app.post("/api/ai/performance-review", async (req, res) => {
+  const { employeeName, role, score, strengths, improvements, goals } = req.body;
+
+  if (!employeeName || !role) {
+    return res.status(400).json({ error: "Employee name and role are required" });
+  }
+
+  try {
+    const prompt = `กรุณาเขียนร่างประเมินผลการปฏิบัติงานประจำปี (Performance Review) ภาษาไทย อย่างเป็นทางการ สุภาพ และสร้างสรรค์ สำหรับพนักงานต่อไปนี้:
+ชื่อพนักงาน: ${employeeName}
+ตำแหน่ง: ${role}
+คะแนนการประเมิน: ${score || 3} เต็ม 5
+จุดเด่นหลัก: ${strengths || "มีความรับผิดชอบดี"}
+จุดที่ควรปรับปรุง: ${improvements || "ไม่มีข้อบ่งชี้พิเศษ"}
+เป้าหมายในอนาคต: ${goals || "พัฒนาศักยภาพตามบทบาทหน้าที่"}
+
+ช่วยร่างรายงานประเมินผลแบ่งตามหัวข้อ Markdown ต่อไปนี้:
+- บทสรุปภาพรวมผลงาน (Overall Summary)
+- จุดเด่นและข้อดีของพนักงาน (Key Strengths)
+- ข้อเสนอแนะเชิงสร้างสรรค์เพื่อการปรับปรุงและเติบโต (Feedback for Growth)
+- คำแนะนำเป้าหมายในรอบถัดไป (Target Goals)
+- ข้อคิดเห็นเพิ่มเติมจากผู้ประเมิน (Evaluator Comments)`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: "คุณเป็นหัวหน้างานและผู้บริหารฝ่ายทรัพยากรบุคคลที่มีวุฒิภาวะ สูงด้วยความเป็นผู้นำ เขียนประเมินพนักงานด้วยถ้อยคำที่สุภาพ ให้เกียรติ พัฒนาบุคคลได้จริง และสร้างแรงบันดาลใจให้พนักงานพัฒนาตนเอง เขียนผลลัพธ์เป็นโครงสร้าง Markdown",
+      }
+    });
+
+    res.json({ text: response.text });
+  } catch (error: any) {
+    console.error("Gemini AI Performance Review error:", error);
+    res.status(500).json({ error: error.message || "Failed to draft performance review with AI" });
+  }
+});
+
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+// Download full project code as ZIP
+app.get("/api/download-zip", (req, res) => {
+  try {
+    const zip = new AdmZip();
+    const rootDir = process.cwd();
+
+    const addDirToZip = (localPath: string, zipPath: string) => {
+      const items = fs.readdirSync(localPath);
+      for (const item of items) {
+        if (item === "node_modules" || item === ".git" || item === "package-lock.json") {
+          continue;
+        }
+        const fullPath = path.join(localPath, item);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          addDirToZip(fullPath, zipPath ? `${zipPath}/${item}` : item);
+        } else {
+          zip.addLocalFile(fullPath, zipPath);
+        }
+      }
+    };
+
+    addDirToZip(rootDir, "");
+
+    const buffer = zip.toBuffer();
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", "attachment; filename=hr-payroll-system.zip");
+    res.send(buffer);
+  } catch (error: any) {
+    console.error("ZIP Generation failed:", error);
+    res.status(500).send("Error compiling project to ZIP: " + error.message);
+  }
+});
+
+// Download dynamic .env file for Hostinger deployment
+app.get("/api/download-env", (req, res) => {
+  try {
+    const mysqlConfig = getMySQLConfig();
+
+    let envContent = `# =========================================================================
+# คอนฟิกูเรชันไฟล์สำหรับระบบบริหารจัดการงานบุคคล (HR & Payroll Management System)
+# วิธีใช้: เปลี่ยนชื่อไฟล์นี้เป็น ".env" แล้วนำไปวางไว้ที่โฟลเดอร์หลักบน Hostinger
+# =========================================================================
+
+# 1. การตั้งค่าระบบเซิร์ฟเวอร์
+PORT=3000
+NODE_ENV=production
+
+# 2. คีย์เชื่อมต่อระบบปัญญาประดิษฐ์ AI (ใช้สำหรับประเมินผลพนักงานและสรรหาคำอธิบายงาน)
+GEMINI_API_KEY="${process.env.GEMINI_API_KEY || ""}"
+
+# 3. ตั้งค่าฐานข้อมูล Hostinger MySQL (นำไปสร้างและกรอกตาม Hostinger hPanel)
+MYSQL_HOST="${mysqlConfig?.host || "localhost"}"
+MYSQL_PORT=${mysqlConfig?.port || 3306}
+MYSQL_USER="${mysqlConfig?.user || "your_mysql_username"}"
+MYSQL_PASSWORD="${mysqlConfig?.password || ""}"
+MYSQL_DATABASE="${mysqlConfig?.database || "your_mysql_database_name"}"
+MYSQL_AUTO_CREATE=true
+`;
+
+    res.setHeader("Content-Type", "text/plain");
+    res.setHeader("Content-Disposition", "attachment; filename=.env");
+    res.send(envContent);
+  } catch (error: any) {
+    console.error("Failed to generate .env file:", error);
+    res.status(500).send("Error generating .env file: " + error.message);
+  }
+});
+
+// GET Database Connection configurations and status (Firebase & MySQL)
+app.get("/api/db/config", async (req, res) => {
+  const firebaseConfig = getFirebaseConfig();
+
+  const statuses = {
+    mysql: { connected: false, error: "MySQL integration disabled" },
+    firebase: { connected: false, error: "" }
+  };
+
+  if (firebaseConfig && firebaseConfig.projectId && firebaseConfig.apiKey) {
+    try {
+      // Test Firebase Connection via checking config existence & simple REST fetch with a strict 1.5s timeout
+      const dbName = firebaseConfig.firestoreDatabaseId || "(default)";
+      const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${dbName}/documents/system_settings/current?key=${firebaseConfig.apiKey}`;
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
+      
+      try {
+        const fbRes = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (fbRes.ok || fbRes.status === 404) {
+          statuses.firebase.connected = true;
+        } else {
+          statuses.firebase.error = `Firestore responded with status ${fbRes.status}`;
+        }
+      } catch (fetchErr: any) {
+        clearTimeout(timeoutId);
+        if (fetchErr.name === 'AbortError') {
+          statuses.firebase.error = "Firebase connection timed out";
+        } else {
+          statuses.firebase.error = fetchErr.message || "Failed to contact Firebase Firestore";
+        }
+      }
+    } catch (error: any) {
+      statuses.firebase.error = error.message || "Firebase Firestore not reachable";
+    }
+  } else {
+    statuses.firebase.error = "Firebase config is missing or invalid";
+  }
+
+  res.json({
+    mysql: {
+      host: "",
+      port: 3306,
+      user: "",
+      database: "",
+      autoCreateDb: false
+    },
+    firebase: {
+      projectId: firebaseConfig?.projectId || "",
+      apiKey: firebaseConfig?.apiKey ? "AIzaSy..." : "",
+      firestoreDatabaseId: firebaseConfig?.firestoreDatabaseId || "(default)",
+      storageBucket: firebaseConfig?.storageBucket || ""
+    },
+    status: statuses
+  });
+});
+
+// POST Database Config (Saved to Local Storage / local settings)
+app.post("/api/db/config", async (req, res) => {
+  res.json({ success: true, message: "เชื่อมต่อกับฐานข้อมูลคลาวด์ Firebase Firestore สำเร็จเรียบร้อยแล้ว" });
+});
+
+// POST DB Sync - synchronize local state to BOTH Hostinger & Firebase
+app.post("/api/db/sync", async (req, res) => {
+  const payload = req.body;
+  const mysqlConfig = getMySQLConfig();
+
+  try {
+    const results = await syncToDualDatabases(payload, mysqlConfig);
+    res.json({ success: true, results });
+  } catch (error: any) {
+    console.error("Database Sync Error:", error);
+    res.status(500).json({ error: error.message || "Failed to sync databases" });
+  }
+});
+
+// GET DB Load - retrieve data from both databases
+app.get("/api/db/load", async (req, res) => {
+  const mysqlConfig = getMySQLConfig();
+
+  try {
+    const data = await loadFromDualDatabases(mysqlConfig);
+    res.json({ success: true, data });
+  } catch (error: any) {
+    console.error("Database Load Error:", error);
+    res.status(500).json({ error: error.message || "Failed to load databases" });
+  }
+});
+
+// POST DB Clear - reset the Firebase Firestore database to empty data
+app.post("/api/db/clear", async (req, res) => {
+  try {
+    const result = await clearFirestoreDatabase();
+    res.json(result);
+  } catch (error: any) {
+    console.error("Database Clear Error:", error);
+    res.status(500).json({ success: false, error: error.message || "Failed to clear Firestore database" });
+  }
+});
+
+// Integrate Vite as Middleware
+async function initializeServer() {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (!isProduction) {
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (err: any) {
+      console.warn("Vite could not be loaded dynamically, falling back to production static assets:", err.message || err);
+      const distPath = typeof __dirname !== "undefined"
+        ? (__dirname.endsWith("dist") ? __dirname : path.join(__dirname, "dist"))
+        : path.join(process.cwd(), "dist");
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
+  } else {
+    const distPath = typeof __dirname !== "undefined"
+      ? (__dirname.endsWith("dist") ? __dirname : path.join(__dirname, "dist"))
+      : path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  if (isSocket) {
+    app.listen(PORT, () => {
+      console.log(`Server is running on Unix socket: ${PORT}`);
+    });
+  } else {
+    app.listen(Number(PORT), "0.0.0.0", () => {
+      console.log(`Server is running at http://localhost:${PORT}`);
+    });
+  }
+}
+
+initializeServer().catch((err) => {
+  console.error("Error starting server:", err);
+});

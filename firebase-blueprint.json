@@ -1,0 +1,296 @@
+{
+  "entities": {
+    "employees": {
+      "title": "Employees",
+      "description": "Employee profiles and basic HR records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "department": { "type": "string" },
+        "salary": { "type": "number" },
+        "status": { "type": "string" },
+        "startDate": { "type": "string" },
+        "bankAccount": { "type": "string" }
+      }
+    },
+    "payroll": {
+      "title": "Payroll",
+      "description": "Payroll vouchers and records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "month": { "type": "string" },
+        "year": { "type": "integer" },
+        "baseSalary": { "type": "number" },
+        "allowances": { "type": "number" },
+        "deductions": { "type": "number" },
+        "netSalary": { "type": "number" },
+        "tax": { "type": "number" },
+        "socialSecurity": { "type": "number" },
+        "status": { "type": "string" },
+        "period": { "type": "string" },
+        "voucherNo": { "type": "string" }
+      }
+    },
+    "leaves": {
+      "title": "Leaves",
+      "description": "Leave requests and approval status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "type": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string" },
+        "approvedBy": { "type": "string" }
+      }
+    },
+    "sales": {
+      "title": "Sales",
+      "description": "Employee daily sales logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "status": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    },
+    "cheques": {
+      "title": "Cheques",
+      "description": "Partner cheques tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "chequeNumber": { "type": "string" },
+        "bankName": { "type": "string" },
+        "amount": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "status": { "type": "string" },
+        "payeeName": { "type": "string" }
+      }
+    },
+    "cashflow": {
+      "title": "Cashflow",
+      "description": "System cash-flow transactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "date": { "type": "string" },
+        "description": { "type": "string" },
+        "voucherNo": { "type": "string" }
+      }
+    },
+    "partner_billings": {
+      "title": "Partner Billings",
+      "description": "Deliveries and billings from partner companies",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "partnerName": { "type": "string" },
+        "invoiceNo": { "type": "string" },
+        "date": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string" },
+        "details": { "type": "string" }
+      }
+    },
+    "audit_logs": {
+      "title": "Audit Logs",
+      "description": "System audit and operation histories",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "action": { "type": "string" },
+        "module": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "jobs": {
+      "title": "Jobs",
+      "description": "Recruitment job postings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "department": { "type": "string" },
+        "type": { "type": "string" },
+        "location": { "type": "string" },
+        "status": { "type": "string" },
+        "description": { "type": "string" },
+        "applicantsCount": { "type": "integer" }
+      }
+    },
+    "applicants": {
+      "title": "Applicants",
+      "description": "Recruitment job applicants",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "jobId": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "stage": { "type": "string" },
+        "rating": { "type": "integer" },
+        "appliedDate": { "type": "string" }
+      }
+    },
+    "evaluations": {
+      "title": "Evaluations",
+      "description": "Performance evaluations of employees",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "role": { "type": "string" },
+        "department": { "type": "string" },
+        "evaluatorName": { "type": "string" },
+        "period": { "type": "string" },
+        "score": { "type": "integer" },
+        "strengths": { "type": "string" },
+        "improvements": { "type": "string" },
+        "goals": { "type": "string" },
+        "comments": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "attendance": {
+      "title": "Attendance",
+      "description": "Daily attendance records of employees",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" }
+      }
+    },
+    "dayoff_swaps": {
+      "title": "Dayoff Swaps",
+      "description": "Dayoff swap requests",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "originalOffDate": { "type": "string" },
+        "swappedOffDate": { "type": "string" },
+        "status": { "type": "string" },
+        "reason": { "type": "string" },
+        "appliedDate": { "type": "string" }
+      }
+    },
+    "partner_companies": {
+      "title": "Partner Companies",
+      "description": "Partner companies and supplier profiles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "taxId": { "type": "string" },
+        "address": { "type": "string" },
+        "contactPerson": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    },
+    "system_settings": {
+      "title": "System Settings",
+      "description": "HR and core system settings document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyName": { "type": "string" },
+        "companyAddress": { "type": "string" },
+        "companyPhone": { "type": "string" },
+        "companyTaxId": { "type": "string" },
+        "companyEmail": { "type": "string" },
+        "workingHoursStart": { "type": "string" },
+        "workingHoursEnd": { "type": "string" },
+        "otRateMultiplier": { "type": "number" },
+        "socialSecurityRate": { "type": "number" },
+        "socialSecurityMaxCap": { "type": "number" },
+        "withholdingTaxRate": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "employees/{id}": {
+      "schema": "employees",
+      "description": "Employee collection"
+    },
+    "payroll/{id}": {
+      "schema": "payroll",
+      "description": "Payroll records collection"
+    },
+    "leaves/{id}": {
+      "schema": "leaves",
+      "description": "Leave request records collection"
+    },
+    "sales/{id}": {
+      "schema": "sales",
+      "description": "Sales records collection"
+    },
+    "cheques/{id}": {
+      "schema": "cheques",
+      "description": "Cheques tracking collection"
+    },
+    "cashflow/{id}": {
+      "schema": "cashflow",
+      "description": "Cashflow logs collection"
+    },
+    "partner_billings/{id}": {
+      "schema": "partner_billings",
+      "description": "Partner deliveries/billings records collection"
+    },
+    "audit_logs/{id}": {
+      "schema": "audit_logs",
+      "description": "System log collection"
+    },
+    "jobs/{id}": {
+      "schema": "jobs",
+      "description": "Job postings collection"
+    },
+    "applicants/{id}": {
+      "schema": "applicants",
+      "description": "Applicants collection"
+    },
+    "evaluations/{id}": {
+      "schema": "evaluations",
+      "description": "Performance evaluations collection"
+    },
+    "attendance/{id}": {
+      "schema": "attendance",
+      "description": "Attendance logs collection"
+    },
+    "dayoff_swaps/{id}": {
+      "schema": "dayoff_swaps",
+      "description": "Dayoff swap logs collection"
+    },
+    "partner_companies/{id}": {
+      "schema": "partner_companies",
+      "description": "Partner companies collection"
+    },
+    "system_settings/{id}": {
+      "schema": "system_settings",
+      "description": "System settings collection"
+    }
+  }
+}

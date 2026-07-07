@@ -1,0 +1,6 @@
+{
+  "name": "HR Management System",
+  "description": "A comprehensive HR Management System (HRMS) featuring Employee Records, Leave Tracking, Payroll & Compensation, Recruitment with AI Job Description Generator, and Performance Reviews with AI Assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
