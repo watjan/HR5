@@ -47,7 +47,7 @@ export default function BackupRestoreManagement({
   onExportAllData
 }: BackupRestoreManagementProps) {
   // Navigation tab
-  const [activeSubTab, setActiveSubTab] = useState<'file' | 'sync'>('sync');
+  const [activeSubTab, setActiveSubTab] = useState<'file' | 'sync' | 'hostinger'>('sync');
 
   // Local database inspection tab and search
   const [inspectLocalTab, setInspectLocalTab] = useState<'employees' | 'leaves' | 'payroll' | 'sales' | 'cashflow' | 'cheques' | 'partnerBillings' | 'dayoffSwaps' | 'jobs' | 'applicants' | 'evaluations'>('employees');
@@ -916,7 +916,7 @@ export default function BackupRestoreManagement({
         </div>
 
         {/* Tab Selector */}
-        <div className="flex p-0.5 bg-slate-100 rounded-sm border border-slate-200 w-full md:w-auto shrink-0 font-sans">
+        <div className="flex p-0.5 bg-slate-100 rounded-sm border border-slate-200 w-full md:w-auto shrink-0 font-sans gap-0.5">
           <button
             onClick={() => setActiveSubTab('sync')}
             className={`flex-1 md:flex-none px-4 py-1.5 text-xs font-bold rounded-xs flex items-center justify-center gap-1.5 cursor-pointer transition ${
@@ -925,7 +925,7 @@ export default function BackupRestoreManagement({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Cloud className="w-3.5 h-3.5" /> ตั้งค่าซิงค์คลาวด์ (Firebase Firestore)
+            <Cloud className="w-3.5 h-3.5 text-indigo-600" /> ตั้งค่าซิงค์คลาวด์ (Firebase)
           </button>
           <button
             onClick={() => setActiveSubTab('file')}
@@ -935,7 +935,17 @@ export default function BackupRestoreManagement({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <FileJson className="w-3.5 h-3.5" /> กู้คืนด้วยไฟล์ปกติ (JSON Export)
+            <FileJson className="w-3.5 h-3.5 text-amber-500" /> กู้คืนด้วยไฟล์ (JSON)
+          </button>
+          <button
+            onClick={() => setActiveSubTab('hostinger')}
+            className={`flex-1 md:flex-none px-4 py-1.5 text-xs font-bold rounded-xs flex items-center justify-center gap-1.5 cursor-pointer transition ${
+              activeSubTab === 'hostinger'
+                ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/50'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Server className="w-3.5 h-3.5 text-emerald-600" /> ติดตั้งบน Hostinger (ดาวน์โหลด)
           </button>
         </div>
       </div>
@@ -1195,7 +1205,7 @@ export default function BackupRestoreManagement({
 
           </div>
         </div>
-      ) : (
+      ) : activeSubTab === 'file' ? (
         /* Original JSON File Backup & Snapshots tab */
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
           {/* Left Column: Quick Actions & Local Snapshots */}
@@ -2076,6 +2086,167 @@ export default function BackupRestoreManagement({
                   <p className="text-[10px] text-slate-400 mt-1">ลองล้างคำค้นหาหรือเลือกหมวดหมู่อื่นเพื่อเรียกดูข้อมูลปัจจุบันในบราวเซอร์</p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Hostinger Installation and Download Panel */
+        <div className="space-y-6 animate-fade-in font-sans">
+          {/* Main info card */}
+          <div className="bg-white border border-slate-200 rounded-sm p-6 shadow-2xs space-y-4">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-150 pb-4">
+              <div className="space-y-1">
+                <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-widest bg-emerald-500 text-white rounded-xs">
+                  Hostinger 1-Click Zero Config Deployment
+                </span>
+                <h3 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2 mt-1">
+                  <Server className="w-5 h-5 text-emerald-600" /> นำออกไฟล์โปรเจกต์และกำหนดค่า เพื่อนำไปขึ้นระบบจริงบน Hostinger
+                </h3>
+                <p className="text-xs text-slate-505">
+                  คุณสามารถดาวน์โหลดโค้ดโปรเจกต์นี้ทั้งหมดในรูปแบบ ZIP พร้อมรัน และรับไฟล์กำหนดค่า (.env) ที่ถูกปรับแต่งโดยระบบ เพื่อนำไปแตกไฟล์รันได้ทันทีบน Hostinger hPanel Node.js
+                </p>
+              </div>
+            </div>
+
+            {/* Downloads Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+              
+              {/* Box 1: ZIP Codebase */}
+              <div className="border border-slate-200 rounded p-5 bg-slate-50/50 flex flex-col justify-between space-y-4 hover:border-emerald-300 transition duration-200">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-emerald-50 text-emerald-700 rounded-md">
+                      <Server className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-800">1. ชุดซอร์สโค้ดโปรเจกต์พร้อมติดตั้ง (.ZIP)</h4>
+                      <p className="text-[10px] text-slate-400">ครบถ้วนทั้งโค้ดระบบหน้าบ้าน (React/Vite) และเซิร์ฟเวอร์ (Express)</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-650 leading-relaxed pl-1">
+                    ระบบได้รวบรวมไฟล์ทั้งหมดที่จำเป็นในการติดตั้ง ยกเว้นไฟล์ขนาดใหญ่ที่ไม่จำเป็น (เช่น <code className="bg-slate-100 px-1 py-0.5 rounded text-[11px] font-mono">node_modules</code>) พร้อมทั้งคอมไพล์และมีไฟล์เริ่มต้นระบบ <code className="bg-slate-100 px-1 py-0.5 rounded text-[11px] font-mono">index.js</code> ที่เหมาะสมกับ hPanel Node.js เรียบร้อยแล้ว
+                  </p>
+                </div>
+                <button
+                  onClick={() => window.open("/api/download-zip", "_blank")}
+                  className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-sm flex items-center justify-center gap-2 cursor-pointer transition shadow-sm"
+                >
+                  <Download className="w-4 h-4 text-emerald-400 animate-bounce" />
+                  ดาวน์โหลดไฟล์โปรเจกต์ .zip ทั้งหมด (hr-payroll-system.zip)
+                </button>
+              </div>
+
+              {/* Box 2: Env config file */}
+              <div className="border border-slate-200 rounded p-5 bg-slate-50/50 flex flex-col justify-between space-y-4 hover:border-emerald-300 transition duration-200">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-emerald-50 text-emerald-700 rounded-md">
+                      <FileJson className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-800">2. ไฟล์กำหนดค่าและตัวแปรสภาพแวดล้อม (.env)</h4>
+                      <p className="text-[10px] text-slate-400">สร้างไฟล์เชื่อมโยง Firebase Firestore และข้อมูล Hostinger MySQL</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-650 leading-relaxed pl-1">
+                    แอปพลิเคชันจะทำการสร้างและบันทึกไฟล์ <code className="bg-slate-100 px-1 py-0.5 rounded text-[11px] font-mono">.env</code> ให้แบบไดนามิก โดยนำค่าความปลอดภัยของ Firebase Firestore ที่กำลังใช้บนเครื่องนี้ พร้อมข้อมูล MySQL ที่คุณกรอกไว้ มาร้อยเรียงให้อย่างลงตัวพร้อมใช้งาน
+                  </p>
+                </div>
+                <button
+                  onClick={() => window.open("/api/download-env", "_blank")}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-sm flex items-center justify-center gap-2 cursor-pointer transition shadow-sm"
+                >
+                  <Download className="w-4 h-4 text-white animate-bounce" />
+                  ดาวน์โหลดไฟล์กำหนดค่าสภาพแวดล้อม (.env)
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Detailed step-by-step documentation card */}
+          <div className="bg-white border border-slate-200 rounded-sm p-6 shadow-2xs space-y-5">
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <Info className="w-4.5 h-4.5 text-indigo-650" /> 📖 คู่มือการติดตั้งและเปิดใช้งานระบบอย่างง่ายบน Hostinger hPanel
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                ทำตามขั้นตอนหลัก 3 ขั้นตอนนี้ เพื่อนำระบบบริหารทรัพยากรบุคคลและเงินเดือนของคุณขึ้นสู่ออนไลน์อย่างสมบูรณ์แบบ
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 border-t border-slate-100 pt-5 font-sans">
+              
+              {/* Step 1 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-black shrink-0">
+                    1
+                  </span>
+                  <h4 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">อัปโหลดไฟล์เข้าระบบ</h4>
+                </div>
+                <p className="text-xs text-slate-605 leading-relaxed pl-8">
+                  นำไฟล์ <code className="bg-slate-50 px-1 py-0.5 rounded text-indigo-700 font-mono font-bold">hr-payroll-system.zip</code> อัปโหลดผ่านหน้า **File Manager** ของ Hostinger ภายใต้โฟลเดอร์หลัก เช่น <code className="font-mono bg-slate-50 text-slate-655 px-1">public_html</code> หรือโฟลเดอร์โปรเจกต์ที่คุณต้องการ
+                </p>
+                <p className="text-xs text-slate-605 leading-relaxed pl-8">
+                  ทำการ **Extract (แตกไฟล์ .zip)** ให้ครอบคลุมทุกไฟล์ภายในไดเรกทอรี
+                </p>
+                <p className="text-xs text-slate-605 leading-relaxed pl-8">
+                  นำไฟล์คีย์กำหนดค่า <code className="bg-slate-50 px-1 py-0.5 rounded text-indigo-700 font-mono font-bold">.env</code> ที่ดาวน์โหลดได้จากด้านบน ไปอัปโหลดวางไว้คู่กับไฟล์ <code className="font-mono text-slate-500">package.json</code>
+                </p>
+              </div>
+
+              {/* Step 2 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-black shrink-0">
+                    2
+                  </span>
+                  <h4 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">ตั้งค่า Node.js ใน hPanel</h4>
+                </div>
+                <p className="text-xs text-slate-605 leading-relaxed pl-8">
+                  ไปที่หน้าคอนโซลควบคุมของ Hostinger (hPanel) และเข้าเมนู **Node.js** หรือ **VPS / App manager** และตั้งค่าการรันระบบดังนี้:
+                </p>
+                <ul className="text-xs text-slate-605 list-disc list-inside space-y-1.5 pl-8 font-sans">
+                  <li>
+                    <strong>Node.js Version:</strong> เลือกเวอร์ชัน <code className="font-mono bg-slate-50 px-1 text-slate-800 font-bold">18 หรือ 20 ขึ้นไป</code>
+                  </li>
+                  <li>
+                    <strong>Application Document Root:</strong> เลือกโฟลเดอร์ปลายทางที่คุณอัปโหลดโปรเจกต์ไว้
+                  </li>
+                  <li>
+                    <strong>Application Startup File:</strong> กรอกคำว่า <code className="font-mono bg-slate-50 px-1.5 py-0.5 text-emerald-700 font-extrabold">index.js</code> (พิมพ์ตัวเล็กทั้งหมด)
+                  </li>
+                </ul>
+                <p className="text-xs text-slate-605 leading-relaxed pl-8">
+                  คลิกปุ่ม **Save** จากนั้นกดปุ่ม **Start / Restart App** เพื่อเริ่มใช้งานจริงได้ทันที!
+                </p>
+              </div>
+
+              {/* Step 3 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-black shrink-0">
+                    3
+                  </span>
+                  <h4 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">เชื่อมต่อและซิงค์ MySQL</h4>
+                </div>
+                <p className="text-xs text-slate-605 leading-relaxed pl-8">
+                  ระบบได้รับการออกแบบให้เป็น **Zero-Configuration** เพื่อความง่ายสูงสุด: ทันทีที่เซิร์ฟเวอร์เริ่มทำงานบน Hostinger ระบบจะสั่งรันการคอมไพล์หน้าบ้านและจำลองสภาพแวดล้อมให้อัตโนมัติในตัว
+                </p>
+                <p className="text-xs text-slate-605 leading-relaxed pl-8">
+                  หลังจากแอปออนไลน์แล้ว คุณสามารถสร้างฐานข้อมูล MySQL ใหม่ได้บน hPanel และนำไปกรอกเชื่อมโยงในหน้าตั้งค่าเว็บผ่านปุ่ม ⚙️ ด้านบนขวา และกดปุ่ม **"ซิงค์ข้อมูลทั้งหมด"** ตารางข้อมูลทั้งหมดจะถูกติดตั้งขึ้นฐานข้อมูลใหม่ทันทีอย่างไร้กังวล!
+                </p>
+              </div>
+
+            </div>
+
+            {/* Alert banner for memory performance optimization */}
+            <div className="p-4 bg-amber-50 border border-amber-200 text-amber-950 text-xs rounded-sm flex items-start gap-2.5 leading-relaxed">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 animate-pulse" />
+              <div>
+                <strong>💡 ข้อแนะนำพิเศษสำหรับการรันบนโฮสติ้งสเปกจำกัด:</strong> เนื่องจากระบบจะสแกนและสั่งติดตั้งไลบรารีรวมถึงดาวน์โหลดคอมไพล์ชุดโค้ดหน้าบ้านให้อัตโนมัติเมื่อเริ่มต้น หากโฮสติ้งของคุณมี RAM จำกัดและเกิดข้อผิดพลาดในการรันคอมไพล์ครั้งแรก คุณสามารถสั่งรันคำสั่ง <code className="font-mono bg-amber-100/60 px-1">npm install</code> และ <code className="font-mono bg-amber-100/60 px-1">npm run build</code> บนเครื่องส่วนตัวของคุณก่อน แล้วนำโฟลเดอร์ <code className="font-mono bg-amber-100/60 px-1">dist/</code> และ <code className="font-mono bg-amber-100/60 px-1">node_modules/</code> อัปโหลดไปเขียนทับบน Hostinger โดยตรง จะประหยัดความจำและเปิดใช้งานระบบได้ลื่นไหลสมบูรณ์แบบที่สุด!
+              </div>
             </div>
           </div>
         </div>
