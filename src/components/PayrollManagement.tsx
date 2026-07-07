@@ -1029,7 +1029,7 @@ export default function PayrollManagement({
                     <div className="space-y-1">
                       <h1 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">ใบสำคัญจ่าย</h1>
                       <h2 className="text-[11px] font-bold text-slate-800 uppercase tracking-widest font-mono">PAYMENT VOUCHER</h2>
-                      <p className="text-[10px] text-slate-500">สยาม ดีเวลลอปเปอร์ สตาร์ทอัพ จำกัด (สำนักงานใหญ่)</p>
+                      <p className="text-[10px] text-slate-500">บริษัทอภิวัฒน์เครื่องครัวจำกัด (สำนักงานใหญ่)</p>
                     </div>
                     <div className="text-right space-y-1.5 font-mono">
                       <div className="bg-slate-900 text-white px-3 py-1 font-bold text-[11px] rounded-xs">
