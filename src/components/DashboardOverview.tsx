@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Employee, LeaveRequest, JobPosting, PartnerBilling, PayrollRecord } from '../types';
 import { Users, Calendar, Briefcase, DollarSign, ArrowRight, UserCheck, ShieldAlert, Award, ClipboardList, AlertCircle, Check, Plus, Edit2, Trash2, X } from 'lucide-react';
+import { convertToThaiBahtText } from '../lib/thaiBaht';
 
 interface DashboardOverviewProps {
   employees: Employee[];
@@ -270,6 +271,7 @@ export default function DashboardOverview({
               <h2 className="text-3xl font-light mt-3.5 text-slate-900 group-hover:text-blue-600 transition-colors">
                 ฿{monthlyPayroll.toLocaleString()}
               </h2>
+              <p className="text-[10px] text-blue-600 font-semibold font-sans mt-1">({convertToThaiBahtText(monthlyPayroll)})</p>
             </div>
             <div className="p-2 bg-blue-50 text-blue-600 rounded-sm">
               <Users className="w-5 h-5" />
@@ -545,6 +547,7 @@ export default function DashboardOverview({
                 <span className="text-2xl font-black text-slate-900 font-mono tracking-tight block mt-1">
                   ฿{totalOutstandingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
+                <p className="text-[10px] text-amber-600 font-semibold font-sans mt-1">({convertToThaiBahtText(totalOutstandingAmount)})</p>
               </div>
 
               {/* Warnings / Alerts */}

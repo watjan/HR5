@@ -184,61 +184,73 @@ MYSQL_AUTO_CREATE=true
 
 // GET Database Connection configurations and status (Firebase & MySQL)
 app.get("/api/db/config", async (req, res) => {
-  const firebaseConfig = getFirebaseConfig();
+  try {
+    const firebaseConfig = getFirebaseConfig();
 
-  const statuses = {
-    mysql: { connected: false, error: "MySQL integration disabled" },
-    firebase: { connected: false, error: "" }
-  };
+    const statuses = {
+      mysql: { connected: false, error: "MySQL integration disabled" },
+      firebase: { connected: false, error: "" }
+    };
 
-  if (firebaseConfig && firebaseConfig.projectId && firebaseConfig.apiKey) {
-    try {
-      // Test Firebase Connection via checking config existence & simple REST fetch with a strict 1.5s timeout
-      const dbName = firebaseConfig.firestoreDatabaseId || "(default)";
-      const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${dbName}/documents/system_settings/current?key=${firebaseConfig.apiKey}`;
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1500);
-      
+    if (firebaseConfig && firebaseConfig.projectId && firebaseConfig.apiKey) {
       try {
-        const fbRes = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (fbRes.ok || fbRes.status === 404) {
-          statuses.firebase.connected = true;
-        } else {
-          statuses.firebase.error = `Firestore responded with status ${fbRes.status}`;
+        // Test Firebase Connection via checking config existence & simple REST fetch with a strict 1.5s timeout
+        const dbName = firebaseConfig.firestoreDatabaseId || "(default)";
+        const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${dbName}/documents/system_settings/current?key=${firebaseConfig.apiKey}`;
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+        
+        try {
+          const fbRes = await fetch(url, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (fbRes.ok || fbRes.status === 404) {
+            statuses.firebase.connected = true;
+          } else {
+            statuses.firebase.error = `Firestore responded with status ${fbRes.status}`;
+          }
+        } catch (fetchErr: any) {
+          clearTimeout(timeoutId);
+          if (fetchErr.name === 'AbortError') {
+            statuses.firebase.error = "Firebase connection timed out";
+          } else {
+            statuses.firebase.error = fetchErr.message || "Failed to contact Firebase Firestore";
+          }
         }
-      } catch (fetchErr: any) {
-        clearTimeout(timeoutId);
-        if (fetchErr.name === 'AbortError') {
-          statuses.firebase.error = "Firebase connection timed out";
-        } else {
-          statuses.firebase.error = fetchErr.message || "Failed to contact Firebase Firestore";
-        }
+      } catch (error: any) {
+        statuses.firebase.error = error.message || "Firebase Firestore not reachable";
       }
-    } catch (error: any) {
-      statuses.firebase.error = error.message || "Firebase Firestore not reachable";
+    } else {
+      statuses.firebase.error = "Firebase config is missing or invalid";
     }
-  } else {
-    statuses.firebase.error = "Firebase config is missing or invalid";
-  }
 
-  res.json({
-    mysql: {
-      host: "",
-      port: 3306,
-      user: "",
-      database: "",
-      autoCreateDb: false
-    },
-    firebase: {
-      projectId: firebaseConfig?.projectId || "",
-      apiKey: firebaseConfig?.apiKey ? "AIzaSy..." : "",
-      firestoreDatabaseId: firebaseConfig?.firestoreDatabaseId || "(default)",
-      storageBucket: firebaseConfig?.storageBucket || ""
-    },
-    status: statuses
-  });
+    res.json({
+      mysql: {
+        host: "",
+        port: 3306,
+        user: "",
+        database: "",
+        autoCreateDb: false
+      },
+      firebase: {
+        projectId: firebaseConfig?.projectId || "",
+        apiKey: firebaseConfig?.apiKey ? "AIzaSy..." : "",
+        firestoreDatabaseId: firebaseConfig?.firestoreDatabaseId || "(default)",
+        storageBucket: firebaseConfig?.storageBucket || ""
+      },
+      status: statuses
+    });
+  } catch (outerErr: any) {
+    console.warn("Gracefully caught error in /api/db/config:", outerErr);
+    res.json({
+      mysql: { host: "", port: 3306, user: "", database: "", autoCreateDb: false },
+      firebase: { projectId: "", apiKey: "", firestoreDatabaseId: "(default)", storageBucket: "" },
+      status: {
+        mysql: { connected: false, error: "MySQL integration disabled" },
+        firebase: { connected: false, error: outerErr?.message || "Failed to resolve DB configuration status" }
+      }
+    });
+  }
 });
 
 // POST Database Config (Saved to Local Storage / local settings)

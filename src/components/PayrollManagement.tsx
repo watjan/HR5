@@ -17,6 +17,7 @@ import {
   Coins,
   Calculator
 } from 'lucide-react';
+import { convertToThaiBahtText } from '../lib/thaiBaht';
 
 interface PayrollManagementProps {
   payroll: PayrollRecord[];
@@ -476,8 +477,9 @@ export default function PayrollManagement({
         {/* Total Monthly Payout */}
         <div className="bg-white border border-slate-200 rounded-sm p-5 transition flex justify-between items-center shadow-2xs">
           <div>
-            <h3 className="text-[10px] font-bold text-slate-400 font-sans uppercase tracking-wider">งบประมาณตามรอบที่กรอง</h3>
+            <h3 className="text-[10px] font-bold text-slate-400 font-sans uppercase tracking-wider">งบประมาณตามรอบที่กรอง (รายจ่ายรวมสุทธิ)</h3>
             <p className="text-xl font-extrabold text-slate-900 mt-1">฿{totalPayout.toLocaleString()}</p>
+            <p className="text-[10px] text-indigo-600 font-semibold font-sans mt-0.5">({convertToThaiBahtText(totalPayout)})</p>
             <p className="text-[10px] text-slate-500 mt-1 font-sans">ฐานเงินรวมพนักงานทั้งหมด</p>
           </div>
           <div className="p-3 bg-blue-50 text-blue-600 rounded-sm">
@@ -490,6 +492,7 @@ export default function PayrollManagement({
           <div>
             <h3 className="text-[10px] font-bold text-slate-400 font-sans uppercase tracking-wider">จ่ายเงินเสร็จสิ้นแล้ว (Paid)</h3>
             <p className="text-xl font-extrabold text-emerald-600 mt-1">฿{totalPaid.toLocaleString()}</p>
+            <p className="text-[10px] text-emerald-600 font-semibold font-sans mt-0.5">({convertToThaiBahtText(totalPaid)})</p>
             <p className="text-[10px] text-slate-500 mt-1 font-sans">โอนเงินเข้าบัญชีพนักงานแล้ว</p>
           </div>
           <div className="p-3 bg-emerald-50 text-emerald-600 rounded-sm">
@@ -504,6 +507,9 @@ export default function PayrollManagement({
             <p className={`text-xl font-extrabold mt-1 font-sans ${totalPending > 0 ? 'text-amber-500' : 'text-slate-400'}`}>
               ฿{totalPending.toLocaleString()}
             </p>
+            {totalPending > 0 && (
+              <p className="text-[10px] text-amber-600 font-semibold font-sans mt-0.5">({convertToThaiBahtText(totalPending)})</p>
+            )}
             <p className="text-[10px] text-slate-500 mt-1 font-sans">รอตรวจสอบความถูกต้อง</p>
           </div>
           <div className={`p-3 rounded-sm ${totalPending > 0 ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400'}`}>
@@ -982,14 +988,24 @@ export default function PayrollManagement({
                   </div>
 
                   {/* Calculation Summary Sheet */}
-                  <div className="p-4 bg-slate-900 text-white rounded-b-sm flex justify-between items-center">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block uppercase tracking-wide font-mono">รายจ่ายรวมของบริษัทสุทธิ</span>
-                      <span className="text-base font-extrabold font-mono">฿{(selectedRecord.baseSalary + selectedRecord.allowances).toLocaleString()}</span>
+                  <div className="p-4 bg-slate-900 text-white rounded-b-sm space-y-3">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block uppercase tracking-wide font-mono">รายจ่ายรวมของบริษัทสุทธิ</span>
+                        <span className="text-base font-extrabold font-mono">฿{(selectedRecord.baseSalary + selectedRecord.allowances).toLocaleString()}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-blue-400 block uppercase tracking-wide font-mono">รายรับสุทธิพนักงาน (Net Salary Payout)</span>
+                        <span className="text-lg font-extrabold font-mono text-blue-400">฿{selectedRecord.netSalary.toLocaleString()}</span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-[10px] text-blue-400 block uppercase tracking-wide font-mono">รายรับสุทธิพนักงาน (Net Salary Payout)</span>
-                      <span className="text-lg font-extrabold font-mono text-blue-400">฿{selectedRecord.netSalary.toLocaleString()}</span>
+                    <div className="border-t border-slate-800 pt-2 flex flex-col sm:flex-row justify-between text-[10px] font-medium tracking-wide">
+                      <div className="text-slate-400">
+                        รายจ่ายบริษัทตัวอักษร: <span className="text-slate-200">({convertToThaiBahtText(selectedRecord.baseSalary + selectedRecord.allowances)})</span>
+                      </div>
+                      <div className="text-right text-blue-400">
+                        เงินสุทธิพนักงานตัวอักษร: <span className="text-blue-200">({convertToThaiBahtText(selectedRecord.netSalary)})</span>
+                      </div>
                     </div>
                   </div>
 
@@ -1089,9 +1105,14 @@ export default function PayrollManagement({
                   </div>
 
                   {/* Words Amount */}
-                  <div className="p-3 bg-slate-900 text-white rounded-sm flex justify-between items-center">
-                    <span className="font-bold text-[11px] text-blue-400 uppercase tracking-wide">ยอดสั่งจ่ายสุทธิพนักงาน (NET AMOUNT PAYOUT)</span>
-                    <span className="text-sm font-extrabold font-mono text-blue-400">฿{selectedRecord.netSalary.toLocaleString()}</span>
+                  <div className="p-3 bg-slate-900 text-white rounded-sm space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-[11px] text-blue-400 uppercase tracking-wide">ยอดสั่งจ่ายสุทธิพนักงาน (NET AMOUNT PAYOUT)</span>
+                      <span className="text-sm font-extrabold font-mono text-blue-400">฿{selectedRecord.netSalary.toLocaleString()}</span>
+                    </div>
+                    <div className="border-t border-slate-800 pt-1 text-right text-[10px] text-blue-300 font-sans">
+                      จำนวนเงินตัวอักษร: <span className="text-white font-bold">({convertToThaiBahtText(selectedRecord.netSalary)})</span>
+                    </div>
                   </div>
 
                   {/* Multi-Signatures block for payment voucher */}
