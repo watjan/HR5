@@ -37,6 +37,7 @@ export default function PartnerBillingManagement({
   const [docTypeFilter, setDocTypeFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'documents' | 'partners'>('dashboard');
+  const [dashboardLeftTab, setDashboardLeftTab] = useState<'partners' | 'recent_10'>('recent_10');
   const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
   const [selectedPartnerDashboard, setSelectedPartnerDashboard] = useState<string>('All');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -359,6 +360,58 @@ export default function PartnerBillingManagement({
 
   const unpaidBilledItems = useMemo(() => {
     return billings.filter(item => item.status === 'billed');
+  }, [billings]);
+
+  // Format YYYY-MM to Thai month name and year (BE)
+  const formatThaiMonthYear = useCallback((yearStr: string, monthStr: string) => {
+    const months = [
+      'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+    ];
+    const mIndex = parseInt(monthStr, 10) - 1;
+    const thaiMonth = (mIndex >= 0 && mIndex < 12) ? months[mIndex] : monthStr;
+    const thaiYear = parseInt(yearStr, 10) + 543;
+    return `${thaiMonth} ${thaiYear}`;
+  }, []);
+
+  // Get latest 10 transactions in the latest month present, sorted by newest on top
+  const latestMonthBillings = useMemo(() => {
+    let targetYear = new Date().getFullYear().toString();
+    let targetMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+    
+    let latestDateStr = '';
+    billings.forEach(b => {
+      if (b.issueDate && b.issueDate > latestDateStr) {
+        latestDateStr = b.issueDate;
+      }
+    });
+    
+    if (latestDateStr) {
+      const parts = latestDateStr.split('-');
+      targetYear = parts[0];
+      targetMonth = parts[1];
+    }
+    
+    const filtered = billings.filter(b => {
+      if (!b.issueDate) return false;
+      const parts = b.issueDate.split('-');
+      return parts[0] === targetYear && parts[1] === targetMonth;
+    });
+    
+    const sorted = [...filtered].sort((a, b) => {
+      const dateA = a.issueDate || '';
+      const dateB = b.issueDate || '';
+      if (dateB !== dateA) {
+        return dateB.localeCompare(dateA);
+      }
+      return b.id.localeCompare(a.id);
+    });
+    
+    return {
+      items: sorted.slice(0, 10),
+      year: targetYear,
+      month: targetMonth
+    };
   }, [billings]);
 
   const filteredPartners = useMemo(() => {
@@ -1280,73 +1333,179 @@ export default function PartnerBillingManagement({
             
             {/* 1.3.1 LEFT MODULE: SUPPLIER ACTIVE CONTRACT LIST */}
             <div className="bg-white border border-slate-200 rounded-md p-4 lg:col-span-7 shadow-xs space-y-4">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
                 <div className="space-y-0.5">
                   <h3 className="text-xs font-black text-slate-900 font-sans uppercase tracking-wider flex items-center gap-1.5">
                     <TrendingUp className="w-4 h-4 text-violet-600" /> วิเคราะห์รายรับและการทำธุรกรรมของบริษัทคู่ค้าหลัก
                   </h3>
-                  <p className="text-[10px] text-slate-400">สรุปข้อมูลเปรียบเทียบมูลค่าธุรกรรมและเอกสารค้างชำระในรอบเดือน</p>
+                  <p className="text-[10px] text-slate-400">
+                    {dashboardLeftTab === 'recent_10'
+                      ? `สรุปข้อมูลเปรียบเทียบมูลค่าธุรกรรมและเอกสารค้างชำระในรอบเดือน ${formatThaiMonthYear(latestMonthBillings.year, latestMonthBillings.month)}`
+                      : 'สรุปข้อมูลเปรียบเทียบมูลค่าธุรกรรมและเอกสารค้างชำระของคู่ค้าหลักสะสมทั้งหมด'
+                    }
+                  </p>
                 </div>
-                <span className="px-2 py-0.5 bg-slate-50 border border-slate-200 text-slate-500 font-mono text-[9px] font-bold rounded-full">
-                  Real-time Data
-                </span>
+                
+                {/* SUB-TAB SELECTOR */}
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-sm shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setDashboardLeftTab('recent_10')}
+                    className={`px-2.5 py-1 text-[10px] font-bold font-sans rounded-xs transition-all duration-150 cursor-pointer ${
+                      dashboardLeftTab === 'recent_10'
+                        ? 'bg-white text-violet-600 shadow-3xs border border-slate-200'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    10 รายการล่าสุด
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDashboardLeftTab('partners')}
+                    className={`px-2.5 py-1 text-[10px] font-bold font-sans rounded-xs transition-all duration-150 cursor-pointer ${
+                      dashboardLeftTab === 'partners'
+                        ? 'bg-white text-violet-600 shadow-3xs border border-slate-200'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    เปรียบเทียบรายคู่ค้า
+                  </button>
+                </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/50 text-slate-400 text-[9px] font-mono font-bold uppercase tracking-wider border-b border-slate-100">
-                      <th className="py-2.5 px-3">ชื่อบริษัทคู่ค้า</th>
-                      <th className="py-2.5 px-3 text-right">ใบส่งของ (DO)</th>
-                      <th className="py-2.5 px-3 text-right">ใบวางบิล (BI)</th>
-                      <th className="py-2.5 px-3 text-right">ชำระแล้ว (PAID)</th>
-                      <th className="py-2.5 px-3 text-center">ดัชนีประสิทธิภาพ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {partners.map(p => {
-                      const pBillings = billings.filter(b => b.partnerName === p.name);
-                      const pDO = pBillings.filter(b => b.docType === 'delivery' && b.status !== 'cancelled').reduce((acc, b) => acc + b.amount, 0);
-                      const pBI = pBillings.filter(b => b.docType === 'billing' && b.status !== 'cancelled').reduce((acc, b) => acc + b.amount, 0);
-                      const pPaid = pBillings.filter(b => b.status === 'paid').reduce((acc, b) => acc + b.amount, 0);
-                      
-                      // Calculate mock efficiency based on speed of paid vs total
-                      const efficiency = pBillings.length > 0 
-                        ? Math.round((pBillings.filter(b => b.status === 'paid').length / pBillings.length) * 100)
-                        : 100;
+              {dashboardLeftTab === 'recent_10' ? (
+                /* TAB 1: NEWEST 10 ITEMS - SORTED BY NEWEST ON TOP */
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-50 border border-slate-150 rounded-sm p-3 text-[10.5px] text-slate-600 font-sans gap-2">
+                    <div>
+                      รอบบัญชีปัจจุบัน: <strong className="text-slate-800 font-bold font-sans">{formatThaiMonthYear(latestMonthBillings.year, latestMonthBillings.month)}</strong>
+                    </div>
+                    <div className="flex flex-wrap gap-4">
+                      <span>ค้างชำระในรอบเดือน: <strong className="text-rose-600 font-bold font-mono">฿{latestMonthBillings.items.filter(b => b.status === 'pending' || b.status === 'billed').reduce((sum, item) => sum + item.amount, 0).toLocaleString()}</strong></span>
+                      <span>ชำระแล้ว: <strong className="text-emerald-600 font-bold font-mono">฿{latestMonthBillings.items.filter(b => b.status === 'paid').reduce((sum, item) => sum + item.amount, 0).toLocaleString()}</strong></span>
+                    </div>
+                  </div>
 
-                      return (
-                        <tr key={p.id} className="hover:bg-slate-50/50 transition">
-                          <td className="py-3 px-3 font-semibold text-slate-800">
-                            <span className="block truncate max-w-[200px]" title={p.name}>{p.name}</span>
-                            <span className="text-[9px] font-mono text-slate-400">ID: {p.id} | {p.contactPerson}</span>
-                          </td>
-                          <td className="py-3 px-3 text-right font-mono text-slate-600">
-                            ฿{pDO.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 text-right font-mono font-bold text-indigo-600">
-                            ฿{pBI.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 text-right font-mono text-emerald-600">
-                            ฿{pPaid.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            <div className="inline-flex items-center gap-1.5">
-                              <div className="w-12 bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                <div 
-                                  className={`h-full rounded-full ${efficiency >= 80 ? 'bg-emerald-500' : efficiency >= 40 ? 'bg-amber-500' : 'bg-rose-500'}`}
-                                  style={{ width: `${efficiency}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-[9px] font-mono font-bold text-slate-500">{efficiency}%</span>
-                            </div>
-                          </td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50/50 text-slate-400 text-[9px] font-mono font-bold uppercase tracking-wider border-b border-slate-100">
+                          <th className="py-2.5 px-3">วันที่ / เลขที่เอกสาร</th>
+                          <th className="py-2.5 px-3">ประเภทเอกสาร</th>
+                          <th className="py-2.5 px-3">บริษัทคู่ค้าหลัก</th>
+                          <th className="py-2.5 px-3 text-right">มูลค่าธุรกรรม</th>
+                          <th className="py-2.5 px-3 text-center">สถานะการชำระเงิน</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {latestMonthBillings.items.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-8 text-center text-slate-400 text-[11px] font-sans italic">
+                              ไม่มีข้อมูลเอกสารหรือรายการธุรกรรมในรอบเดือนนี้
+                            </td>
+                          </tr>
+                        ) : (
+                          latestMonthBillings.items.map(item => {
+                            return (
+                              <tr key={item.id} className="hover:bg-slate-50/40 transition">
+                                <td className="py-2.5 px-3">
+                                  <span className="block font-semibold text-slate-700 font-mono text-[11px]">{item.issueDate}</span>
+                                  <span className="text-[9px] font-mono text-slate-400 uppercase font-bold tracking-wider">{item.docNumber}</span>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  {getDocTypeBadge(item.docType)}
+                                </td>
+                                <td className="py-2.5 px-3 font-semibold text-slate-800">
+                                  <span className="block truncate max-w-[150px]" title={item.partnerName}>{item.partnerName}</span>
+                                  {item.contactPerson && <span className="text-[9px] font-sans text-slate-400 block font-normal">ติดต่อ: {item.contactPerson}</span>}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                                  ฿{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  {item.status === 'paid' ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9.5px] font-bold border border-emerald-200">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                      ชำระแล้ว (Paid)
+                                    </span>
+                                  ) : item.status === 'billed' ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[9.5px] font-black border border-rose-200 animate-pulse">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                                      🔴 ค้างชำระ (Unpaid)
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[9.5px] font-bold border border-amber-200">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                      🟡 รอวางบิล (Pending)
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                /* TAB 2: ORIGINAL PARTNERS INDEX COMPARISON */
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/50 text-slate-400 text-[9px] font-mono font-bold uppercase tracking-wider border-b border-slate-100">
+                        <th className="py-2.5 px-3">ชื่อบริษัทคู่ค้า</th>
+                        <th className="py-2.5 px-3 text-right">ใบส่งของ (DO)</th>
+                        <th className="py-2.5 px-3 text-right">ใบวางบิล (BI)</th>
+                        <th className="py-2.5 px-3 text-right">ชำระแล้ว (PAID)</th>
+                        <th className="py-2.5 px-3 text-center">ดัชนีประสิทธิภาพ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {partners.map(p => {
+                        const pBillings = billings.filter(b => b.partnerName === p.name);
+                        const pDO = pBillings.filter(b => b.docType === 'delivery' && b.status !== 'cancelled').reduce((acc, b) => acc + b.amount, 0);
+                        const pBI = pBillings.filter(b => b.docType === 'billing' && b.status !== 'cancelled').reduce((acc, b) => acc + b.amount, 0);
+                        const pPaid = pBillings.filter(b => b.status === 'paid').reduce((acc, b) => acc + b.amount, 0);
+                        
+                        // Calculate mock efficiency based on speed of paid vs total
+                        const efficiency = pBillings.length > 0 
+                          ? Math.round((pBillings.filter(b => b.status === 'paid').length / pBillings.length) * 100)
+                          : 100;
+
+                        return (
+                          <tr key={p.id} className="hover:bg-slate-50/50 transition">
+                            <td className="py-3 px-3 font-semibold text-slate-800">
+                              <span className="block truncate max-w-[200px]" title={p.name}>{p.name}</span>
+                              <span className="text-[9px] font-mono text-slate-400">ID: {p.id} | {p.contactPerson}</span>
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono text-slate-600">
+                              ฿{pDO.toLocaleString()}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono font-bold text-indigo-600">
+                              ฿{pBI.toLocaleString()}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono text-emerald-600">
+                              ฿{pPaid.toLocaleString()}
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              <div className="inline-flex items-center gap-1.5">
+                                <div className="w-12 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full ${efficiency >= 80 ? 'bg-emerald-500' : efficiency >= 40 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                                    style={{ width: `${efficiency}%` }}
+                                  ></div>
+                                </div>
+                                <span className="text-[9px] font-mono font-bold text-slate-500">{efficiency}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* 1.3.2 RIGHT MODULES: CONCENTRIC ARC CHARTS (THE ENDLESSLOOP ICONIC LAYOUT) */}
