@@ -35,6 +35,7 @@ import SalesManagement from './components/SalesManagement';
 import BackupRestoreManagement from './components/BackupRestoreManagement';
 import HrStockDashboard from './components/HrStockDashboard';
 import DatabaseInspector from './components/DatabaseInspector';
+import LeaveStatistics from './components/LeaveStatistics';
 
 
 // Icons
@@ -1389,6 +1390,7 @@ export default function App() {
     { id: 'employees', name: 'รายชื่อพนักงาน', icon: Users },
     { id: 'attendance', name: 'ลงเวลา & สลับวันหยุด', icon: Clock },
     { id: 'leaves', name: 'ระบบการลางาน', icon: Calendar },
+    { id: 'leave_statistics', name: '1. สถิติการลา', icon: BarChart3 },
     { id: 'payroll', name: 'จ่ายเงินเดือน & ภาษี', icon: DollarSign },
     { id: 'sales', name: 'ยอดขายรายวันเดือนปี', icon: BarChart3 },
     { id: 'cashflow', name: 'ตรวจเช็คขารับ-ขาจ่าย', icon: Coins },
@@ -1432,7 +1434,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">Main Operations</div>
               <div className="space-y-1">
-                {sidebarItems.slice(0, 10).map(item => {
+                {sidebarItems.slice(0, 11).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -1470,7 +1472,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">Talent & Performance</div>
               <div className="space-y-1">
-                {sidebarItems.slice(10, 12).map(item => {
+                {sidebarItems.slice(11, 13).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -1502,7 +1504,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">System Configuration</div>
               <div className="space-y-1">
-                {sidebarItems.slice(12).map(item => {
+                {sidebarItems.slice(13).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -1901,6 +1903,13 @@ export default function App() {
               onRejectLeave={handleRejectLeave}
               onEditLeaveRequest={handleEditLeaveRequest}
               onDeleteLeaveRequest={handleDeleteLeaveRequest}
+            />
+          )}
+
+          {activeTab === 'leave_statistics' && (
+            <LeaveStatistics 
+              leaves={leaves}
+              employees={employees}
             />
           )}
 
