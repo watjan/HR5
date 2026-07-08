@@ -173,6 +173,30 @@ export interface PartnerBilling {
   phone?: string; // เบอร์โทรศัพท์
 }
 
+export interface AdminPermissions {
+  employees: boolean;
+  attendance: boolean;
+  leaves: boolean;
+  payroll: boolean;
+  sales: boolean;
+  cashflow: boolean;
+  cheques: boolean;
+  partner_billing: boolean;
+  recruitment: boolean;
+  performance: boolean;
+  settings: boolean;
+  backup_restore: boolean;
+  database_inspector: boolean;
+}
+
+export interface AdminUser {
+  id: string; // username e.g. "watjan"
+  name: string;
+  role: string;
+  password: string;
+  permissions: AdminPermissions;
+}
+
 export interface SystemSettings {
   companyName: string;
   companyAddress: string;
@@ -185,6 +209,7 @@ export interface SystemSettings {
   socialSecurityRate: number; // e.g. 5
   socialSecurityMaxCap: number; // e.g. 750
   withholdingTaxRate: number; // e.g. 3
+  admins?: AdminUser[];
 }
 
 export interface AuditLogEntry {

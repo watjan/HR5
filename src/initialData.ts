@@ -35,7 +35,30 @@ export const INITIAL_SYSTEM_SETTINGS: SystemSettings = {
   otRateMultiplier: 1.5,
   socialSecurityRate: 5,
   socialSecurityMaxCap: 750,
-  withholdingTaxRate: 3
+  withholdingTaxRate: 3,
+  admins: [
+    {
+      id: "watjan",
+      name: "คุณ วรรณจันทร์ (watjan)",
+      role: "Super Admin (ผู้ควบคุมระบบสูงสุด)",
+      password: "AA12199124",
+      permissions: {
+        employees: true,
+        attendance: true,
+        leaves: true,
+        payroll: true,
+        sales: true,
+        cashflow: true,
+        cheques: true,
+        partner_billing: true,
+        recruitment: true,
+        performance: true,
+        settings: true,
+        backup_restore: true,
+        database_inspector: true
+      }
+    }
+  ]
 };
 
 export const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [];

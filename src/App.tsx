@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { safeStorage } from './lib/safeStorage';
 import { Employee, LeaveRequest, PayrollRecord, JobPosting, Applicant, PerformanceEvaluation, CashFlowTransaction, PartnerCheque, DailyAttendance, DayOffSwap, PartnerBilling, PartnerCompany, SystemSettings, AuditLogEntry, SalesRecord } from './types';
 import { 
@@ -36,6 +36,7 @@ import BackupRestoreManagement from './components/BackupRestoreManagement';
 import HrStockDashboard from './components/HrStockDashboard';
 import DatabaseInspector from './components/DatabaseInspector';
 import LeaveStatistics from './components/LeaveStatistics';
+import LoginScreen from './components/LoginScreen';
 
 
 // Icons
@@ -64,7 +65,9 @@ import {
   Cloud,
   Volume2,
   VolumeX,
-  Download
+  Download,
+  ChefHat,
+  Flame
 } from 'lucide-react';
 
 export default function App() {
@@ -72,6 +75,36 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // Login & Authentication States (Simulated / Bypasable as requested: "ไม่ต้องมีระบบล๊อค")
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    try {
+      return safeStorage.getItem('hr_is_logged_in') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [loggedInUser, setLoggedInUser] = useState<string>(() => {
+    try {
+      return safeStorage.getItem('hr_logged_in_user') || 'ผู้ดูแลระบบ HR';
+    } catch {
+      return 'ผู้ดูแลระบบ HR';
+    }
+  });
+  const [loggedInRole, setLoggedInRole] = useState<string>(() => {
+    try {
+      return safeStorage.getItem('hr_logged_in_role') || 'System Architect';
+    } catch {
+      return 'System Architect';
+    }
+  });
+  const [loggedInUserId, setLoggedInUserId] = useState<string>(() => {
+    try {
+      return safeStorage.getItem('hr_logged_in_user_id') || 'watjan';
+    } catch {
+      return 'watjan';
+    }
+  });
 
   // Audio configuration & states
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
@@ -686,7 +719,50 @@ export default function App() {
       action,
       module,
       description,
-      user: 'apiwatkitchenware@gmail.com'
+      user: loggedInUser || 'apiwatkitchenware@gmail.com'
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  };
+
+  const handleLoginSuccess = (userName: string, userRole: string, userId: string = 'watjan') => {
+    setIsLoggedIn(true);
+    setLoggedInUser(userName);
+    setLoggedInRole(userRole);
+    setLoggedInUserId(userId);
+    try {
+      safeStorage.setItem('hr_is_logged_in', 'true');
+      safeStorage.setItem('hr_logged_in_user', userName);
+      safeStorage.setItem('hr_logged_in_role', userRole);
+      safeStorage.setItem('hr_logged_in_user_id', userId);
+    } catch (e) {}
+    
+    // Add audit log for successful entry
+    const newLog: AuditLogEntry = {
+      id: `LOG-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      timestamp: new Date().toISOString(),
+      action: 'SYSTEM',
+      module: 'เข้าสู่ระบบ',
+      description: `ผู้ใช้ ${userName} (${userRole}) เข้าสู่ระบบสำเร็จ`,
+      user: userName
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    try {
+      safeStorage.setItem('hr_is_logged_in', 'false');
+      safeStorage.setItem('hr_logged_in_user_id', '');
+    } catch (e) {}
+    
+    // Add audit log for logging out
+    const newLog: AuditLogEntry = {
+      id: `LOG-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      timestamp: new Date().toISOString(),
+      action: 'SYSTEM',
+      module: 'ออกจากระบบ',
+      description: `ผู้ใช้ ${loggedInUser} ลงชื่อออกจากระบบ`,
+      user: loggedInUser
     };
     setAuditLogs(prev => [newLog, ...prev]);
   };
@@ -1383,6 +1459,64 @@ export default function App() {
 
   const unpaidBilledCount = partnerBillings.filter(b => b.status === 'billed').length;
 
+  // Retrieve current admin configuration from database settings
+  const currentAdmin = useMemo(() => {
+    const admins = systemSettings?.admins || [
+      {
+        id: "watjan",
+        name: "คุณ วรรณจันทร์ (watjan)",
+        role: "Super Admin (ผู้ควบคุมระบบสูงสุด)",
+        password: "AA12199124",
+        permissions: {
+          employees: true,
+          attendance: true,
+          leaves: true,
+          payroll: true,
+          sales: true,
+          cashflow: true,
+          cheques: true,
+          partner_billing: true,
+          recruitment: true,
+          performance: true,
+          settings: true,
+          backup_restore: true,
+          database_inspector: true
+        }
+      }
+    ];
+    return admins.find(a => a.id.toLowerCase() === loggedInUserId.toLowerCase()) || admins[0];
+  }, [systemSettings, loggedInUserId]);
+
+  const isTabAllowed = (tabId: string) => {
+    if (tabId === 'overview' || tabId === 'stock_dashboard') return true;
+    
+    const permissions = currentAdmin?.permissions;
+    if (!permissions) return true; // default safety fallback
+
+    if (tabId === 'employees') return !!permissions.employees;
+    if (tabId === 'attendance') return !!permissions.attendance;
+    if (tabId === 'leaves' || tabId === 'leave_statistics') return !!permissions.leaves;
+    if (tabId === 'payroll') return !!permissions.payroll;
+    if (tabId === 'sales') return !!permissions.sales;
+    if (tabId === 'cashflow') return !!permissions.cashflow;
+    if (tabId === 'cheques') return !!permissions.cheques;
+    if (tabId === 'partner_billing') return !!permissions.partner_billing;
+    if (tabId === 'recruitment') return !!permissions.recruitment;
+    if (tabId === 'performance') return !!permissions.performance;
+    if (tabId === 'settings') return !!permissions.settings;
+    if (tabId === 'backup_restore') return !!permissions.backup_restore;
+    if (tabId === 'database_inspector') return !!permissions.database_inspector;
+    
+    return true;
+  };
+
+  // Auto-redirect if active tab is no longer allowed
+  useEffect(() => {
+    if (isLoggedIn && !isTabAllowed(activeTab)) {
+      setActiveTab('overview');
+    }
+  }, [activeTab, loggedInUserId, systemSettings, isLoggedIn]);
+
   // Sidebar items definition
   const sidebarItems = [
     { id: 'overview', name: 'แผงภาพรวมระบบ', icon: LayoutDashboard },
@@ -1403,6 +1537,16 @@ export default function App() {
     { id: 'database_inspector', name: 'ตรวจสอบตารางฐานข้อมูล', icon: Database }
   ];
 
+  if (!isLoggedIn) {
+    return (
+      <LoginScreen 
+        employees={employees}
+        systemSettings={systemSettings}
+        onLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
+
   return (
     <div id="app-root-container" className="min-h-screen bg-slate-50 flex text-slate-900 antialiased font-sans">
       
@@ -1412,12 +1556,12 @@ export default function App() {
           {/* Logo & Company Name */}
           <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-blue-500 rounded-sm flex items-center justify-center text-white font-black text-sm shadow-xs">
-                H
+              <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-amber-700 rounded-sm flex items-center justify-center text-slate-950 font-black shadow-xs shrink-0">
+                <ChefHat className="w-5 h-5 stroke-[2.5]" />
               </div>
               <div>
-                <span className="font-extrabold text-white tracking-wider block leading-none text-xs uppercase">HR Core System</span>
-                <span className="text-[9px] text-slate-500 mt-1 block tracking-widest font-mono">v4.2.0-STABLE</span>
+                <span className="font-extrabold text-white tracking-tight block leading-none text-xs">อภิวัฒน์เครื่องครัว</span>
+                <span className="text-[9px] text-amber-500 mt-1 block tracking-wider font-mono font-bold">HR MANAGEMENT</span>
               </div>
             </div>
             {/* Mobile close toggle */}
@@ -1434,7 +1578,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">Main Operations</div>
               <div className="space-y-1">
-                {sidebarItems.slice(0, 11).map(item => {
+                {sidebarItems.slice(0, 11).filter(item => isTabAllowed(item.id)).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -1472,7 +1616,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">Talent & Performance</div>
               <div className="space-y-1">
-                {sidebarItems.slice(11, 13).map(item => {
+                {sidebarItems.slice(11, 13).filter(item => isTabAllowed(item.id)).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -1504,7 +1648,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">System Configuration</div>
               <div className="space-y-1">
-                {sidebarItems.slice(13).map(item => {
+                {sidebarItems.slice(13).filter(item => isTabAllowed(item.id)).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -1537,17 +1681,18 @@ export default function App() {
           {/* User Account / Signout area */}
           <div className="p-4 border-t border-slate-800 space-y-3 bg-slate-950/40 shrink-0">
             <div className="flex items-center gap-3 p-2 rounded-sm">
-              <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs text-white font-mono font-bold">
-                AD
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-xs text-slate-950 font-bold uppercase border border-amber-400/20 shadow-sm shrink-0">
+                {loggedInUser ? loggedInUser.trim().substring(0, 2) : 'HR'}
               </div>
-              <div className="text-xs">
-                <p className="text-white font-medium">ผู้ดูแลระบบ HR</p>
-                <p className="text-[10px] text-slate-500 font-mono">System Architect</p>
+              <div className="text-xs min-w-0">
+                <p className="text-white font-medium truncate" title={loggedInUser}>{loggedInUser}</p>
+                <p className="text-[10px] text-amber-500 font-mono truncate" title={loggedInRole}>{loggedInRole}</p>
               </div>
             </div>
             <button 
               id="signout-button"
-              className="w-full py-2 border border-slate-800 hover:bg-rose-950/20 hover:border-rose-900 text-slate-500 hover:text-rose-400 rounded-sm text-[10px] font-mono font-bold uppercase tracking-wider transition flex items-center justify-center gap-2"
+              onClick={handleLogout}
+              className="w-full py-2 border border-slate-800 hover:bg-rose-950/20 hover:border-rose-905 text-slate-500 hover:text-rose-400 rounded-sm text-[10px] font-mono font-bold uppercase tracking-wider transition flex items-center justify-center gap-2 cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" /> Sign Out
             </button>
@@ -1992,6 +2137,7 @@ export default function App() {
           {activeTab === 'settings' && (
             <SettingsManagement 
               settings={systemSettings}
+              currentAdminId={loggedInUserId || 'watjan'}
               onUpdateSettings={(newSettings) => {
                 setSystemSettings(newSettings);
                 addAuditLog('UPDATE', 'ตั้งค่าระบบ', 'ปรับปรุงข้อมูลโปรไฟล์และเกณฑ์มาตรฐานระบบ');

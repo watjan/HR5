@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { SystemSettings, AuditLogEntry } from '../types';
+import { useState, useEffect, useMemo } from 'react';
+import { SystemSettings, AuditLogEntry, AdminUser, AdminPermissions } from '../types';
 import { isLocalStorageEnabled, setLocalStorageEnabled } from '../lib/safeStorage';
 import { 
   Building2, 
@@ -21,7 +21,15 @@ import {
   Trash2,
   Database,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ShieldAlert,
+  Plus,
+  Eye,
+  EyeOff,
+  UserPlus,
+  Users,
+  Key,
+  ShieldCheck
 } from 'lucide-react';
 
 interface SettingsManagementProps {
@@ -33,6 +41,7 @@ interface SettingsManagementProps {
   onExportAllData: (silent?: boolean) => string;
   auditLogs: AuditLogEntry[];
   onClearAuditLogs: () => void;
+  currentAdminId?: string;
 }
 
 export default function SettingsManagement({
@@ -43,9 +52,10 @@ export default function SettingsManagement({
   onImportAllData,
   onExportAllData,
   auditLogs = [],
-  onClearAuditLogs
+  onClearAuditLogs,
+  currentAdminId = 'watjan'
 }: SettingsManagementProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'shift' | 'tax' | 'database' | 'audit_logs'>('profile');
+  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'shift' | 'tax' | 'database' | 'audit_logs' | 'admins'>('profile');
   
   const [isLSOn, setIsLSOn] = useState(() => isLocalStorageEnabled());
   const [lsToggleMessage, setLsToggleMessage] = useState<string | null>(null);
@@ -114,6 +124,43 @@ export default function SettingsManagement({
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState(false);
 
+  // Administrators management local state
+  const [adminsList, setAdminsList] = useState<AdminUser[]>(() => settings?.admins || []);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newAdminId, setNewAdminId] = useState('');
+  const [newAdminName, setNewAdminName] = useState('');
+  const [newAdminRole, setNewAdminRole] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [newAdminPermissions, setNewAdminPermissions] = useState<AdminPermissions>({
+    employees: true,
+    attendance: true,
+    leaves: true,
+    payroll: true,
+    sales: true,
+    cashflow: true,
+    cheques: true,
+    partner_billing: true,
+    recruitment: true,
+    performance: true,
+    settings: false,
+    backup_restore: false,
+    database_inspector: false
+  });
+
+  const [editingAdminId, setEditingAdminId] = useState<string | null>(null);
+  const [editAdminName, setEditAdminName] = useState('');
+  const [editAdminRole, setEditAdminRole] = useState('');
+  const [editAdminPassword, setEditAdminPassword] = useState('');
+  const [editAdminPermissions, setEditAdminPermissions] = useState<AdminPermissions | null>(null);
+
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (settings?.admins) {
+      setAdminsList(settings.admins);
+    }
+  }, [settings]);
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const updated: SystemSettings = {
@@ -127,11 +174,130 @@ export default function SettingsManagement({
       otRateMultiplier: Number(otRateMultiplier),
       socialSecurityRate: Number(socialSecurityRate),
       socialSecurityMaxCap: Number(socialSecurityMaxCap),
-      withholdingTaxRate: Number(withholdingTaxRate)
+      withholdingTaxRate: Number(withholdingTaxRate),
+      admins: settings?.admins || adminsList
     };
     onUpdateSettings(updated);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
+  };
+
+  const handleAddAdmin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanId = newAdminId.trim().toLowerCase();
+    if (!cleanId) return;
+
+    if (adminsList.some(a => a.id.toLowerCase() === cleanId)) {
+      alert(`❌ ชื่อผู้ใช้งาน (Username) "${cleanId}" มีอยู่ในระบบแล้ว กรุณาใช้ชื่ออื่น`);
+      return;
+    }
+
+    const newAdmin: AdminUser = {
+      id: cleanId,
+      name: newAdminName.trim() || cleanId,
+      role: newAdminRole.trim() || 'ผู้ดูแลระบบร่วม',
+      password: newAdminPassword.trim() || 'Password123!',
+      permissions: newAdminPermissions
+    };
+
+    const updatedAdmins = [...adminsList, newAdmin];
+    setAdminsList(updatedAdmins);
+
+    const updatedSettings: SystemSettings = {
+      ...settings,
+      admins: updatedAdmins
+    };
+    onUpdateSettings(updatedSettings);
+
+    // Reset fields
+    setNewAdminId('');
+    setNewAdminName('');
+    setNewAdminRole('');
+    setNewAdminPassword('');
+    setNewAdminPermissions({
+      employees: true,
+      attendance: true,
+      leaves: true,
+      payroll: true,
+      sales: true,
+      cashflow: true,
+      cheques: true,
+      partner_billing: true,
+      recruitment: true,
+      performance: true,
+      settings: false,
+      backup_restore: false,
+      database_inspector: false
+    });
+    setShowAddForm(false);
+  };
+
+  const handleStartEditAdmin = (admin: AdminUser) => {
+    setEditingAdminId(admin.id);
+    setEditAdminName(admin.name);
+    setEditAdminRole(admin.role);
+    setEditAdminPassword(admin.password);
+    setEditAdminPermissions(admin.permissions);
+  };
+
+  const handleUpdateAdmin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAdminId || !editAdminPermissions) return;
+
+    // Safety constraint: Prevent removing settings permission of self
+    const isSelf = editingAdminId.toLowerCase() === currentAdminId.toLowerCase();
+    const updatedPermissions = { ...editAdminPermissions };
+    if (isSelf) {
+      updatedPermissions.settings = true; // force keep settings permission
+    }
+
+    const updatedAdmins = adminsList.map(admin => {
+      if (admin.id.toLowerCase() === editingAdminId.toLowerCase()) {
+        return {
+          ...admin,
+          name: editAdminName.trim() || admin.name,
+          role: editAdminRole.trim() || admin.role,
+          password: editAdminPassword.trim() || admin.password,
+          permissions: updatedPermissions
+        };
+      }
+      return admin;
+    });
+
+    setAdminsList(updatedAdmins);
+    const updatedSettings: SystemSettings = {
+      ...settings,
+      admins: updatedAdmins
+    };
+    onUpdateSettings(updatedSettings);
+
+    // Clear editing states
+    setEditingAdminId(null);
+    setEditAdminPermissions(null);
+  };
+
+  const handleDeleteAdmin = (adminId: string) => {
+    if (adminId.toLowerCase() === currentAdminId.toLowerCase()) {
+      alert('❌ คุณไม่สามารถลบคุณลักษณะผู้ดูแลระบบบัญชีปัจจุบันที่คุณกำลังล็อกอินเข้าใช้งานอยู่ได้!');
+      return;
+    }
+
+    if (window.confirm(`⚠️ คุณแน่ใจหรือไม่ว่าต้องการลบสิทธิ์ผู้ดูแลระบบของ "${adminId}" ออกอย่างถาวร?`)) {
+      const updatedAdmins = adminsList.filter(a => a.id.toLowerCase() !== adminId.toLowerCase());
+      setAdminsList(updatedAdmins);
+      const updatedSettings: SystemSettings = {
+        ...settings,
+        admins: updatedAdmins
+      };
+      onUpdateSettings(updatedSettings);
+    }
+  };
+
+  const togglePasswordVisibility = (adminId: string) => {
+    setVisiblePasswords(prev => ({
+      ...prev,
+      [adminId]: !prev[adminId]
+    }));
   };
 
   const handleExport = () => {
@@ -315,6 +481,18 @@ export default function SettingsManagement({
           >
             <History className="w-4 h-4 shrink-0" />
             <span>ประวัติบันทึกระบบ (Audit Logs)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('admins')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-sm text-xs font-bold transition font-sans ${
+              activeSubTab === 'admins'
+                ? 'bg-slate-900 text-white'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4 shrink-0" />
+            <span>สิทธิ์ผู้ดูแลระบบ (Admin RBAC)</span>
           </button>
         </div>
 
@@ -1064,6 +1242,453 @@ export default function SettingsManagement({
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: ADMINISTRATORS MANAGEMENT */}
+          {activeSubTab === 'admins' && (
+            <div className="space-y-6 animate-fade-in font-sans">
+              <div className="bg-white border border-slate-200 rounded-sm p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <ShieldCheck className="w-4.5 h-4.5 text-amber-500" /> จัดการบัญชีผู้ดูแลระบบ & กำหนดสิทธิ์การใช้งาน (Admin RBAC Gate)
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      สร้างผู้ดูแลระบบเพิ่ม กำหนดสิทธิ์แยกส่วนรายโมดูลงาน และตั้งค่ารหัสผ่านอย่างปลอดภัยโดยไม่เปิดเผยในหน้าจอหลัก
+                    </p>
+                  </div>
+                  
+                  {!showAddForm && !editingAdminId && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddForm(true)}
+                      className="px-3.5 py-1.8 bg-slate-900 hover:bg-slate-800 text-white rounded-sm text-xs font-bold flex items-center gap-1.5 cursor-pointer transition shadow-xs"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" /> ＋ เพิ่มผู้ดูแลระบบใหม่
+                    </button>
+                  )}
+                </div>
+
+                {/* ADD NEW ADMIN FORM */}
+                {showAddForm && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-sm p-5 space-y-4 animate-fade-in">
+                    <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <UserPlus className="w-4 h-4 text-slate-500" /> กรอกข้อมูลบัญชีผู้ดูแลระบบท่านใหม่
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddForm(false)}
+                        className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+                      >
+                        ยกเลิก
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleAddAdmin} className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">ชื่อเข้าระบบ (Username / ID)</label>
+                          <input
+                            type="text"
+                            required
+                            value={newAdminId}
+                            onChange={(e) => setNewAdminId(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                            placeholder="ภาษาอังกฤษเท่านั้น e.g. watjan"
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-sm text-xs focus:outline-none focus:border-blue-500 bg-white"
+                          />
+                        </div>
+                        <div className="space-y-1 col-span-1 md:col-span-1">
+                          <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">ชื่อ-นามสกุล จริง</label>
+                          <input
+                            type="text"
+                            required
+                            value={newAdminName}
+                            onChange={(e) => setNewAdminName(e.target.value)}
+                            placeholder="e.g. คุณ วรรณจันทร์"
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-sm text-xs focus:outline-none focus:border-blue-500 bg-white"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">ตำแหน่ง / บทบาทหน้าที่</label>
+                          <input
+                            type="text"
+                            required
+                            value={newAdminRole}
+                            onChange={(e) => setNewAdminRole(e.target.value)}
+                            placeholder="e.g. ฝ่ายบัญชีระดับสูง"
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-sm text-xs focus:outline-none focus:border-blue-500 bg-white"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">กำหนดรหัสผ่าน (Password)</label>
+                          <input
+                            type="password"
+                            required
+                            value={newAdminPassword}
+                            onChange={(e) => setNewAdminPassword(e.target.value)}
+                            placeholder="รหัสผ่านเข้าใช้งานจริง"
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-sm text-xs focus:outline-none focus:border-blue-500 bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Permissions Assignment */}
+                      <div className="bg-white border border-slate-200 rounded-sm p-4 space-y-3">
+                        <span className="text-[10.5px] font-bold text-slate-700 uppercase tracking-wider block border-b border-slate-100 pb-1.5">
+                          🛡️ กำหนดขอบเขตสิทธิ์การใช้งานรายโมดูล (Granular Permission Settings)
+                        </span>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {Object.keys(newAdminPermissions).map((permKey) => {
+                            const key = permKey as keyof AdminPermissions;
+                            let label: string = key;
+                            let desc = '';
+                            
+                            if (key === 'employees') { label = 'รายชื่อพนักงาน'; desc = 'จัดการแฟ้มข้อมูลและประวัติพนักงาน'; }
+                            else if (key === 'attendance') { label = 'ลงเวลา & สลับวันหยุด'; desc = 'ตรวจสอบตารางกะ บันทึกเวลาสแกนนิ้ว'; }
+                            else if (key === 'leaves') { label = 'ระบบการลางาน'; desc = 'อนุมัติใบลาและประมวลสถิติการลา'; }
+                            else if (key === 'payroll') { label = 'จ่ายเงินเดือน & ภาษี'; desc = 'พิมพ์ใบสลิป คำนวณเงินเดือน ประกันสังคม'; }
+                            else if (key === 'sales') { label = 'ยอดขายรายวันเดือนปี'; desc = 'วิเคราะห์เป้ายอดขายและรายงานสถิติ'; }
+                            else if (key === 'cashflow') { label = 'ตรวจเช็คขารับ-ขาจ่าย'; desc = 'บันทึกรายรับ รายจ่าย และกระแสเงินสด'; }
+                            else if (key === 'cheques') { label = 'เช็คจ่าย & เช็ครับ'; desc = 'ระบบควบคุมสถานะตั๋วเงินและเช็คคู่ค้า'; }
+                            else if (key === 'partner_billing') { label = 'คู่ค้าใบส่งของ & วางบิล'; desc = 'บันทึกใบแจ้งหนี้ วางบิลเจ้าหนี้'; }
+                            else if (key === 'recruitment') { label = 'สรรหาบุคลากร'; desc = 'รับสมัคร คัดกรอง สัมภาษณ์พนักงานใหม่'; }
+                            else if (key === 'performance') { label = 'ประเมินผลงาน'; desc = 'ประเมินเกรดและผลการประเมินประจำปี'; }
+                            else if (key === 'settings') { label = 'ตั้งค่าระบบ'; desc = 'จัดการข้อมูลองค์กร อัตราสวัสดิการ สิทธิ์ RBAC'; }
+                            else if (key === 'backup_restore') { label = 'สำรองและกู้คืนข้อมูล'; desc = 'ดาวน์โหลดสำรองและอัปโหลดข้อมูล JSON'; }
+                            else if (key === 'database_inspector') { label = 'ตรวจสอบตารางฐานข้อมูล'; desc = 'ตรวจสอบตารางฐานข้อมูลระดับระบบ'; }
+
+                            return (
+                              <label key={key} className="flex items-start gap-2.5 p-2 bg-slate-50/60 border border-slate-150 hover:border-slate-300 rounded-sm cursor-pointer transition select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={newAdminPermissions[key]}
+                                  onChange={(e) => setNewAdminPermissions(prev => ({ ...prev, [key]: e.target.checked }))}
+                                  className="mt-0.5 rounded-sm text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 border-slate-300"
+                                />
+                                <div>
+                                  <span className="text-[11.5px] font-bold text-slate-800 block">{label}</span>
+                                  <span className="text-[9.5px] text-slate-500 leading-none">{desc}</span>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowAddForm(false)}
+                          className="px-4 py-2 border border-slate-200 rounded-sm text-xs text-slate-700 bg-white hover:bg-slate-50 cursor-pointer font-sans"
+                        >
+                          ยกเลิก
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-sm text-xs font-bold cursor-pointer font-sans shadow-xs"
+                        >
+                          บันทึกผู้ดูแลระบบใหม่
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {/* EDIT ADMIN FORM */}
+                {editingAdminId && editAdminPermissions && (
+                  <div className="bg-amber-50/30 border border-amber-200 rounded-sm p-5 space-y-4 animate-fade-in">
+                    <div className="flex justify-between items-center border-b border-amber-200 pb-2">
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Settings className="w-4 h-4 text-amber-600" /> แก้ไขการตั้งค่าและสิทธิ์ของบัญชี "{editingAdminId}"
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingAdminId(null);
+                          setEditAdminPermissions(null);
+                        }}
+                        className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+                      >
+                        ยกเลิก
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleUpdateAdmin} className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">ชื่อ-นามสกุล จริง</label>
+                          <input
+                            type="text"
+                            required
+                            value={editAdminName}
+                            onChange={(e) => setEditAdminName(e.target.value)}
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-sm text-xs focus:outline-none focus:border-blue-500 bg-white"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">ตำแหน่ง / บทบาทหน้าที่</label>
+                          <input
+                            type="text"
+                            required
+                            value={editAdminRole}
+                            onChange={(e) => setEditAdminRole(e.target.value)}
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-sm text-xs focus:outline-none focus:border-blue-500 bg-white"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">แก้ไขรหัสผ่านใหม่ (Password)</label>
+                          <input
+                            type="text"
+                            required
+                            value={editAdminPassword}
+                            onChange={(e) => setEditAdminPassword(e.target.value)}
+                            className="w-full px-3 py-1.5 border border-slate-200 rounded-sm text-xs focus:outline-none focus:border-blue-500 bg-white font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Permissions Assignment */}
+                      <div className="bg-white border border-slate-200 rounded-sm p-4 space-y-3">
+                        <span className="text-[10.5px] font-bold text-slate-700 uppercase tracking-wider block border-b border-slate-100 pb-1.5">
+                          🛡️ อัปเดตขอบเขตสิทธิ์การใช้งานรายโมดูล (Update Granular Permissions)
+                        </span>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {Object.keys(editAdminPermissions).map((permKey) => {
+                            const key = permKey as keyof AdminPermissions;
+                            let label: string = key;
+                            let desc = '';
+                            
+                            if (key === 'employees') { label = 'รายชื่อพนักงาน'; desc = 'จัดการแฟ้มข้อมูลและประวัติพนักงาน'; }
+                            else if (key === 'attendance') { label = 'ลงเวลา & สลับวันหยุด'; desc = 'ตรวจสอบตารางกะ บันทึกเวลาสแกนนิ้ว'; }
+                            else if (key === 'leaves') { label = 'ระบบการลางาน'; desc = 'อนุมัติใบลาและประมวลสถิติการลา'; }
+                            else if (key === 'payroll') { label = 'จ่ายเงินเดือน & ภาษี'; desc = 'พิมพ์ใบสลิป คำนวณเงินเดือน ประกันสังคม'; }
+                            else if (key === 'sales') { label = 'ยอดขายรายวันเดือนปี'; desc = 'วิเคราะห์เป้ายอดขายและรายงานสถิติ'; }
+                            else if (key === 'cashflow') { label = 'ตรวจเช็คขารับ-ขาจ่าย'; desc = 'บันทึกรายรับ รายจ่าย และกระแสเงินสด'; }
+                            else if (key === 'cheques') { label = 'เช็คจ่าย & เช็ครับ'; desc = 'ระบบควบคุมสถานะตั๋วเงินและเช็คคู่ค้า'; }
+                            else if (key === 'partner_billing') { label = 'คู่ค้าใบส่งของ & วางบิล'; desc = 'บันทึกใบแจ้งหนี้ วางบิลเจ้าหนี้'; }
+                            else if (key === 'recruitment') { label = 'สรรหาบุคลากร'; desc = 'รับสมัคร คัดกรอง สัมภาษณ์พนักงานใหม่'; }
+                            else if (key === 'performance') { label = 'ประเมินผลงาน'; desc = 'ประเมินเกรดและผลการประเมินประจำปี'; }
+                            else if (key === 'settings') { label = 'ตั้งค่าระบบ'; desc = 'จัดการข้อมูลองค์กร อัตราสวัสดิการ สิทธิ์ RBAC'; }
+                            else if (key === 'backup_restore') { label = 'สำรองและกู้คืนข้อมูล'; desc = 'ดาวน์โหลดสำรองและอัปโหลดข้อมูล JSON'; }
+                            else if (key === 'database_inspector') { label = 'ตรวจสอบตารางฐานข้อมูล'; desc = 'ตรวจสอบตารางฐานข้อมูลระดับระบบ'; }
+
+                            // Prevent current active admin from disabling settings permission on themselves
+                            const isSelf = editingAdminId.toLowerCase() === currentAdminId.toLowerCase();
+                            const isSettingsField = key === 'settings';
+
+                            return (
+                              <label 
+                                key={key} 
+                                className={`flex items-start gap-2.5 p-2 border rounded-sm cursor-pointer transition select-none ${
+                                  isSelf && isSettingsField 
+                                    ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed'
+                                    : 'bg-slate-50/60 border-slate-150 hover:border-slate-300'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  disabled={isSelf && isSettingsField}
+                                  checked={editAdminPermissions[key]}
+                                  onChange={(e) => setEditAdminPermissions(prev => prev ? ({ ...prev, [key]: e.target.checked }) : null)}
+                                  className="mt-0.5 rounded-sm text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 border-slate-300 disabled:opacity-50"
+                                />
+                                <div>
+                                  <span className="text-[11.5px] font-bold text-slate-800 block">
+                                    {label} {isSelf && isSettingsField && <strong className="text-amber-600 text-[9px]">(คุณลักษณะบังคับ)</strong>}
+                                  </span>
+                                  <span className="text-[9.5px] text-slate-500 leading-none">{desc}</span>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingAdminId(null);
+                            setEditAdminPermissions(null);
+                          }}
+                          className="px-4 py-2 border border-slate-200 rounded-sm text-xs text-slate-700 bg-white hover:bg-slate-50 cursor-pointer font-sans"
+                        >
+                          ยกเลิก
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-sm text-xs font-bold cursor-pointer font-sans shadow-xs"
+                        >
+                          บันทึกการเปลี่ยนแปลงสิทธิ์
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {/* ADMINISTRATORS LIST TABLE */}
+                <div className="border border-slate-200 rounded-sm overflow-hidden bg-white">
+                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                      <Users className="w-4 h-4 text-slate-400" /> บัญชีผู้ดูแลระบบที่เปิดใช้งานในฐานข้อมูล ({adminsList.length} ท่าน)
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-[10.5px] font-bold text-slate-600 uppercase tracking-wider">
+                          <th className="py-3 px-4 w-48">รายละเอียดผู้ดูแลระบบ</th>
+                          <th className="py-3 px-4 w-40">รหัสผ่านเข้ารหัสปลอดภัย</th>
+                          <th className="py-3 px-4">ขอบเขตสิทธิ์โมดูล (Allowed Modules)</th>
+                          <th className="py-3 px-4 w-36 text-right">การจัดการ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {adminsList.map((admin) => {
+                          const isSelf = admin.id.toLowerCase() === currentAdminId.toLowerCase();
+                          const isVisible = visiblePasswords[admin.id] || false;
+                          
+                          // Count active modules
+                          const activeCount = Object.values(admin.permissions).filter(Boolean).length;
+                          const totalCount = Object.keys(admin.permissions).length;
+
+                          return (
+                            <tr key={admin.id} className={`hover:bg-slate-50/50 transition-colors text-xs ${isSelf ? 'bg-amber-50/10' : ''}`}>
+                              <td className="py-4 px-4">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-extrabold text-slate-900 text-xs">{admin.name}</span>
+                                    {isSelf && (
+                                      <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-700 text-[8.5px] font-extrabold border border-amber-500/20 rounded-xs">
+                                        บัญชีของคุณ
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1 text-[10.5px] text-slate-500 font-mono">
+                                    <span>Username:</span>
+                                    <strong className="text-slate-700 font-bold">{admin.id}</strong>
+                                  </div>
+                                  <div className="text-[10px] text-slate-400">
+                                    บทบาท: <span className="font-medium text-slate-600">{admin.role}</span>
+                                  </div>
+                                </div>
+                              </td>
+                              
+                              <td className="py-4 px-4 font-mono">
+                                <div className="flex items-center gap-1.5">
+                                  {isVisible ? (
+                                    <span className="font-bold text-slate-800 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded-sm">
+                                      {admin.password}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 select-none tracking-widest text-[11px]">
+                                      ••••••••
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => togglePasswordVisibility(admin.id)}
+                                    title={isVisible ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                                    className="p-1 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                                  >
+                                    {isVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                  </button>
+                                </div>
+                              </td>
+
+                              <td className="py-4 px-4">
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-bold text-slate-500">
+                                      ได้รับสิทธิ์เข้าถึงโมดูล ({activeCount}/{totalCount}):
+                                    </span>
+                                    <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                                      <div 
+                                        className="h-full bg-emerald-500 rounded-full transition-all duration-300" 
+                                        style={{ width: `${(activeCount / totalCount) * 100}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex flex-wrap gap-1">
+                                    {Object.entries(admin.permissions).map(([key, val]) => {
+                                      if (!val) return null;
+                                      
+                                      let name = key;
+                                      if (key === 'employees') name = 'พนักงาน';
+                                      else if (key === 'attendance') name = 'ลงเวลาทำงาน';
+                                      else if (key === 'leaves') name = 'ระบบลา';
+                                      else if (key === 'payroll') name = 'เงินเดือน';
+                                      else if (key === 'sales') name = 'ยอดขาย';
+                                      else if (key === 'cashflow') name = 'ธุรกรรมรับ-จ่าย';
+                                      else if (key === 'cheques') name = 'เช็คคู่ค้า';
+                                      else if (key === 'partner_billing') name = 'วางบิลคู่ค้า';
+                                      else if (key === 'recruitment') name = 'สรรหาคน';
+                                      else if (key === 'performance') name = 'ประเมินงาน';
+                                      else if (key === 'settings') name = 'ตั้งค่าระบบ';
+                                      else if (key === 'backup_restore') name = 'จัดการข้อมูลสำรอง';
+                                      else if (key === 'database_inspector') name = 'ตรวจสอบฐานข้อมูล';
+
+                                      return (
+                                        <span 
+                                          key={key} 
+                                          className={`px-1.5 py-0.5 rounded-xs text-[9px] font-bold font-sans border ${
+                                            key === 'settings' || key === 'backup_restore' || key === 'database_inspector'
+                                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                              : 'bg-slate-100 text-slate-700 border-slate-200'
+                                          }`}
+                                        >
+                                          ✓ {name}
+                                        </span>
+                                      );
+                                    })}
+                                    {activeCount === 0 && (
+                                      <span className="text-[10px] text-rose-500 font-bold">
+                                        ❌ ไม่มีสิทธิ์ใช้งานโมดูลใดๆ เลย (บล็อกถาวร)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="py-4 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditAdmin(admin)}
+                                    className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-sm transition cursor-pointer"
+                                    title="แก้ไขข้อมูลสิทธิ์"
+                                  >
+                                    <Settings className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteAdmin(admin.id)}
+                                    disabled={isSelf}
+                                    className={`p-1.5 rounded-sm transition ${
+                                      isSelf 
+                                        ? 'text-slate-300 cursor-not-allowed' 
+                                        : 'text-slate-400 hover:text-rose-600 hover:bg-slate-100 cursor-pointer'
+                                    }`}
+                                    title={isSelf ? "ไม่สามารถลบบัญชีตัวเองได้" : "ลบแอดมินคนนี้"}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
