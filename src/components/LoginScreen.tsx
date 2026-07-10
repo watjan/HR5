@@ -34,37 +34,6 @@ export default function LoginScreen({ employees, systemSettings, onLoginSuccess 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // Kitchenware products catalog to show off the culinary branding
-  const kitchenwareProducts = [
-    {
-      id: "K-01",
-      name: "ชุดหม้อทองแดงสไตล์ฝรั่งเศสพรีเมียม (Royal Copper Set)",
-      desc: "ชุดหม้อทองแดงแท้ 5 ชิ้น นำความร้อนสูงพิเศษสำหรับเชฟมืออาชีพ",
-      price: "18,900 ฿",
-      badge: "Best Seller",
-      badgeColor: "bg-amber-500/20 text-amber-250 border-amber-500/30",
-      icon: Flame
-    },
-    {
-      id: "K-02",
-      name: "มีดดามัสกัสตีมือรุ่น 67 ชั้น (Damascus Masterpiece Knife)",
-      desc: "ใบมีดเหล็กดามัสกัสคมกริบ ด้ามจับไม้โรสวูดถนัดมือ ทนทานสูงสุด",
-      price: "4,500 ฿",
-      badge: "Premium",
-      badgeColor: "bg-violet-500/20 text-violet-250 border-violet-500/30",
-      icon: Utensils
-    },
-    {
-      id: "K-03",
-      name: "กระทะเหล็กหล่อหลอมชิ้นเดียว (Professional Cast Iron)",
-      desc: "กระทะเหล็กหล่อหนา 5mm เก็บความร้อนดีเยี่ยม ปลอดสารพิษ 100%",
-      price: "2,200 ฿",
-      badge: "In Stock",
-      badgeColor: "bg-emerald-500/20 text-emerald-250 border-emerald-500/30",
-      icon: ChefHat
-    }
-  ];
-
   // Load admins list dynamically from system settings (fallback to watjan default)
   const adminsList = useMemo<AdminUser[]>(() => {
     return systemSettings?.admins && systemSettings.admins.length > 0
@@ -181,40 +150,179 @@ export default function LoginScreen({ employees, systemSettings, onLoginSuccess 
             </p>
           </div>
 
-          {/* KITCHENWARE EXQUISITE PRODUCT CATALOG EXHIBIT */}
-          <div className="space-y-3.5 pt-4">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 font-mono block">
-              💡 ผลิตภัณฑ์เครื่องครัวยอดนิยมประดับองค์กร (Best Kitchenware Showcase)
+          {/* KITCHENWARE 3D PREMIUM EMBLEM & BRAND LOGO SHOWCASE */}
+          <div className="pt-4 space-y-4">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500/80 font-mono block">
+              ✨ ตราสัญลักษณ์แบรนด์เครื่องครัวพรีเมียม (Premium Brand Landmark)
             </span>
             
-            <div className="grid gap-3">
-              {kitchenwareProducts.map((p) => {
-                const IconComponent = p.icon;
-                return (
-                  <div 
-                    key={p.id}
-                    className="group bg-slate-800/40 hover:bg-slate-800/80 border border-slate-800 hover:border-slate-700/80 p-3.5 rounded-lg transition duration-200 flex gap-3.5 items-start"
-                  >
-                    <div className="p-2.5 bg-slate-900 text-amber-500 rounded-md border border-slate-700 group-hover:border-amber-500/30 transition shrink-0">
-                      <IconComponent className="w-4.5 h-4.5 stroke-[1.8]" />
-                    </div>
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2 justify-between">
-                        <h4 className="text-[11.5px] font-bold text-slate-200 group-hover:text-amber-400 transition truncate pr-2">
-                          {p.name}
-                        </h4>
-                        <span className={`px-2 py-0.5 text-[8.5px] font-bold uppercase border rounded-full shrink-0 ${p.badgeColor}`}>
-                          {p.badge}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 truncate">{p.desc}</p>
-                      <div className="text-[10px] text-slate-500">
-                        รหัสพัสดุ: <span className="font-mono text-slate-300">{p.id}</span> | ราคาจำหน่ายหลัก: <strong className="text-amber-500 font-mono">{p.price}</strong>
-                      </div>
-                    </div>
+            <div className="relative group bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 overflow-hidden transition-all duration-500 hover:border-amber-500/40 hover:shadow-[0_0_30px_rgba(245,158,11,0.08)] flex flex-col items-center justify-center min-h-[300px] perspective-1000">
+              {/* Backlit glow effect */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-gradient-to-tr from-amber-500/20 via-orange-500/10 to-transparent rounded-full blur-3xl pointer-events-none group-hover:scale-125 transition-transform duration-700"></div>
+
+              {/* Ambient rustic kitchen container background */}
+              <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=600&q=40')] bg-cover bg-center opacity-15 mix-blend-overlay pointer-events-none"></div>
+
+              {/* 3D Rotating Emblem Container */}
+              <div className="relative w-44 h-44 transition-all duration-700 ease-out [transform-style:preserve-3d] group-hover:[transform:rotateX(12deg)_rotateY(15deg)]">
+                
+                {/* 1. Outer Metallic Golden Ring with 3D Depth */}
+                <div className="absolute inset-0 rounded-full border-4 border-double border-amber-500/60 bg-slate-950/90 shadow-[0_10px_30px_rgba(0,0,0,0.8),inset_0_2px_10px_rgba(245,158,11,0.2)] flex items-center justify-center [transform:translateZ(10px)]">
+                  
+                  {/* Subtle radial sheen on the gold background */}
+                  <div className="absolute inset-2 rounded-full bg-radial-gradient from-amber-500/5 to-slate-950"></div>
+
+                  {/* 2. Inner Logo Ring */}
+                  <div className="absolute inset-4 rounded-full border border-amber-500/20 flex flex-col items-center justify-center p-2 [transform:translateZ(20px)]">
+                    
+                    {/* SVG representing Pot, Pan, Basin and Chef Knife in 3D style */}
+                    <svg viewBox="0 0 100 100" className="w-28 h-28 drop-shadow-[0_8px_16px_rgba(0,0,0,0.6)]">
+                      <defs>
+                        {/* Metallic Coppery Gold Gradient for Pot */}
+                        <linearGradient id="copperGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#f59e0b" />
+                          <stop offset="30%" stopColor="#d97706" />
+                          <stop offset="70%" stopColor="#b45309" />
+                          <stop offset="100%" stopColor="#78350f" />
+                        </linearGradient>
+
+                        {/* Steel Silver Gradient for Knife and Pan */}
+                        <linearGradient id="silverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#f8fafc" />
+                          <stop offset="40%" stopColor="#cbd5e1" />
+                          <stop offset="70%" stopColor="#94a3b8" />
+                          <stop offset="100%" stopColor="#475569" />
+                        </linearGradient>
+
+                        {/* Gold Accent Gradient */}
+                        <linearGradient id="goldAccent" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" stopColor="#fbbf24" />
+                          <stop offset="100%" stopColor="#b45309" />
+                        </linearGradient>
+                        
+                        {/* Blue Steel Gradient */}
+                        <linearGradient id="basinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#e2e8f0" />
+                          <stop offset="50%" stopColor="#cbd5e1" />
+                          <stop offset="100%" stopColor="#64748b" />
+                        </linearGradient>
+                      </defs>
+
+                      {/* 1. Basin (กะละมัง) - Large base bowl shape at the background bottom */}
+                      <path 
+                        d="M 20,60 C 20,72 30,78 50,78 C 70,78 80,72 80,60 Z" 
+                        fill="url(#basinGrad)" 
+                        opacity="0.85"
+                        stroke="#475569"
+                        strokeWidth="1.2"
+                      />
+                      {/* Basin Rim */}
+                      <ellipse cx="50" cy="60" rx="30" ry="4" fill="#94a3b8" stroke="#475569" strokeWidth="0.8" />
+
+                      {/* 2. Professional Frying Pan (กระทะ) - Tilted to the right */}
+                      <g transform="rotate(15 50 50)">
+                        {/* Pan Handle */}
+                        <path d="M 8,45 L 30,45" stroke="url(#silverGrad)" strokeWidth="3" strokeLinecap="round" />
+                        <path d="M 8,45 L 18,45" stroke="#1e293b" strokeWidth="3.5" strokeLinecap="round" />
+                        
+                        {/* Pan Body */}
+                        <path 
+                          d="M 28,45 C 28,52 34,56 46,56 C 58,56 64,52 64,45 Z" 
+                          fill="#334155" 
+                          stroke="#1e293b"
+                          strokeWidth="1.2"
+                        />
+                        <ellipse cx="46" cy="45" rx="18" ry="2.5" fill="#1e293b" stroke="url(#silverGrad)" strokeWidth="0.8" />
+                      </g>
+
+                      {/* 3. Luxury Copper Boiling Pot (หม้อต้มมีฝา) - Center Majesty */}
+                      {/* Left Handle */}
+                      <path d="M 25,32 C 18,32 18,40 25,40" fill="none" stroke="url(#goldAccent)" strokeWidth="2.5" strokeLinecap="round" />
+                      {/* Right Handle */}
+                      <path d="M 75,32 C 82,32 82,40 75,40" fill="none" stroke="url(#goldAccent)" strokeWidth="2.5" strokeLinecap="round" />
+                      
+                      {/* Pot Body */}
+                      <path 
+                        d="M 28,34 L 29,48 C 29,54 35,58 50,58 C 65,58 71,54 71,48 L 72,34 Z" 
+                        fill="url(#copperGrad)" 
+                        stroke="#78350f"
+                        strokeWidth="1"
+                      />
+                      
+                      {/* Pot Rim */}
+                      <ellipse cx="50" cy="34" rx="22" ry="2.5" fill="url(#goldAccent)" />
+                      
+                      {/* Pot Lid (ฝาหม้อ) */}
+                      <path 
+                        d="M 27,33 C 33,26 67,26 73,33 Z" 
+                        fill="url(#copperGrad)" 
+                        stroke="#78350f"
+                        strokeWidth="0.8"
+                      />
+                      {/* Lid Knob (หูฝาหม้อทองคำ) */}
+                      <ellipse cx="50" cy="26" rx="4" ry="2.5" fill="url(#goldAccent)" stroke="#78350f" strokeWidth="0.5" />
+                      <rect x="48" y="27" width="4" height="2" fill="url(#goldAccent)" />
+
+                      {/* 4. Hand-Forged Chef Knife (มีดดามัสกัส) - Crossing sleekly in front */}
+                      <g transform="rotate(-25 50 50)">
+                        {/* Blade */}
+                        <path 
+                          d="M 15,48 L 75,48 C 77,48 83,44 85,42 C 78,41 73,42 15,42 Z" 
+                          fill="url(#silverGrad)" 
+                          stroke="#334155"
+                          strokeWidth="0.5"
+                        />
+                        {/* Damascus wavy steel lines (Decorative) */}
+                        <path d="M 25,44 Q 35,46 45,43 T 65,45 T 78,43" fill="none" stroke="#64748b" strokeWidth="0.5" opacity="0.6" />
+                        <path d="M 20,46 Q 30,44 40,46 T 60,43 T 75,44" fill="none" stroke="#475569" strokeWidth="0.5" opacity="0.4" />
+                        
+                        {/* Knife Handle (Rosewood & Gold bolster) */}
+                        <rect x="2" y="42.5" width="13" height="4.5" rx="1.5" fill="#311b0b" stroke="#000" strokeWidth="0.5" />
+                        <rect x="11" y="42.5" width="4" height="4.5" fill="url(#goldAccent)" />
+                      </g>
+
+                      {/* Shiny stars/sparkles representing brand pristine quality */}
+                      <path d="M 18,22 Q 18,25 21,25 Q 18,25 18,28 Q 18,25 15,25 Q 18,25 18,22 Z" fill="#fbbf24" />
+                      <path d="M 82,24 Q 82,26 84,26 Q 82,26 82,28 Q 82,26 80,26 Q 82,26 82,24 Z" fill="#fbbf24" />
+                      <path d="M 50,15 Q 50,16 51,16 Q 50,16 50,17 Q 50,16 49,16 Q 50,16 50,15 Z" fill="#fff" />
+                    </svg>
+
                   </div>
-                );
-              })}
+                </div>
+
+                {/* Outer Rotating Text Ring (Coppery text wrapping circular border) */}
+                <div className="absolute inset-0 flex items-center justify-center animate-[spin_25s_linear_infinite] hover:paused pointer-events-none [transform:translateZ(15px)]">
+                  <svg viewBox="0 0 100 100" className="w-full h-full text-amber-500/60 font-bold uppercase tracking-widest text-[5px]">
+                    <defs>
+                      <path id="textCircle" d="M 50,50 m -44,0 a 44,44 0 1,1 88,0 a 44,44 0 1,1 -88,0" />
+                    </defs>
+                    <text fill="currentColor">
+                      <textPath href="#textCircle" startOffset="0%">
+                        • APIWAT KITCHENWARE • PREMIUM CULINARY BRAND • SINCE 1995 • LUXURY COOKWARE
+                      </textPath>
+                    </text>
+                  </svg>
+                </div>
+
+              </div>
+
+              {/* Title & Description under emblem */}
+              <div className="text-center mt-6 space-y-1.5 z-10 [transform:translateZ(25px)]">
+                <h4 className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-400 font-sans tracking-wide">
+                  อภิวัฒน์เครื่องครัวระดับสากล
+                </h4>
+                <p className="text-[10px] text-slate-400 max-w-xs leading-relaxed font-sans">
+                  งานฝีมือประณีตด้วยชุดต้มทองแดง, กระทะเหล็กหล่อหลอมชิ้นเดียว, และเทคโนโลยีโลหะวิทยา 3D เพื่อเชฟและอุตสาหกรรมอาหารไทย
+                </p>
+              </div>
+
+              {/* Real-time brand badge */}
+              <div className="mt-4 flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full z-10">
+                <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
+                <span className="text-[9.5px] font-bold uppercase tracking-widest text-amber-300 font-mono">
+                  3D CRAFTED EMBLEM
+                </span>
+              </div>
             </div>
           </div>
         </div>

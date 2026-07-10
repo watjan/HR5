@@ -94,7 +94,13 @@ export default function PartnerBillingManagement({
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [currentPartnerPage, setCurrentPartnerPage] = useState<number>(1);
   const itemsPerPage = 10;
+
+  // Reset partner page to 1 when search query changes
+  useEffect(() => {
+    setCurrentPartnerPage(1);
+  }, [partnerSearchQuery]);
 
   // Sync sound preference from local storage changes
   useEffect(() => {
@@ -429,6 +435,13 @@ export default function PartnerBillingManagement({
       );
     });
   }, [partners, partnerSearchQuery]);
+
+  const paginatedPartners = useMemo(() => {
+    const startIndex = (currentPartnerPage - 1) * itemsPerPage;
+    return filteredPartners.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredPartners, currentPartnerPage, itemsPerPage]);
+
+  const totalPartnerPages = Math.ceil(filteredPartners.length / itemsPerPage);
 
   // Open Add Modal
   const handleOpenAdd = () => {
@@ -2307,7 +2320,7 @@ export default function PartnerBillingManagement({
                       </td>
                     </tr>
                   ) : (
-                    filteredPartners.map((p) => (
+                    paginatedPartners.map((p) => (
                       <tr key={p.id} className="hover:bg-slate-50/50 transition">
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-2">
@@ -2371,6 +2384,117 @@ export default function PartnerBillingManagement({
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalPartnerPages > 1 && (
+              <div className="flex items-center justify-between border-t border-slate-150 px-4 py-3 bg-white">
+                <div className="flex flex-1 justify-between sm:hidden">
+                  <button
+                    disabled={currentPartnerPage === 1}
+                    onClick={() => {
+                      setCurrentPartnerPage(prev => Math.max(prev - 1, 1));
+                      playNotificationSound();
+                    }}
+                    className="relative inline-flex items-center px-4 py-2 border border-slate-300 text-xs font-medium rounded-sm text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
+                  >
+                    ก่อนหน้า
+                  </button>
+                  <button
+                    disabled={currentPartnerPage === totalPartnerPages}
+                    onClick={() => {
+                      setCurrentPartnerPage(prev => Math.min(prev + 1, totalPartnerPages));
+                      playNotificationSound();
+                    }}
+                    className="relative ml-3 inline-flex items-center px-4 py-2 border border-slate-300 text-xs font-medium rounded-sm text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
+                  >
+                    ถัดไป
+                  </button>
+                </div>
+                <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between text-xs font-sans text-slate-500">
+                  <div>
+                    <p>
+                      แสดงคู่ค้าที่ <span className="font-bold text-slate-900">{(currentPartnerPage - 1) * itemsPerPage + 1}</span> ถึง{' '}
+                      <span className="font-bold text-slate-900">{Math.min((currentPartnerPage - 1) * itemsPerPage + itemsPerPage, filteredPartners.length)}</span> จากทั้งหมด{' '}
+                      <span className="font-bold text-slate-900">{filteredPartners.length}</span> รายการ
+                    </p>
+                  </div>
+                  <div>
+                    <nav className="isolate inline-flex -space-x-px rounded-sm shadow-xs" aria-label="Pagination">
+                      <button
+                        disabled={currentPartnerPage === 1}
+                        onClick={() => {
+                          setCurrentPartnerPage(1);
+                          playNotificationSound();
+                        }}
+                        className="relative inline-flex items-center rounded-l-sm px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                        title="หน้าแรก"
+                      >
+                        «
+                      </button>
+                      <button
+                        disabled={currentPartnerPage === 1}
+                        onClick={() => {
+                          setCurrentPartnerPage(prev => Math.max(prev - 1, 1));
+                          playNotificationSound();
+                        }}
+                        className="relative inline-flex items-center px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                      >
+                        ‹ ก่อนหน้า
+                      </button>
+                      
+                      {/* Page numbers */}
+                      {Array.from({ length: totalPartnerPages }, (_, i) => i + 1)
+                        .filter(p => p === 1 || p === totalPartnerPages || Math.abs(p - currentPartnerPage) <= 1)
+                        .map((p, idx, arr) => {
+                          const isCurrent = p === currentPartnerPage;
+                          return (
+                            <React.Fragment key={p}>
+                              {idx > 0 && arr[idx - 1] !== p - 1 && (
+                                <span className="relative inline-flex items-center px-3 py-2 text-slate-500 ring-1 ring-inset ring-slate-305 bg-white select-none">...</span>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setCurrentPartnerPage(p);
+                                  playNotificationSound();
+                                }}
+                                className={`relative inline-flex items-center px-3 py-2 text-xs font-semibold ring-1 ring-inset focus:z-20 focus:outline-offset-0 transition cursor-pointer ${
+                                  isCurrent
+                                    ? 'z-10 bg-emerald-600 text-white ring-emerald-600'
+                                    : 'text-slate-900 ring-slate-305 hover:bg-slate-50 bg-white'
+                                }`}
+                              >
+                                {p}
+                              </button>
+                            </React.Fragment>
+                          );
+                        })}
+
+                      <button
+                        disabled={currentPartnerPage === totalPartnerPages}
+                        onClick={() => {
+                          setCurrentPartnerPage(prev => Math.min(prev + 1, totalPartnerPages));
+                          playNotificationSound();
+                        }}
+                        className="relative inline-flex items-center px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                      >
+                        ถัดไป ›
+                      </button>
+                      <button
+                        disabled={currentPartnerPage === totalPartnerPages}
+                        onClick={() => {
+                          setCurrentPartnerPage(totalPartnerPages);
+                          playNotificationSound();
+                        }}
+                        className="relative inline-flex items-center rounded-r-sm px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                        title="หน้าสุดท้าย"
+                      >
+                        »
+                      </button>
+                    </nav>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}
