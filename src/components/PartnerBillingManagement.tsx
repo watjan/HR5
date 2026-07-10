@@ -559,11 +559,12 @@ export default function PartnerBillingManagement({
     if (!partnerName.trim() || amount <= 0) return;
 
     const finalDocNumber = docNumber.trim() || deliveryDocNumber.trim() || billingDocNumber.trim() || `DOC-${Date.now().toString().slice(-4)}`;
+    const resolvedDocType = billingDocNumber.trim() ? 'billing' : (deliveryDocNumber.trim() ? 'delivery' : 'delivery');
 
     const newRecord: PartnerBilling = {
       id: `BILL-${Date.now().toString().slice(-4)}`,
       partnerName: partnerName.trim(),
-      docType,
+      docType: resolvedDocType,
       docNumber: finalDocNumber,
       deliveryDocNumber: deliveryDocNumber.trim() || undefined,
       billingDocNumber: billingDocNumber.trim() || undefined,
@@ -591,11 +592,12 @@ export default function PartnerBillingManagement({
     if (!editingBilling || !partnerName.trim() || amount <= 0) return;
 
     const finalDocNumber = docNumber.trim() || deliveryDocNumber.trim() || billingDocNumber.trim() || editingBilling.docNumber;
+    const resolvedDocType = billingDocNumber.trim() ? 'billing' : (deliveryDocNumber.trim() ? 'delivery' : 'delivery');
 
     const updatedRecord: PartnerBilling = {
       ...editingBilling,
       partnerName: partnerName.trim(),
-      docType,
+      docType: resolvedDocType,
       docNumber: finalDocNumber,
       deliveryDocNumber: deliveryDocNumber.trim() || undefined,
       billingDocNumber: billingDocNumber.trim() || undefined,
@@ -1772,21 +1774,6 @@ export default function PartnerBillingManagement({
             </div>
 
             <div className="flex flex-wrap gap-2.5 w-full lg:w-auto items-center">
-              {/* Document Type Filter */}
-              <div className="flex items-center gap-1 text-xs text-slate-500 flex-1 sm:flex-initial">
-                <span className="whitespace-nowrap font-sans font-semibold">ประเภท:</span>
-                <select
-                  value={docTypeFilter}
-                  onChange={(e) => setDocTypeFilter(e.target.value)}
-                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-sm text-xs text-slate-700 focus:outline-none focus:border-blue-500"
-                >
-                  <option value="All">ทุกประเภทเอกสาร</option>
-                  {docTypes.map(d => (
-                    <option key={d.key} value={d.key}>{d.label}</option>
-                  ))}
-                </select>
-              </div>
-
               {/* Status Filter */}
               <div className="flex items-center gap-1 text-xs text-slate-500 flex-1 sm:flex-initial">
                 <span className="whitespace-nowrap font-sans font-semibold">สถานะ:</span>
@@ -1920,7 +1907,6 @@ export default function PartnerBillingManagement({
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-[10px] font-mono font-bold uppercase tracking-wider border-b border-slate-200">
                     <th className="py-3 px-4">รหัส & คู่ค้า</th>
-                    <th className="py-3 px-4">ประเภทเอกสาร</th>
                     <th className="py-3 px-4 font-mono">เลขที่เอกสาร</th>
                     <th className="py-3 px-4 text-right">จำนวนเงิน (บาท)</th>
                     <th className="py-3 px-4 text-center">วันที่ออกเอกสาร</th>
@@ -1932,7 +1918,7 @@ export default function PartnerBillingManagement({
                 <tbody className="divide-y divide-slate-100">
                   {paginatedBillings.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-xs text-slate-400 font-sans">
+                      <td colSpan={7} className="py-12 text-center text-xs text-slate-400 font-sans">
                         ไม่พบข้อมูลเอกสารคู่ค้าและใบส่งวางบิลตามเงื่อนไขที่ระบุ
                       </td>
                     </tr>
@@ -1949,11 +1935,6 @@ export default function PartnerBillingManagement({
                               </span>
                             )}
                           </div>
-                        </td>
-
-                        {/* Document Type Badge */}
-                        <td className="py-3.5 px-4">
-                          {getDocTypeBadge(item.docType)}
                         </td>
 
                         {/* Document Details (Separated Lines) */}
@@ -2455,94 +2436,7 @@ export default function PartnerBillingManagement({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center mb-0.5">
-                    <label className="font-semibold text-slate-700 block">ประเภทเอกสาร <span className="text-red-500">*</span></label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddingNewDocType(!isAddingNewDocType);
-                        playNotificationSound();
-                      }}
-                      className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 cursor-pointer bg-transparent border-0 outline-none"
-                    >
-                      {isAddingNewDocType ? "« เลือกประเภท" : "+ จัดการประเภท"}
-                    </button>
-                  </div>
-                  
-                  {!isAddingNewDocType ? (
-                    <select
-                      value={docType}
-                      onChange={(e) => setDocType(e.target.value)}
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white text-xs font-sans"
-                    >
-                      {docTypes.map(d => (
-                        <option key={d.key} value={d.key}>{d.label}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="space-y-2 border border-blue-100 bg-blue-50/30 p-2 rounded-sm text-[11px]">
-                      {/* Add Doc Type Input */}
-                      <div className="flex gap-1 items-center">
-                        <input
-                          type="text"
-                          value={newDocTypeLabel}
-                          onChange={(e) => setNewDocTypeLabel(e.target.value)}
-                          placeholder="เพิ่มประเภท เช่น ใบเสนอราคา, ใบสั่งซื้อ..."
-                          className="flex-1 px-2 py-1 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-[11px] text-slate-700 bg-white"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const label = newDocTypeLabel.trim();
-                            if (label) {
-                              const key = 'custom_' + Date.now();
-                              const updated = [...docTypes, { key, label }];
-                              setDocTypes(updated);
-                              safeStorage.setItem('hr_doc_types_list', JSON.stringify(updated));
-                              setDocType(key);
-                              setNewDocTypeLabel('');
-                              showSuccess(`เพิ่มประเภทเอกสาร "${label}" สำเร็จ`);
-                              playNotificationSound();
-                            }
-                          }}
-                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-sm font-bold text-[11px] cursor-pointer transition shrink-0 border-0"
-                        >
-                          เพิ่ม
-                        </button>
-                      </div>
-
-                      {/* Doc Type List with Delete options */}
-                      <div className="max-h-24 overflow-y-auto space-y-1 pr-1 border-t border-blue-100/50 pt-1">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">ลบประเภทเอกสารที่มีอยู่:</p>
-                        {docTypes.map(d => (
-                          <div key={d.key} className="flex justify-between items-center text-[10px] bg-white border border-slate-100 py-0.5 px-1 rounded-sm">
-                            <span className="font-semibold text-slate-600 truncate max-w-[150px]">{d.label}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = docTypes.filter(item => item.key !== d.key);
-                                setDocTypes(updated);
-                                safeStorage.setItem('hr_doc_types_list', JSON.stringify(updated));
-                                if (docType === d.key) {
-                                  setDocType(updated[0]?.key || 'delivery');
-                                }
-                                showSuccess(`ลบประเภทเอกสาร "${d.label}" แล้ว`);
-                                playNotificationSound();
-                              }}
-                              className="p-0.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xs transition border-0 cursor-pointer bg-transparent"
-                              title="ลบประเภทเอกสารนี้"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
+              <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-1">
                   <label className="font-semibold text-slate-700 block">เลขที่เอกสารหลัก/อ้างอิง <span className="text-slate-400 font-normal">(เลือกกรอกแยกด้านล่างได้)</span></label>
                   <input
@@ -2550,7 +2444,7 @@ export default function PartnerBillingManagement({
                     value={docNumber}
                     onChange={(e) => setDocNumber(e.target.value)}
                     placeholder="เช่น DO-9988 / BI-10291"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
                   />
                 </div>
               </div>
@@ -2883,94 +2777,7 @@ export default function PartnerBillingManagement({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center mb-0.5">
-                    <label className="font-semibold text-slate-700 block">ประเภทเอกสาร <span className="text-red-500">*</span></label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddingNewDocType(!isAddingNewDocType);
-                        playNotificationSound();
-                      }}
-                      className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 cursor-pointer bg-transparent border-0 outline-none"
-                    >
-                      {isAddingNewDocType ? "« เลือกประเภท" : "+ จัดการประเภท"}
-                    </button>
-                  </div>
-                  
-                  {!isAddingNewDocType ? (
-                    <select
-                      value={docType}
-                      onChange={(e) => setDocType(e.target.value)}
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white text-xs font-sans"
-                    >
-                      {docTypes.map(d => (
-                        <option key={d.key} value={d.key}>{d.label}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="space-y-2 border border-blue-100 bg-blue-50/30 p-2 rounded-sm text-[11px]">
-                      {/* Add Doc Type Input */}
-                      <div className="flex gap-1 items-center">
-                        <input
-                          type="text"
-                          value={newDocTypeLabel}
-                          onChange={(e) => setNewDocTypeLabel(e.target.value)}
-                          placeholder="เพิ่มประเภท เช่น ใบเสนอราคา, ใบสั่งซื้อ..."
-                          className="flex-1 px-2 py-1 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-[11px] text-slate-700 bg-white"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const label = newDocTypeLabel.trim();
-                            if (label) {
-                              const key = 'custom_' + Date.now();
-                              const updated = [...docTypes, { key, label }];
-                              setDocTypes(updated);
-                              safeStorage.setItem('hr_doc_types_list', JSON.stringify(updated));
-                              setDocType(key);
-                              setNewDocTypeLabel('');
-                              showSuccess(`เพิ่มประเภทเอกสาร "${label}" สำเร็จ`);
-                              playNotificationSound();
-                            }
-                          }}
-                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-sm font-bold text-[11px] cursor-pointer transition shrink-0 border-0"
-                        >
-                          เพิ่ม
-                        </button>
-                      </div>
-
-                      {/* Doc Type List with Delete options */}
-                      <div className="max-h-24 overflow-y-auto space-y-1 pr-1 border-t border-blue-100/50 pt-1">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">ลบประเภทเอกสารที่มีอยู่:</p>
-                        {docTypes.map(d => (
-                          <div key={d.key} className="flex justify-between items-center text-[10px] bg-white border border-slate-100 py-0.5 px-1 rounded-sm">
-                            <span className="font-semibold text-slate-600 truncate max-w-[150px]">{d.label}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = docTypes.filter(item => item.key !== d.key);
-                                setDocTypes(updated);
-                                safeStorage.setItem('hr_doc_types_list', JSON.stringify(updated));
-                                if (docType === d.key) {
-                                  setDocType(updated[0]?.key || 'delivery');
-                                }
-                                showSuccess(`ลบประเภทเอกสาร "${d.label}" แล้ว`);
-                                playNotificationSound();
-                              }}
-                              className="p-0.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xs transition border-0 cursor-pointer bg-transparent"
-                              title="ลบประเภทเอกสารนี้"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
+              <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-1">
                   <label className="font-semibold text-slate-700 block">เลขที่เอกสารหลัก/อ้างอิง <span className="text-slate-400 font-normal">(เลือกกรอกแยกด้านล่างได้)</span></label>
                   <input
@@ -2978,7 +2785,7 @@ export default function PartnerBillingManagement({
                     value={docNumber}
                     onChange={(e) => setDocNumber(e.target.value)}
                     placeholder="เช่น DO-9988 / BI-10291"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
                   />
                 </div>
               </div>
