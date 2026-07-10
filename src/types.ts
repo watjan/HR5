@@ -161,10 +161,13 @@ export interface PartnerBilling {
   billingDocNumber?: string; // เลขที่ใบวางบิล (แยกต่างหาก)
   cnDocNumber?: string; // เลขที่ใบลดหนี้ (CN)
   cnAmount?: number; // จำนวนเงินใบลดหนี้ (CN Amount)
-  bookNumber?: string; // เล่มที่
-  pageNumber?: string; // เลขที่ในเล่ม
+  bookNumber?: string; // เล่มที่ (สำหรับใบส่งของ)
+  pageNumber?: string; // เลขที่ในเล่ม (สำหรับใบส่งของ)
+  billingBookNumber?: string; // เล่มที่ (สำหรับใบวางบิล)
+  billingPageNumber?: string; // เลขที่ในเล่ม (สำหรับใบวางบิล)
   transportCarrier?: string; // ขนส่ง/บริษัทขนส่ง
-  amount: number; // จำนวนเงิน (บาท)
+  amount: number; // จำนวนเงิน (บาท) (สำหรับใบส่งของ หรือยอดหลัก)
+  billingAmount?: number; // จำนวนเงิน (บาท) (สำหรับใบวางบิล)
   issueDate: string; // วันที่ออกเอกสาร (YYYY-MM-DD)
   dueDate: string; // วันที่นัดจ่าย/กำหนดชำระ (YYYY-MM-DD)
   status: 'pending' | 'billed' | 'paid' | 'cancelled'; // รอวางบิล/รอดำเนินการ | วางบิลแล้ว/รอจ่าย | ชำระเงินแล้ว | ยกเลิก

@@ -184,7 +184,7 @@ export default function PartnerBillingManagement({
   });
   const [newDocTypeLabel, setNewDocTypeLabel] = useState('');
   const [isAddingNewDocType, setIsAddingNewDocType] = useState(false);
-  const [amount, setAmount] = useState<number>(0);
+  const [amount, setAmount] = useState<number | ''>(0);
   const [issueDate, setIssueDate] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [status, setStatus] = useState<'pending' | 'billed' | 'paid' | 'cancelled'>('pending');
@@ -199,6 +199,9 @@ export default function PartnerBillingManagement({
   const [cnAmount, setCnAmount] = useState<number | ''>('');
   const [bookNumber, setBookNumber] = useState('');
   const [pageNumber, setPageNumber] = useState('');
+  const [billingBookNumber, setBillingBookNumber] = useState('');
+  const [billingPageNumber, setBillingPageNumber] = useState('');
+  const [billingAmount, setBillingAmount] = useState<number | ''>('');
   const [transportCarrier, setTransportCarrier] = useState('');
   
   // Custom Carrier selection list
@@ -543,6 +546,9 @@ export default function PartnerBillingManagement({
     setCnAmount(item.cnAmount !== undefined ? item.cnAmount : '');
     setBookNumber(item.bookNumber || '');
     setPageNumber(item.pageNumber || '');
+    setBillingBookNumber(item.billingBookNumber || '');
+    setBillingPageNumber(item.billingPageNumber || '');
+    setBillingAmount(item.billingAmount !== undefined ? item.billingAmount : '');
     setTransportCarrier(item.transportCarrier || '');
     setAmount(item.amount);
     setIssueDate(item.issueDate);
@@ -556,7 +562,8 @@ export default function PartnerBillingManagement({
   // Submit Add
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!partnerName.trim() || amount <= 0) return;
+    const resolvedAmount = amount || (billingAmount !== '' ? Number(billingAmount) : 0);
+    if (!partnerName.trim() || resolvedAmount <= 0) return;
 
     const finalDocNumber = docNumber.trim() || deliveryDocNumber.trim() || billingDocNumber.trim() || `DOC-${Date.now().toString().slice(-4)}`;
     const resolvedDocType = billingDocNumber.trim() ? 'billing' : (deliveryDocNumber.trim() ? 'delivery' : 'delivery');
@@ -572,8 +579,11 @@ export default function PartnerBillingManagement({
       cnAmount: cnAmount !== '' ? Number(cnAmount) : undefined,
       bookNumber: bookNumber.trim() || undefined,
       pageNumber: pageNumber.trim() || undefined,
+      billingBookNumber: billingBookNumber.trim() || undefined,
+      billingPageNumber: billingPageNumber.trim() || undefined,
       transportCarrier: transportCarrier.trim() || undefined,
-      amount,
+      amount: resolvedAmount,
+      billingAmount: billingAmount !== '' ? Number(billingAmount) : undefined,
       issueDate,
       dueDate,
       status,
@@ -589,7 +599,8 @@ export default function PartnerBillingManagement({
   // Submit Edit
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingBilling || !partnerName.trim() || amount <= 0) return;
+    const resolvedAmount = amount || (billingAmount !== '' ? Number(billingAmount) : 0);
+    if (!editingBilling || !partnerName.trim() || resolvedAmount <= 0) return;
 
     const finalDocNumber = docNumber.trim() || deliveryDocNumber.trim() || billingDocNumber.trim() || editingBilling.docNumber;
     const resolvedDocType = billingDocNumber.trim() ? 'billing' : (deliveryDocNumber.trim() ? 'delivery' : 'delivery');
@@ -605,8 +616,11 @@ export default function PartnerBillingManagement({
       cnAmount: cnAmount !== '' ? Number(cnAmount) : undefined,
       bookNumber: bookNumber.trim() || undefined,
       pageNumber: pageNumber.trim() || undefined,
+      billingBookNumber: billingBookNumber.trim() || undefined,
+      billingPageNumber: billingPageNumber.trim() || undefined,
       transportCarrier: transportCarrier.trim() || undefined,
-      amount,
+      amount: resolvedAmount,
+      billingAmount: billingAmount !== '' ? Number(billingAmount) : undefined,
       issueDate,
       dueDate,
       status,
@@ -1939,78 +1953,76 @@ export default function PartnerBillingManagement({
 
                         {/* Document Details (Separated Lines) */}
                         <td className="py-3.5 px-4">
-                          <div className="space-y-1 text-slate-700 font-sans text-xs">
-                            {item.docType === 'delivery' ? (
-                              <div className="space-y-0.5">
+                          <div className="space-y-2 text-slate-700 font-sans text-xs">
+                            {/* Render Delivery block if exists */}
+                            {(item.deliveryDocNumber || item.docType === 'delivery') && (
+                              <div className="space-y-0.5 border-l-2 border-blue-500 pl-2">
                                 <div className="text-[10px] font-bold text-blue-600 uppercase flex items-center gap-1">
                                   <span>🚚 ใบส่งของ</span>
                                 </div>
-                                <div className="font-mono">
+                                <div className="font-mono text-[11px]">
                                   <span className="text-slate-400">เลขที่ส่งของ:</span> <span className="font-bold text-slate-900">{item.deliveryDocNumber || item.docNumber}</span>
                                 </div>
-                                <div className="font-mono">
-                                  <span className="text-slate-400">เล่มที่:</span> <span className="text-slate-800 font-semibold">{item.bookNumber || '-'}</span>
+                                <div className="grid grid-cols-2 gap-x-2 text-[10px] text-slate-500 font-mono">
+                                  <div>
+                                    <span className="text-slate-400">เล่มที่:</span> <span className="text-slate-700 font-semibold">{item.bookNumber || '-'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400">เลขที่:</span> <span className="text-slate-700 font-semibold">{item.pageNumber || '-'}</span>
+                                  </div>
                                 </div>
-                                <div className="font-mono">
-                                  <span className="text-slate-400">เลขที่:</span> <span className="text-slate-800 font-semibold">{item.pageNumber || '-'}</span>
-                                </div>
-                                <div className="font-mono">
-                                  <span className="text-slate-400">ราคา:</span> <span className="text-blue-600 font-bold">฿{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                </div>
+                                {(!item.billingDocNumber && item.docType !== 'billing') && (
+                                  <div className="font-mono text-[11px]">
+                                    <span className="text-slate-400">ราคา:</span> <span className="text-blue-600 font-bold">฿{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                )}
                               </div>
-                            ) : item.docType === 'billing' ? (
-                              <div className="space-y-0.5">
+                            )}
+
+                            {/* Render Billing block if exists */}
+                            {(item.billingDocNumber || item.docType === 'billing') && (
+                              <div className="space-y-0.5 border-l-2 border-violet-500 pl-2">
                                 <div className="text-[10px] font-bold text-violet-600 uppercase flex items-center gap-1">
                                   <span>📄 ใบวางบิล</span>
                                 </div>
-                                <div className="font-mono">
+                                <div className="font-mono text-[11px]">
                                   <span className="text-slate-400">เลขที่ใบวางบิล:</span> <span className="font-bold text-slate-900">{item.billingDocNumber || item.docNumber}</span>
                                 </div>
-                                <div className="font-mono">
-                                  <span className="text-slate-400">เล่มที่:</span> <span className="text-slate-800 font-semibold">{item.bookNumber || '-'}</span>
-                                </div>
-                                <div className="font-mono">
-                                  <span className="text-slate-400">เลขที่:</span> <span className="text-slate-800 font-semibold">{item.pageNumber || '-'}</span>
-                                </div>
-                                <div className="font-mono">
-                                  <span className="text-slate-400">ราคาใบวางบิล:</span> <span className="text-violet-600 font-bold">฿{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                </div>
-                                {item.cnDocNumber && (
-                                  <div className="font-mono text-rose-600 flex items-center gap-1">
-                                    <span className="text-rose-400 text-[10px]">เลขที่ CN:</span>
-                                    <span className="font-bold">{item.cnDocNumber}</span>
+                                <div className="grid grid-cols-2 gap-x-2 text-[10px] text-slate-500 font-mono">
+                                  <div>
+                                    <span className="text-slate-400">เล่มที่:</span> <span className="text-slate-700 font-semibold">{item.billingBookNumber || item.bookNumber || '-'}</span>
                                   </div>
-                                )}
-                                {item.cnAmount !== undefined && item.cnAmount > 0 && (
-                                  <div className="font-mono text-rose-600 flex items-center gap-1">
-                                    <span className="text-rose-400 text-[10px]">ราคา CN:</span>
-                                    <span className="font-bold">-฿{item.cnAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  <div>
+                                    <span className="text-slate-400">เลขที่:</span> <span className="text-slate-700 font-semibold">{item.billingPageNumber || item.pageNumber || '-'}</span>
                                   </div>
-                                )}
+                                </div>
+                                <div className="font-mono text-[11px]">
+                                  <span className="text-slate-400">ราคาใบวางบิล:</span> <span className="text-violet-600 font-bold">฿{(item.billingAmount !== undefined ? item.billingAmount : item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Render CN / credit details */}
+                            {item.cnDocNumber && (
+                              <div className="space-y-0.5 border-l-2 border-rose-500 pl-2">
+                                <div className="text-[10px] font-bold text-rose-600 uppercase flex items-center gap-1">
+                                  <span>ใบลดหนี้ (CN)</span>
+                                </div>
+                                <div className="font-mono text-[11px]">
+                                  <span className="text-slate-400">เลขที่ CN:</span> <span className="font-bold text-slate-900">{item.cnDocNumber}</span>
+                                </div>
                                 {item.cnAmount !== undefined && item.cnAmount > 0 && (
-                                  <div className="font-mono text-emerald-600 flex items-center gap-1 border-t border-dashed border-slate-200 pt-0.5 mt-0.5">
-                                    <span className="text-emerald-500 font-bold">ยอดที่ต้องจ่าย:</span>
-                                    <span className="font-black bg-emerald-50 px-1 rounded-xs">฿{(item.amount - item.cnAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  <div className="font-mono text-[11px] text-rose-600">
+                                    <span className="text-rose-400">ราคา CN:</span> <span className="font-bold">-฿{item.cnAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                   </div>
                                 )}
                               </div>
-                            ) : (
-                              <div className="space-y-0.5">
-                                <div className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
-                                  <span>🧾 ใบเสร็จ/อื่นๆ</span>
-                                </div>
-                                <div className="font-mono">
-                                  <span className="text-slate-400">เลขที่เอกสาร:</span> <span className="font-bold text-slate-900">{item.docNumber}</span>
-                                </div>
-                                <div className="font-mono">
-                                  <span className="text-slate-400">เล่มที่:</span> <span className="text-slate-800 font-semibold">{item.bookNumber || '-'}</span>
-                                </div>
-                                <div className="font-mono">
-                                  <span className="text-slate-400">เลขที่:</span> <span className="text-slate-800 font-semibold">{item.pageNumber || '-'}</span>
-                                </div>
-                                <div className="font-mono">
-                                  <span className="text-slate-400">ราคา:</span> <span className="text-slate-900 font-bold">฿{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                </div>
+                            )}
+
+                            {item.cnAmount !== undefined && item.cnAmount > 0 && (
+                              <div className="font-mono text-emerald-600 flex items-center gap-1 border-t border-dashed border-slate-200 pt-1 mt-1 text-[11px]">
+                                <span className="text-emerald-500 font-bold">ยอดที่ต้องจ่าย:</span>
+                                <span className="font-black bg-emerald-50 px-1 rounded-xs">฿{((item.billingAmount !== undefined ? item.billingAmount : item.amount) - item.cnAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                               </div>
                             )}
 
@@ -2366,7 +2378,7 @@ export default function PartnerBillingManagement({
       {/* MODAL: ADD RECORD */}
       {isAddOpen && (
         <div id="add-partner-billing-modal" className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-sm border border-slate-200 max-w-lg w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-white rounded-sm border border-slate-200 max-w-lg md:max-w-3xl lg:max-w-4xl w-full p-6 shadow-2xl space-y-4">
             
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide font-sans flex items-center gap-1.5">
@@ -2449,39 +2461,125 @@ export default function PartnerBillingManagement({
                 </div>
               </div>
 
-              {/* Separated Delivery Document No. and Billing Document No. */}
-              <div className="grid grid-cols-2 gap-3 bg-slate-50/50 p-2.5 rounded-sm border border-slate-100">
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 block flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> เลขที่ใบส่งของ
-                  </label>
-                  <input
-                    type="text"
-                    value={deliveryDocNumber}
-                    onChange={(e) => setDeliveryDocNumber(e.target.value)}
-                    placeholder="เช่น DO-2026-001"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
-                  />
+              {/* Delivery & Billing side-by-side in desktop/tablet, stacked in mobile */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {/* Delivery Document Group */}
+                <div className="space-y-3 bg-blue-50/20 p-3 rounded-md border border-blue-100/60 flex flex-col justify-between">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-blue-800 block flex items-center gap-1.5 text-xs">
+                      <span className="w-2 h-2 bg-blue-500 rounded-full"></span> 🚚 รายละเอียดใบส่งของ
+                    </label>
+                    <input
+                      type="text"
+                      value={deliveryDocNumber}
+                      onChange={(e) => setDeliveryDocNumber(e.target.value)}
+                      placeholder="เลขที่ใบส่งของ เช่น DO-2026-001"
+                      className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 block">เล่มที่ (Book No.)</label>
+                      <input
+                        type="text"
+                        value={bookNumber}
+                        onChange={(e) => setBookNumber(e.target.value)}
+                        placeholder="เล่มที่"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 block">เลขที่ (Page No.)</label>
+                      <input
+                        type="text"
+                        value={pageNumber}
+                        onChange={(e) => setPageNumber(e.target.value)}
+                        placeholder="เลขที่ในเล่ม"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 block">ราคา/จำนวนเงิน</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={amount || ''}
+                          onChange={(e) => setAmount(e.target.value !== '' ? Number(e.target.value) : '')}
+                          placeholder="0.00"
+                          min={0}
+                          step="any"
+                          className="w-full pl-2 pr-5 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono font-bold text-xs"
+                        />
+                        <span className="absolute right-1 top-2 text-slate-400 font-semibold text-[9px]">บ.</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 block flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-violet-500 rounded-full"></span> เลขที่ใบวางบิล
-                  </label>
-                  <input
-                    type="text"
-                    value={billingDocNumber}
-                    onChange={(e) => setBillingDocNumber(e.target.value)}
-                    placeholder="placeholder เช่น BI-2026-001"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
-                  />
+                {/* Billing Document Group */}
+                <div className="space-y-3 bg-violet-50/20 p-3 rounded-md border border-violet-100/60 flex flex-col justify-between">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-violet-800 block flex items-center gap-1.5 text-xs">
+                      <span className="w-2 h-2 bg-violet-500 rounded-full"></span> 📄 รายละเอียดใบวางบิล
+                    </label>
+                    <input
+                      type="text"
+                      value={billingDocNumber}
+                      onChange={(e) => setBillingDocNumber(e.target.value)}
+                      placeholder="เลขที่ใบวางบิล เช่น BI-2026-001"
+                      className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 block">เล่มที่ (Book No.)</label>
+                      <input
+                        type="text"
+                        value={billingBookNumber}
+                        onChange={(e) => setBillingBookNumber(e.target.value)}
+                        placeholder="เล่มที่"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 block">เลขที่ (Page No.)</label>
+                      <input
+                        type="text"
+                        value={billingPageNumber}
+                        onChange={(e) => setBillingPageNumber(e.target.value)}
+                        placeholder="เลขที่ในเล่ม"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 block">ราคา/จำนวนเงิน</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={billingAmount || ''}
+                          onChange={(e) => setBillingAmount(e.target.value !== '' ? Number(e.target.value) : '')}
+                          placeholder="0.00"
+                          min={0}
+                          step="any"
+                          className="w-full pl-2 pr-5 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono font-bold text-xs"
+                        />
+                        <span className="absolute right-1 top-2 text-slate-400 font-semibold text-[9px]">บ.</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {/* Separated Credit Note (CN) No. & CN Amount/Price */}
               <div className="grid grid-cols-2 gap-3 bg-rose-50/30 p-2.5 rounded-sm border border-rose-100/40">
                 <div className="space-y-1">
-                  <label className="font-semibold text-rose-700 block flex items-center gap-1">
+                  <label className="font-semibold text-rose-700 block flex items-center gap-1 text-[11px]">
                     <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span> เลขที่ CN (ใบลดหนี้)
                   </label>
                   <input
@@ -2489,13 +2587,13 @@ export default function PartnerBillingManagement({
                     value={cnDocNumber}
                     onChange={(e) => setCnDocNumber(e.target.value)}
                     placeholder="เช่น CN-2026-001"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-semibold text-rose-700 block flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span> ราคา/จำนวนเงิน CN (บาท)
+                  <label className="font-semibold text-rose-700 block flex items-center gap-1 text-[11px]">
+                    <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span> ราคา CN (บาท)
                   </label>
                   <input
                     type="number"
@@ -2503,50 +2601,8 @@ export default function PartnerBillingManagement({
                     onChange={(e) => setCnAmount(e.target.value !== '' ? Number(e.target.value) : '')}
                     placeholder="0.00"
                     step="any"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
                   />
-                </div>
-              </div>
-
-              {/* Book No. & Page No. & Price/Amount */}
-              <div className="grid grid-cols-3 gap-2.5">
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 block">เล่มที่ (Book No.)</label>
-                  <input
-                    type="text"
-                    value={bookNumber}
-                    onChange={(e) => setBookNumber(e.target.value)}
-                    placeholder="เล่มที่"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 block">เลขที่ (Page No.)</label>
-                  <input
-                    type="text"
-                    value={pageNumber}
-                    onChange={(e) => setPageNumber(e.target.value)}
-                    placeholder="เลขที่ในเล่ม"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 block">ราคา/จำนวนเงิน <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={amount || ''}
-                      onChange={(e) => setAmount(Number(e.target.value))}
-                      placeholder="0.00"
-                      min={0.01}
-                      step="any"
-                      className="w-full pl-2 pr-6 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono font-bold"
-                      required
-                    />
-                    <span className="absolute right-1.5 top-1.5 text-slate-400 font-semibold text-[10px]">บ.</span>
-                  </div>
                 </div>
               </div>
 
@@ -2707,7 +2763,7 @@ export default function PartnerBillingManagement({
       {/* MODAL: EDIT RECORD */}
       {editingBilling && (
         <div id="edit-partner-billing-modal" className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-sm border border-slate-200 max-w-lg w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-white rounded-sm border border-slate-200 max-w-lg md:max-w-3xl lg:max-w-4xl w-full p-6 shadow-2xl space-y-4">
             
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide font-sans flex items-center gap-1.5">
@@ -2790,39 +2846,125 @@ export default function PartnerBillingManagement({
                 </div>
               </div>
 
-              {/* Separated Delivery Document No. and Billing Document No. */}
-              <div className="grid grid-cols-2 gap-3 bg-slate-50/50 p-2.5 rounded-sm border border-slate-100">
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 block flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> เลขที่ใบส่งของ
-                  </label>
-                  <input
-                    type="text"
-                    value={deliveryDocNumber}
-                    onChange={(e) => setDeliveryDocNumber(e.target.value)}
-                    placeholder="เช่น DO-2026-001"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
-                  />
+              {/* Delivery & Billing side-by-side in desktop/tablet, stacked in mobile */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {/* Delivery Document Group */}
+                <div className="space-y-3 bg-blue-50/20 p-3 rounded-md border border-blue-100/60 flex flex-col justify-between">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-blue-800 block flex items-center gap-1.5 text-xs">
+                      <span className="w-2 h-2 bg-blue-500 rounded-full"></span> 🚚 รายละเอียดใบส่งของ
+                    </label>
+                    <input
+                      type="text"
+                      value={deliveryDocNumber}
+                      onChange={(e) => setDeliveryDocNumber(e.target.value)}
+                      placeholder="เลขที่ใบส่งของ เช่น DO-2026-001"
+                      className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 block">เล่มที่ (Book No.)</label>
+                      <input
+                        type="text"
+                        value={bookNumber}
+                        onChange={(e) => setBookNumber(e.target.value)}
+                        placeholder="เล่มที่"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 block">เลขที่ (Page No.)</label>
+                      <input
+                        type="text"
+                        value={pageNumber}
+                        onChange={(e) => setPageNumber(e.target.value)}
+                        placeholder="เลขที่ในเล่ม"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 block">ราคา/จำนวนเงิน</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={amount || ''}
+                          onChange={(e) => setAmount(e.target.value !== '' ? Number(e.target.value) : '')}
+                          placeholder="0.00"
+                          min={0}
+                          step="any"
+                          className="w-full pl-2 pr-5 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono font-bold text-xs"
+                        />
+                        <span className="absolute right-1 top-2 text-slate-400 font-semibold text-[9px]">บ.</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 block flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-violet-500 rounded-full"></span> เลขที่ใบวางบิล
-                  </label>
-                  <input
-                    type="text"
-                    value={billingDocNumber}
-                    onChange={(e) => setBillingDocNumber(e.target.value)}
-                    placeholder="เช่น BI-2026-001"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
-                  />
+                {/* Billing Document Group */}
+                <div className="space-y-3 bg-violet-50/20 p-3 rounded-md border border-violet-100/60 flex flex-col justify-between">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-violet-800 block flex items-center gap-1.5 text-xs">
+                      <span className="w-2 h-2 bg-violet-500 rounded-full"></span> 📄 รายละเอียดใบวางบิล
+                    </label>
+                    <input
+                      type="text"
+                      value={billingDocNumber}
+                      onChange={(e) => setBillingDocNumber(e.target.value)}
+                      placeholder="เลขที่ใบวางบิล เช่น BI-2026-001"
+                      className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 block">เล่มที่ (Book No.)</label>
+                      <input
+                        type="text"
+                        value={billingBookNumber}
+                        onChange={(e) => setBillingBookNumber(e.target.value)}
+                        placeholder="เล่มที่"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 block">เลขที่ (Page No.)</label>
+                      <input
+                        type="text"
+                        value={billingPageNumber}
+                        onChange={(e) => setBillingPageNumber(e.target.value)}
+                        placeholder="เลขที่ในเล่ม"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-600 block">ราคา/จำนวนเงิน</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={billingAmount || ''}
+                          onChange={(e) => setBillingAmount(e.target.value !== '' ? Number(e.target.value) : '')}
+                          placeholder="0.00"
+                          min={0}
+                          step="any"
+                          className="w-full pl-2 pr-5 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono font-bold text-xs"
+                        />
+                        <span className="absolute right-1 top-2 text-slate-400 font-semibold text-[9px]">บ.</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {/* Separated Credit Note (CN) No. & CN Amount/Price */}
               <div className="grid grid-cols-2 gap-3 bg-rose-50/30 p-2.5 rounded-sm border border-rose-100/40">
                 <div className="space-y-1">
-                  <label className="font-semibold text-rose-700 block flex items-center gap-1">
+                  <label className="font-semibold text-rose-700 block flex items-center gap-1 text-[11px]">
                     <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span> เลขที่ CN (ใบลดหนี้)
                   </label>
                   <input
@@ -2830,13 +2972,13 @@ export default function PartnerBillingManagement({
                     value={cnDocNumber}
                     onChange={(e) => setCnDocNumber(e.target.value)}
                     placeholder="เช่น CN-2026-001"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-semibold text-rose-700 block flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span> ราคา/จำนวนเงิน CN (บาท)
+                  <label className="font-semibold text-rose-700 block flex items-center gap-1 text-[11px]">
+                    <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span> ราคา CN (บาท)
                   </label>
                   <input
                     type="number"
@@ -2844,50 +2986,8 @@ export default function PartnerBillingManagement({
                     onChange={(e) => setCnAmount(e.target.value !== '' ? Number(e.target.value) : '')}
                     placeholder="0.00"
                     step="any"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono text-xs"
                   />
-                </div>
-              </div>
-
-              {/* Book No. & Page No. & Price/Amount */}
-              <div className="grid grid-cols-3 gap-2.5">
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 block">เล่มที่ (Book No.)</label>
-                  <input
-                    type="text"
-                    value={bookNumber}
-                    onChange={(e) => setBookNumber(e.target.value)}
-                    placeholder="เล่มที่"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 block">เลขที่ (Page No.)</label>
-                  <input
-                    type="text"
-                    value={pageNumber}
-                    onChange={(e) => setPageNumber(e.target.value)}
-                    placeholder="เลขที่ในเล่ม"
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 block">ราคา/จำนวนเงิน <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={amount || ''}
-                      onChange={(e) => setAmount(Number(e.target.value))}
-                      placeholder="0.00"
-                      min={0.01}
-                      step="any"
-                      className="w-full pl-2 pr-6 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-mono font-bold"
-                      required
-                    />
-                    <span className="absolute right-1.5 top-1.5 text-slate-400 font-semibold text-[10px]">บ.</span>
-                  </div>
                 </div>
               </div>
 
@@ -3090,14 +3190,26 @@ export default function PartnerBillingManagement({
                 )}
                 {viewingDetails.bookNumber && (
                   <div className="flex justify-between py-1 border-b border-slate-50">
-                    <span className="text-slate-400">เล่มที่ (Book No.):</span>
+                    <span className="text-slate-400">เล่มที่ใบส่งของ (Book No.):</span>
                     <span className="font-mono font-bold text-slate-800">{viewingDetails.bookNumber}</span>
                   </div>
                 )}
                 {viewingDetails.pageNumber && (
                   <div className="flex justify-between py-1 border-b border-slate-50">
-                    <span className="text-slate-400">เลขที่ (Page No.):</span>
+                    <span className="text-slate-400">เลขที่ใบส่งของ (Page No.):</span>
                     <span className="font-mono font-bold text-slate-800">{viewingDetails.pageNumber}</span>
+                  </div>
+                )}
+                {viewingDetails.billingBookNumber && (
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-400">เล่มที่ใบวางบิล (Book No.):</span>
+                    <span className="font-mono font-bold text-slate-800">{viewingDetails.billingBookNumber}</span>
+                  </div>
+                )}
+                {viewingDetails.billingPageNumber && (
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-400">เลขที่ใบวางบิล (Page No.):</span>
+                    <span className="font-mono font-bold text-slate-800">{viewingDetails.billingPageNumber}</span>
                   </div>
                 )}
                 {viewingDetails.transportCarrier && (
@@ -3118,14 +3230,20 @@ export default function PartnerBillingManagement({
                     <span className="font-mono font-bold text-rose-600">฿{viewingDetails.cnAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                 )}
-                 <div className="flex justify-between py-1 border-b border-slate-50">
-                  <span className="text-slate-400">จำนวนเงิน/ราคา:</span>
-                  <span className="font-mono font-bold text-slate-800 text-sm">฿{viewingDetails.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                <div className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-400">ราคาใบส่งของ:</span>
+                  <span className="font-mono font-bold text-slate-800">฿{viewingDetails.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                 </div>
+                {viewingDetails.billingAmount !== undefined && (
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-400">ราคาใบวางบิล:</span>
+                    <span className="font-mono font-bold text-violet-700">฿{viewingDetails.billingAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
                 {viewingDetails.cnAmount !== undefined && viewingDetails.cnAmount > 0 && (
                   <div className="flex justify-between py-1 border-b border-slate-50 bg-emerald-50/50 px-1 rounded-xs">
                     <span className="text-emerald-700 font-bold">ยอดที่ต้องจ่าย (หัก CN):</span>
-                    <span className="font-mono font-black text-emerald-600 text-sm">฿{(viewingDetails.amount - viewingDetails.cnAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    <span className="font-mono font-black text-emerald-600 text-sm">฿{((viewingDetails.billingAmount !== undefined ? viewingDetails.billingAmount : viewingDetails.amount) - viewingDetails.cnAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                 )}
                 <div className="flex justify-between py-1 border-b border-slate-50">
