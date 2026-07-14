@@ -41,6 +41,7 @@ export default function PartnerBillingManagement({
   const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
   const [selectedPartnerDashboard, setSelectedPartnerDashboard] = useState<string>('All');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
   // Audio configuration & states
@@ -148,6 +149,13 @@ export default function PartnerBillingManagement({
     setTimeout(() => {
       setSuccessMessage(null);
     }, 3000);
+  };
+
+  const showError = (msg: string) => {
+    setErrorMessage(msg);
+    setTimeout(() => {
+      setErrorMessage(null);
+    }, 4000);
   };
 
   // Modals
@@ -495,49 +503,68 @@ export default function PartnerBillingManagement({
   // Submit Add Partner
   const handleAddPartnerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pName.trim()) return;
+    try {
+      if (!pName.trim()) {
+        showError("กรุณาระบุชื่อบริษัทคู่ค้า");
+        return;
+      }
 
-    const newPartner: PartnerCompany = {
-      id: `PTN-${Date.now().toString().slice(-4)}`,
-      name: pName.trim(),
-      taxId: pTaxId.trim() || undefined,
-      address: pAddress.trim() || undefined,
-      contactPerson: pContactPerson.trim() || undefined,
-      phone: pPhone.trim() || undefined,
-      email: pEmail.trim() || undefined,
-      notes: pNotes.trim() || undefined,
-    };
+      const newPartner: PartnerCompany = {
+        id: `PTN-${Date.now().toString().slice(-4)}`,
+        name: pName.trim(),
+        taxId: pTaxId.trim() || undefined,
+        address: pAddress.trim() || undefined,
+        contactPerson: pContactPerson.trim() || undefined,
+        phone: pPhone.trim() || undefined,
+        email: pEmail.trim() || undefined,
+        notes: pNotes.trim() || undefined,
+      };
 
-    onAddPartner(newPartner);
-    setPartnerName(pName.trim());
-    if (pContactPerson.trim()) {
-      setContactPerson(pContactPerson.trim());
+      onAddPartner(newPartner);
+      setPartnerName(pName.trim());
+      if (pContactPerson.trim()) {
+        setContactPerson(pContactPerson.trim());
+      }
+      if (pPhone.trim()) {
+        setPhone(pPhone.trim());
+      }
+      setIsAddPartnerOpen(false);
+      showSuccess(`ลงทะเบียนและเลือกคู่ค้า "${pName.trim()}" ในใบวางบิลสำเร็จ`);
+    } catch (err: any) {
+      showError(err?.message || "บันทึกข้อมูลคู่ค้าไม่สำเร็จ");
     }
-    if (pPhone.trim()) {
-      setPhone(pPhone.trim());
-    }
-    setIsAddPartnerOpen(false);
-    showSuccess(`ลงทะเบียนและเลือกคู่ค้า "${pName.trim()}" ในใบวางบิลสำเร็จ`);
   };
 
   // Submit Edit Partner
   const handleEditPartnerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingPartner || !pName.trim()) return;
+    try {
+      if (!editingPartner) {
+        showError("ไม่พบคู่ค้าที่ต้องการแก้ไข");
+        return;
+      }
+      if (!pName.trim()) {
+        showError("กรุณาระบุชื่อบริษัทคู่ค้า");
+        return;
+      }
 
-    const updatedPartner: PartnerCompany = {
-      id: editingPartner.id,
-      name: pName.trim(),
-      taxId: pTaxId.trim() || undefined,
-      address: pAddress.trim() || undefined,
-      contactPerson: pContactPerson.trim() || undefined,
-      phone: pPhone.trim() || undefined,
-      email: pEmail.trim() || undefined,
-      notes: pNotes.trim() || undefined,
-    };
+      const updatedPartner: PartnerCompany = {
+        id: editingPartner.id,
+        name: pName.trim(),
+        taxId: pTaxId.trim() || undefined,
+        address: pAddress.trim() || undefined,
+        contactPerson: pContactPerson.trim() || undefined,
+        phone: pPhone.trim() || undefined,
+        email: pEmail.trim() || undefined,
+        notes: pNotes.trim() || undefined,
+      };
 
-    onUpdatePartner(updatedPartner);
-    setEditingPartner(null);
+      onUpdatePartner(updatedPartner);
+      setEditingPartner(null);
+      showSuccess(`แก้ไขข้อมูลคู่ค้า "${pName.trim()}" สำเร็จ`);
+    } catch (err: any) {
+      showError(err?.message || "แก้ไขข้อมูลคู่ค้าไม่สำเร็จ");
+    }
   };
 
   // Delete Partner Confirm
@@ -575,75 +602,108 @@ export default function PartnerBillingManagement({
   // Submit Add
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const resolvedAmount = amount || (billingAmount !== '' ? Number(billingAmount) : 0);
-    if (!partnerName.trim() || resolvedAmount <= 0) return;
+    try {
+      const resolvedAmount = amount || (billingAmount !== '' ? Number(billingAmount) : 0);
+      
+      if (!partnerName.trim()) {
+        showError("กรุณาเลือกหรือระบุชื่อบริษัทคู่ค้า");
+        return;
+      }
 
-    const finalDocNumber = docNumber.trim() || deliveryDocNumber.trim() || billingDocNumber.trim() || `DOC-${Date.now().toString().slice(-4)}`;
-    const resolvedDocType = billingDocNumber.trim() ? 'billing' : (deliveryDocNumber.trim() ? 'delivery' : 'delivery');
+      if (resolvedAmount <= 0) {
+        showError("กรุณากรอกจำนวนเงินให้ถูกต้อง (ต้องเป็นตัวเลขที่มากกว่า 0)");
+        return;
+      }
 
-    const newRecord: PartnerBilling = {
-      id: `BILL-${Date.now().toString().slice(-4)}`,
-      partnerName: partnerName.trim(),
-      docType: resolvedDocType,
-      docNumber: finalDocNumber,
-      deliveryDocNumber: deliveryDocNumber.trim() || undefined,
-      billingDocNumber: billingDocNumber.trim() || undefined,
-      cnDocNumber: cnDocNumber.trim() || undefined,
-      cnAmount: cnAmount !== '' ? Number(cnAmount) : undefined,
-      bookNumber: bookNumber.trim() || undefined,
-      pageNumber: pageNumber.trim() || undefined,
-      billingBookNumber: billingBookNumber.trim() || undefined,
-      billingPageNumber: billingPageNumber.trim() || undefined,
-      transportCarrier: transportCarrier.trim() || undefined,
-      amount: resolvedAmount,
-      billingAmount: billingAmount !== '' ? Number(billingAmount) : undefined,
-      issueDate,
-      dueDate,
-      status,
-      notes: notes.trim() || undefined,
-      contactPerson: contactPerson.trim() || undefined,
-      phone: phone.trim() || undefined
-    };
+      const finalDocNumber = docNumber.trim() || deliveryDocNumber.trim() || billingDocNumber.trim() || `DOC-${Date.now().toString().slice(-4)}`;
+      const resolvedDocType = billingDocNumber.trim() ? 'billing' : (deliveryDocNumber.trim() ? 'delivery' : 'delivery');
 
-    onAddBilling(newRecord);
-    setIsAddOpen(false);
+      const newRecord: PartnerBilling = {
+        id: `BILL-${Date.now().toString().slice(-4)}`,
+        partnerName: partnerName.trim(),
+        docType: resolvedDocType,
+        docNumber: finalDocNumber,
+        deliveryDocNumber: deliveryDocNumber.trim() || undefined,
+        billingDocNumber: billingDocNumber.trim() || undefined,
+        cnDocNumber: cnDocNumber.trim() || undefined,
+        cnAmount: cnAmount !== '' ? Number(cnAmount) : undefined,
+        bookNumber: bookNumber.trim() || undefined,
+        pageNumber: pageNumber.trim() || undefined,
+        billingBookNumber: billingBookNumber.trim() || undefined,
+        billingPageNumber: billingPageNumber.trim() || undefined,
+        transportCarrier: transportCarrier.trim() || undefined,
+        amount: resolvedAmount,
+        billingAmount: billingAmount !== '' ? Number(billingAmount) : undefined,
+        issueDate,
+        dueDate,
+        status,
+        notes: notes.trim() || undefined,
+        contactPerson: contactPerson.trim() || undefined,
+        phone: phone.trim() || undefined
+      };
+
+      onAddBilling(newRecord);
+      setIsAddOpen(false);
+      showSuccess(`บันทึกเอกสารเลขที่ ${finalDocNumber} สำเร็จ`);
+    } catch (err: any) {
+      showError(err?.message || "บันทึกข้อมูลเอกสารไม่สำเร็จ");
+    }
   };
 
   // Submit Edit
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const resolvedAmount = amount || (billingAmount !== '' ? Number(billingAmount) : 0);
-    if (!editingBilling || !partnerName.trim() || resolvedAmount <= 0) return;
+    try {
+      if (!editingBilling) {
+        showError("ไม่พบเอกสารที่ต้องการแก้ไข");
+        return;
+      }
 
-    const finalDocNumber = docNumber.trim() || deliveryDocNumber.trim() || billingDocNumber.trim() || editingBilling.docNumber;
-    const resolvedDocType = billingDocNumber.trim() ? 'billing' : (deliveryDocNumber.trim() ? 'delivery' : 'delivery');
+      const resolvedAmount = amount || (billingAmount !== '' ? Number(billingAmount) : 0);
+      
+      if (!partnerName.trim()) {
+        showError("กรุณาเลือกหรือระบุชื่อบริษัทคู่ค้า");
+        return;
+      }
 
-    const updatedRecord: PartnerBilling = {
-      ...editingBilling,
-      partnerName: partnerName.trim(),
-      docType: resolvedDocType,
-      docNumber: finalDocNumber,
-      deliveryDocNumber: deliveryDocNumber.trim() || undefined,
-      billingDocNumber: billingDocNumber.trim() || undefined,
-      cnDocNumber: cnDocNumber.trim() || undefined,
-      cnAmount: cnAmount !== '' ? Number(cnAmount) : undefined,
-      bookNumber: bookNumber.trim() || undefined,
-      pageNumber: pageNumber.trim() || undefined,
-      billingBookNumber: billingBookNumber.trim() || undefined,
-      billingPageNumber: billingPageNumber.trim() || undefined,
-      transportCarrier: transportCarrier.trim() || undefined,
-      amount: resolvedAmount,
-      billingAmount: billingAmount !== '' ? Number(billingAmount) : undefined,
-      issueDate,
-      dueDate,
-      status,
-      notes: notes.trim() || undefined,
-      contactPerson: contactPerson.trim() || undefined,
-      phone: phone.trim() || undefined
-    };
+      if (resolvedAmount <= 0) {
+        showError("กรุณากรอกจำนวนเงินให้ถูกต้อง (ต้องเป็นตัวเลขที่มากกว่า 0)");
+        return;
+      }
 
-    onUpdateBilling(updatedRecord);
-    setEditingBilling(null);
+      const finalDocNumber = docNumber.trim() || deliveryDocNumber.trim() || billingDocNumber.trim() || editingBilling.docNumber;
+      const resolvedDocType = billingDocNumber.trim() ? 'billing' : (deliveryDocNumber.trim() ? 'delivery' : 'delivery');
+
+      const updatedRecord: PartnerBilling = {
+        ...editingBilling,
+        partnerName: partnerName.trim(),
+        docType: resolvedDocType,
+        docNumber: finalDocNumber,
+        deliveryDocNumber: deliveryDocNumber.trim() || undefined,
+        billingDocNumber: billingDocNumber.trim() || undefined,
+        cnDocNumber: cnDocNumber.trim() || undefined,
+        cnAmount: cnAmount !== '' ? Number(cnAmount) : undefined,
+        bookNumber: bookNumber.trim() || undefined,
+        pageNumber: pageNumber.trim() || undefined,
+        billingBookNumber: billingBookNumber.trim() || undefined,
+        billingPageNumber: billingPageNumber.trim() || undefined,
+        transportCarrier: transportCarrier.trim() || undefined,
+        amount: resolvedAmount,
+        billingAmount: billingAmount !== '' ? Number(billingAmount) : undefined,
+        issueDate,
+        dueDate,
+        status,
+        notes: notes.trim() || undefined,
+        contactPerson: contactPerson.trim() || undefined,
+        phone: phone.trim() || undefined
+      };
+
+      onUpdateBilling(updatedRecord);
+      setEditingBilling(null);
+      showSuccess(`แก้ไขเอกสารเลขที่ ${finalDocNumber} สำเร็จ`);
+    } catch (err: any) {
+      showError(err?.message || "แก้ไขข้อมูลเอกสารไม่สำเร็จ");
+    }
   };
 
   // Reset filter values
@@ -750,9 +810,17 @@ export default function PartnerBillingManagement({
       
       {/* Floating Success Toast */}
       {successMessage && (
-        <div className="fixed bottom-5 right-5 z-50 bg-emerald-600 text-white px-4 py-3 rounded-sm shadow-xl flex items-center gap-2 border border-emerald-500 animate-bounce no-print">
+        <div id="partner-success-toast" className="fixed bottom-5 right-5 z-50 bg-emerald-600 text-white px-4 py-3 rounded-sm shadow-xl flex items-center gap-2 border border-emerald-500 animate-bounce no-print">
           <CheckCircle className="w-4 h-4 text-white" />
           <span className="text-xs font-bold font-sans">{successMessage}</span>
+        </div>
+      )}
+
+      {/* Floating Error Toast */}
+      {errorMessage && (
+        <div id="partner-error-toast" className="fixed bottom-5 right-5 z-50 bg-rose-600 text-white px-4 py-3 rounded-sm shadow-xl flex items-center gap-2 border border-rose-500 animate-bounce no-print">
+          <AlertCircle className="w-4 h-4 text-white" />
+          <span className="text-xs font-bold font-sans">{errorMessage}</span>
         </div>
       )}
       

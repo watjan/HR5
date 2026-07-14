@@ -29,7 +29,9 @@ import {
   User,
   QrCode,
   Wallet,
-  RefreshCw
+  RefreshCw,
+  Check,
+  AlertCircle
 } from 'lucide-react';
 
 import {
@@ -84,6 +86,17 @@ export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDele
   const [formPaymentChannel, setFormPaymentChannel] = useState<string>('transfer');
   const [formCustomerName, setFormCustomerName] = useState('');
   const [formReceiptNumber, setFormReceiptNumber] = useState('');
+
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; title: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, title = 'ดำเนินการสำเร็จ', type: 'success' | 'error' = 'success') => {
+    setToast({ message, title, type });
+    const timer = setTimeout(() => {
+      setToast(null);
+    }, 4000);
+    return () => clearTimeout(timer);
+  };
 
   // 1. Process individual records with basic filters
   const filteredSales = sales.filter(item => {
@@ -273,33 +286,47 @@ export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDele
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formDate || !formAmount) return;
+    try {
+      if (!formDate) {
+        showToast("กรุณาระบุวันที่ทำรายการให้ถูกต้อง", "บันทึกไม่สำเร็จ", "error");
+        return;
+      }
 
-    const recordAmount = parseFloat(formAmount);
-    if (isNaN(recordAmount) || recordAmount <= 0) return;
+      if (!formAmount || isNaN(parseFloat(formAmount)) || parseFloat(formAmount) <= 0) {
+        showToast("กรุณากรอกจำนวนเงินให้ถูกต้อง (ต้องเป็นตัวเลขที่มากกว่า 0)", "บันทึกไม่สำเร็จ", "error");
+        return;
+      }
 
-    if (editingSale) {
-      onUpdateSale({
-        ...editingSale,
-        date: formDate,
-        amount: recordAmount,
-        notes: formNotes,
-        paymentChannel: formPaymentChannel,
-        customerName: formCustomerName,
-        receiptNumber: formReceiptNumber
-      });
-    } else {
-      onAddSale({
-        id: `SL-${Date.now().toString().slice(-4)}`,
-        date: formDate,
-        amount: recordAmount,
-        notes: formNotes,
-        paymentChannel: formPaymentChannel,
-        customerName: formCustomerName,
-        receiptNumber: formReceiptNumber
-      });
+      const recordAmount = parseFloat(formAmount);
+
+      if (editingSale) {
+        onUpdateSale({
+          ...editingSale,
+          date: formDate,
+          amount: recordAmount,
+          notes: formNotes,
+          paymentChannel: formPaymentChannel,
+          customerName: formCustomerName,
+          receiptNumber: formReceiptNumber
+        });
+        showToast(`แก้ไขยอดขายรหัส ${editingSale.id} สำเร็จ`, "บันทึกยอดขายสำเร็จ", "success");
+      } else {
+        const newId = `SL-${Date.now().toString().slice(-4)}`;
+        onAddSale({
+          id: newId,
+          date: formDate,
+          amount: recordAmount,
+          notes: formNotes,
+          paymentChannel: formPaymentChannel,
+          customerName: formCustomerName,
+          receiptNumber: formReceiptNumber
+        });
+        showToast(`บันทึกยอดขายรหัส ${newId} สำเร็จ`, "บันทึกยอดขายสำเร็จ", "success");
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      showToast(err?.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล", "บันทึกไม่สำเร็จ", "error");
     }
-    setIsModalOpen(false);
   };
 
   const formatThaiDate = (dateStr: string) => {
@@ -378,6 +405,37 @@ export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDele
 
   return (
     <div id="sales-management-container" className="space-y-6 animate-fade-in pb-16">
+      
+      {/* Custom Floating Toast Notification */}
+      {toast && (
+        <div className={`fixed top-6 right-6 z-50 max-w-md w-full border-2 rounded-lg p-4 shadow-2xl flex items-start gap-3 font-sans transition-all duration-300 ${
+          toast.type === 'success' 
+            ? 'bg-emerald-50 border-emerald-500' 
+            : 'bg-rose-50 border-rose-500'
+        }`}>
+          <div className={`p-1 text-white rounded-full shrink-0 ${
+            toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'
+          }`}>
+            {toast.type === 'success' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          </div>
+          <div className="flex-1">
+            <h5 className={`text-sm font-bold ${
+              toast.type === 'success' ? 'text-emerald-950' : 'text-rose-950'
+            }`}>{toast.title}</h5>
+            <p className={`text-xs mt-1 font-medium leading-relaxed ${
+              toast.type === 'success' ? 'text-emerald-800' : 'text-rose-800'
+            }`}>{toast.message}</p>
+          </div>
+          <button 
+            onClick={() => setToast(null)} 
+            className={`font-extrabold text-lg select-none px-1 cursor-pointer ${
+              toast.type === 'success' ? 'text-emerald-500 hover:text-emerald-700' : 'text-rose-500 hover:text-rose-700'
+            }`}
+          >
+            ×
+          </button>
+        </div>
+      )}
       
       {/* 1. HEADER SECTION */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

@@ -37,6 +37,42 @@ export default function DashboardOverview({
   const pendingLeavesCount = leaves.filter(l => l.status === 'pending').length;
   const activeJobsCount = jobs.filter(j => j.status === 'open').length;
 
+  // Current Month Payroll Total Calculation
+  const currentMonthPayrollTotal = useMemo(() => {
+    const now = new Date();
+    const THAI_MONTHS_MAP = [
+      'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+    ];
+    const curMonthName = THAI_MONTHS_MAP[now.getMonth()];
+    const curYear = now.getFullYear();
+
+    const currentMonthRecords = payroll.filter(p => p.month === curMonthName && p.year === curYear);
+    
+    let targetRecords = currentMonthRecords;
+    let displayMonthYear = `${curMonthName} ${curYear}`;
+    
+    if (currentMonthRecords.length === 0 && payroll.length > 0) {
+      const years = payroll.map(p => p.year);
+      const maxYear = Math.max(...years);
+      const yearRecords = payroll.filter(p => p.year === maxYear);
+      
+      const monthToIndex = (m: string) => THAI_MONTHS_MAP.indexOf(m);
+      const maxMonthIndex = Math.max(...yearRecords.map(p => monthToIndex(p.month)));
+      const maxMonthName = THAI_MONTHS_MAP[maxMonthIndex];
+      
+      targetRecords = yearRecords.filter(p => p.month === maxMonthName);
+      displayMonthYear = `${maxMonthName} ${maxYear}`;
+    }
+    
+    const total = targetRecords.reduce((sum, p) => sum + (p.netSalary || 0), 0);
+    return {
+      total,
+      displayLabel: displayMonthYear,
+      count: targetRecords.length
+    };
+  }, [payroll]);
+
   // Overdue / Pending Payroll Calculations
   const overduePayroll = useMemo(() => {
     const pendingItems = payroll.filter(p => p.status === 'pending');
@@ -179,6 +215,45 @@ export default function DashboardOverview({
           >
             Manage Employees
           </button>
+        </div>
+      </div>
+
+      {/* Top Summary KPI Widgets Row */}
+      <div id="top-summary-kpis" className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Total Active Employees */}
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-sm flex items-center justify-between text-white shadow-xs">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-mono">Total Active Employees</p>
+            <h3 className="text-3xl font-light tracking-tight mt-1 text-emerald-400 font-sans">{activeEmployees} <span className="text-xs text-slate-400 font-normal">คน</span></h3>
+            <p className="text-[9px] text-slate-400 mt-1 font-sans">กำลังปฏิบัติงานปกติในระบบ</p>
+          </div>
+          <div className="p-3 bg-slate-800 text-emerald-400 rounded-sm">
+            <UserCheck className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Pending Leave Requests */}
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-sm flex items-center justify-between text-white shadow-xs">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-mono">Pending Leave Requests</p>
+            <h3 className="text-3xl font-light tracking-tight mt-1 text-amber-400 font-sans">{pendingLeavesCount} <span className="text-xs text-slate-400 font-normal">รายการ</span></h3>
+            <p className="text-[9px] text-slate-400 mt-1 font-sans">รอดำเนินการพิจารณาอนุมัติ</p>
+          </div>
+          <div className={`p-3 bg-slate-800 rounded-sm ${pendingLeavesCount > 0 ? 'text-amber-400 animate-pulse' : 'text-slate-400'}`}>
+            <Calendar className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Current Month Payroll Total */}
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-sm flex items-center justify-between text-white shadow-xs">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-mono">Current Month Payroll Total ({currentMonthPayrollTotal.displayLabel})</p>
+            <h3 className="text-2xl font-bold tracking-tight mt-1 text-blue-400 font-mono">฿{currentMonthPayrollTotal.total.toLocaleString()}</h3>
+            <p className="text-[9px] text-slate-400 mt-1 font-sans">รวมยอดจ่ายสุทธิพนักงาน ({currentMonthPayrollTotal.count} รายการ)</p>
+          </div>
+          <div className="p-3 bg-slate-800 text-blue-400 rounded-sm">
+            <DollarSign className="w-5 h-5" />
+          </div>
         </div>
       </div>
 

@@ -81,6 +81,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Collection: Counter Duties
+    match /counter_duties/{id} {
+      allow read, write: if true;
+    }
+
     // Collection: Consolidated High-Performance Tables
     match /consolidated_tables/{id} {
       allow read, write: if true;

@@ -234,6 +234,29 @@ export interface SalesRecord {
   receiptNumber?: string; // เลขที่ใบเสร็จ
 }
 
+export interface CounterDutyAssignment {
+  employeeId: string;
+  employeeName: string;
+  isSubstitute: boolean;
+  originalEmployeeId?: string;
+  originalEmployeeName?: string;
+  skipReason?: string;
+}
+
+export interface CounterDuty {
+  id: string; // Year and Month like "2026-07"
+  month: string; // "07"
+  year: number; // 2026
+  poolEmployeeIds: string[]; // Up to 6 selected employee IDs
+  assignments: {
+    [dateStr: string]: CounterDutyAssignment; // Keyed by YYYY-MM-DD
+  };
+  employeeWeeklyOffs?: { [empId: string]: number[] }; // Individual weekly off days (0-6)
+  companyHolidays?: { [date: string]: string }; // Custom company holidays
+  rotationLogs?: { id: string; date: string; message: string; type: 'skip' | 'override' | 'leave' }[];
+}
+
+
 
 
 

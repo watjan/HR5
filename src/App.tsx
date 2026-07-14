@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { safeStorage } from './lib/safeStorage';
-import { Employee, LeaveRequest, PayrollRecord, JobPosting, Applicant, PerformanceEvaluation, CashFlowTransaction, PartnerCheque, DailyAttendance, DayOffSwap, PartnerBilling, PartnerCompany, SystemSettings, AuditLogEntry, SalesRecord } from './types';
+import { Employee, LeaveRequest, PayrollRecord, JobPosting, Applicant, PerformanceEvaluation, CashFlowTransaction, PartnerCheque, DailyAttendance, DayOffSwap, PartnerBilling, PartnerCompany, SystemSettings, AuditLogEntry, SalesRecord, CounterDuty } from './types';
 import { 
   INITIAL_EMPLOYEES, 
   INITIAL_LEAVES, 
@@ -37,6 +37,8 @@ import HrStockDashboard from './components/HrStockDashboard';
 import DatabaseInspector from './components/DatabaseInspector';
 import LeaveStatistics from './components/LeaveStatistics';
 import LoginScreen from './components/LoginScreen';
+import ApiwatLogo3D from './components/ApiwatLogo3D';
+import CounterDutyManagement from './components/CounterDutyManagement';
 
 
 // Icons
@@ -72,7 +74,7 @@ import {
 
 export default function App() {
   // Navigation active tab
-  const [activeTab, setActiveTab] = useState<string>('overview');
+  const [activeTab, setActiveTab] = useState<string>('counter_duty');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -196,6 +198,7 @@ export default function App() {
   });
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [sales, setSales] = useState<SalesRecord[]>([]);
+  const [counterDuties, setCounterDuties] = useState<CounterDuty[]>([]);
 
   // Reference payload string to prevent redundant Firebase writes
   const lastSyncedPayloadRef = useRef<string>("");
@@ -325,6 +328,7 @@ export default function App() {
               if (parsed.evaluations) setEvaluations(parsed.evaluations);
               if (parsed.dayoffSwaps) setDayOffSwaps(parsed.dayoffSwaps);
               if (parsed.partnerCompanies) setPartnerCompanies(parsed.partnerCompanies);
+              if (parsed.counterDuties) setCounterDuties(parsed.counterDuties);
 
               if (parsed.attendance) {
                 const attendanceMap: any = {};
@@ -384,6 +388,7 @@ export default function App() {
             if (fb.evaluations) setEvaluations(fb.evaluations);
             if (fb.dayoffSwaps) setDayOffSwaps(fb.dayoffSwaps);
             if (fb.partnerCompanies) setPartnerCompanies(fb.partnerCompanies);
+            if (fb.counterDuties) setCounterDuties(fb.counterDuties);
 
             if (fb.attendance) {
               const attendanceMap: any = {};
@@ -422,7 +427,8 @@ export default function App() {
               attendance: fb.attendance || [],
               dayoffSwaps: fb.dayoffSwaps || [],
               partnerCompanies: fb.partnerCompanies || [],
-              systemSettings: fb.systemSettings || []
+              systemSettings: fb.systemSettings || [],
+              counterDuties: fb.counterDuties || []
             };
             lastSyncedPayloadRef.current = getNormalizedPayloadString(loadedPayload);
 
@@ -534,7 +540,8 @@ export default function App() {
       })),
       dayoffSwaps: dayOffSwaps || [],
       partnerCompanies: partnerCompanies || [],
-      systemSettings: [{ id: "current", ...systemSettings }]
+      systemSettings: [{ id: "current", ...systemSettings }],
+      counterDuties: counterDuties || []
     };
   }, [
     employees,
@@ -551,7 +558,8 @@ export default function App() {
     attendanceRecords,
     dayOffSwaps,
     partnerCompanies,
-    systemSettings
+    systemSettings,
+    counterDuties
   ]);
 
   const executeManualSync = async () => {
@@ -653,7 +661,8 @@ export default function App() {
         })),
         dayoffSwaps: dayOffSwaps || [],
         partnerCompanies: partnerCompanies || [],
-        systemSettings: [{ id: "current", ...systemSettings }]
+        systemSettings: [{ id: "current", ...systemSettings }],
+        counterDuties: counterDuties || []
       };
 
       if (typeof window !== 'undefined' && window.localStorage) {
@@ -678,7 +687,8 @@ export default function App() {
     dayOffSwaps,
     partnerCompanies,
     systemSettings,
-    loadingServer
+    loadingServer,
+    counterDuties
   ]);
 
   useEffect(() => {
@@ -708,7 +718,8 @@ export default function App() {
     partnerCompanies,
     systemSettings,
     autoSync,
-    loadingServer
+    loadingServer,
+    counterDuties
   ]);
 
   // Helper to add audit log
@@ -811,6 +822,7 @@ export default function App() {
       setPartnerBillings([]);
       setPartnerCompanies([]);
       setSales([]);
+      setCounterDuties([]);
       setAuditLogs([{
         id: `LOG-${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -991,6 +1003,7 @@ export default function App() {
       hr_system_settings: systemSettings,
       hr_audit_logs: auditLogs,
       hr_sales: sales,
+      hr_counter_duties: counterDuties,
     };
     return JSON.stringify(payload, null, 2);
   };
@@ -1014,6 +1027,7 @@ export default function App() {
       if (parsed.hr_system_settings) setSystemSettings(parsed.hr_system_settings);
       if (parsed.hr_audit_logs) setAuditLogs(parsed.hr_audit_logs);
       if (parsed.hr_sales) setSales(parsed.hr_sales);
+      if (parsed.hr_counter_duties) setCounterDuties(parsed.hr_counter_duties);
 
       return true;
     } catch (e) {
@@ -1494,7 +1508,7 @@ export default function App() {
     if (!permissions) return true; // default safety fallback
 
     if (tabId === 'employees') return !!permissions.employees;
-    if (tabId === 'attendance') return !!permissions.attendance;
+    if (tabId === 'attendance' || tabId === 'counter_duty') return !!permissions.attendance;
     if (tabId === 'leaves' || tabId === 'leave_statistics') return !!permissions.leaves;
     if (tabId === 'payroll') return !!permissions.payroll;
     if (tabId === 'sales') return !!permissions.sales;
@@ -1522,6 +1536,7 @@ export default function App() {
     { id: 'overview', name: 'แผงภาพรวมระบบ', icon: LayoutDashboard },
     { id: 'stock_dashboard', name: 'ทดลองโค้ด 1.เหมือนหุ้น', icon: TrendingUp },
     { id: 'employees', name: 'รายชื่อพนักงาน', icon: Users },
+    { id: 'counter_duty', name: '1. เฝ้าเคาเตอร์', icon: Clock },
     { id: 'attendance', name: 'ลงเวลา & สลับวันหยุด', icon: Clock },
     { id: 'leaves', name: 'ระบบการลางาน', icon: Calendar },
     { id: 'leave_statistics', name: '1. สถิติการลา', icon: BarChart3 },
@@ -1555,10 +1570,8 @@ export default function App() {
         <div className="flex flex-col h-full overflow-y-auto">
           {/* Logo & Company Name */}
           <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-amber-700 rounded-sm flex items-center justify-center text-slate-950 font-black shadow-xs shrink-0">
-                <ChefHat className="w-5 h-5 stroke-[2.5]" />
-              </div>
+            <div className="flex items-center gap-3">
+              <ApiwatLogo3D size="sm" className="w-10 h-10 shrink-0" />
               <div>
                 <span className="font-extrabold text-white tracking-tight block leading-none text-xs">อภิวัฒน์เครื่องครัว</span>
                 <span className="text-[9px] text-amber-500 mt-1 block tracking-wider font-mono font-bold">HR MANAGEMENT</span>
@@ -1578,7 +1591,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">Main Operations</div>
               <div className="space-y-1">
-                {sidebarItems.slice(0, 11).filter(item => isTabAllowed(item.id)).map(item => {
+                {sidebarItems.slice(0, 12).filter(item => isTabAllowed(item.id)).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -1616,7 +1629,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">Talent & Performance</div>
               <div className="space-y-1">
-                {sidebarItems.slice(11, 13).filter(item => isTabAllowed(item.id)).map(item => {
+                {sidebarItems.slice(12, 14).filter(item => isTabAllowed(item.id)).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -1648,7 +1661,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">System Configuration</div>
               <div className="space-y-1">
-                {sidebarItems.slice(13).filter(item => isTabAllowed(item.id)).map(item => {
+                {sidebarItems.slice(14).filter(item => isTabAllowed(item.id)).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -2131,6 +2144,18 @@ export default function App() {
               employees={employees}
               onAddEvaluation={handleAddEvaluation}
               onUpdateEvaluationStatus={handleUpdateEvaluationStatus}
+            />
+          )}
+
+          {activeTab === 'counter_duty' && (
+            <CounterDutyManagement 
+              employees={employees}
+              leaves={leaves}
+              counterDuties={counterDuties}
+              onUpdateCounterDuties={(updated) => {
+                setCounterDuties(updated);
+                addAuditLog('UPDATE', 'เฝ้าเคาเตอร์', 'ปรับปรุงตารางเวรเฝ้าเคาเตอร์');
+              }}
             />
           )}
 

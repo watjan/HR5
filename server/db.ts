@@ -32,6 +32,7 @@ export interface SyncPayload {
   dayoffSwaps?: any[];
   partnerCompanies?: any[];
   systemSettings?: any;
+  counterDuties?: any[];
 }
 
 // Load Firebase configuration
@@ -106,7 +107,8 @@ const COLLECTION_KEYS = [
   { key: "attendance", path: "attendance/current" },
   { key: "dayoffSwaps", path: "dayoff_swaps/current" },
   { key: "partnerCompanies", path: "partner_companies/current" },
-  { key: "systemSettings", path: "system_settings/current" }
+  { key: "systemSettings", path: "system_settings/current" },
+  { key: "counterDuties", path: "counter_duties/current" }
 ];
 
 // Sync to BOTH Local Database and Firebase Firestore
@@ -209,7 +211,8 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
         attendance: firebasePayload.attendance || {},
         dayoffSwaps: firebasePayload.dayoffSwaps || [],
         partnerCompanies: firebasePayload.partnerCompanies || [],
-        systemSettings: firebasePayload.systemSettings || {}
+        systemSettings: firebasePayload.systemSettings || {},
+        counterDuties: firebasePayload.counterDuties || []
       };
       loadedFromFirebase = true;
       console.log("Successfully loaded data from Firebase Firestore!");
@@ -239,7 +242,8 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
           attendance: parsed.attendance || {},
           dayoffSwaps: parsed.dayoffSwaps || [],
           partnerCompanies: parsed.partnerCompanies || [],
-          systemSettings: parsed.systemSettings || {}
+          systemSettings: parsed.systemSettings || {},
+          counterDuties: parsed.counterDuties || []
         };
         console.log("Loaded data from local backup file (Firebase fallback)");
       }

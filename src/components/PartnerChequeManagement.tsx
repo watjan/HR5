@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { safeStorage } from '../lib/safeStorage';
 import { PartnerCheque, PartnerCompany } from '../types';
 import { 
@@ -21,8 +21,28 @@ import {
   ChevronRight,
   FileCheck,
   Volume2,
-  VolumeX
+  VolumeX,
+  BarChart3,
+  TrendingUp,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
+
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts';
 
 interface PartnerChequeManagementProps {
   cheques: PartnerCheque[];
@@ -136,6 +156,121 @@ export default function PartnerChequeManagement({
   const [searchTerm, setSearchTerm] = useState('');
   const [bankFilter, setBankFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [showAnalytics, setShowAnalytics] = useState(true);
+
+  // 1. Cheque Status Distribution Data
+  const statusChartData = useMemo(() => {
+    const statuses: PartnerCheque['status'][] = ['pending', 'cleared', 'bounced', 'cancelled'];
+    const statusLabels: Record<PartnerCheque['status'], string> = {
+      pending: 'รอดำเนินการ',
+      cleared: 'ผ่านบัญชีแล้ว',
+      bounced: 'เช็คเด้ง',
+      cancelled: 'ยกเลิก'
+    };
+
+    return statuses.map(status => {
+      const receivable = cheques
+        .filter(c => c.type === 'receivable' && c.status === status)
+        .reduce((sum, c) => sum + c.amount, 0);
+      const payable = cheques
+        .filter(c => c.type === 'payable' && c.status === status)
+        .reduce((sum, c) => sum + c.amount, 0);
+
+      return {
+        status: statusLabels[status],
+        'เช็ครับ (Receivable)': receivable,
+        'เช็คจ่าย (Payable)': payable
+      };
+    });
+  }, [cheques]);
+
+  // 2. Monthly Due Date Forecast Data (Grouped by Year-Month of dueDate)
+  const monthlyTimelineData = useMemo(() => {
+    const groups: Record<string, { receivable: number; payable: number }> = {};
+    
+    cheques.forEach(c => {
+      if (!c.dueDate) return;
+      // Get Year-Month (e.g. "2026-07")
+      const dateParts = c.dueDate.split('-');
+      if (dateParts.length < 2) return;
+      const yearStr = dateParts[0];
+      const monthNum = parseInt(dateParts[1], 10);
+      
+      const thaiMonthsShort = [
+        'ม.ค.', 'ก.พ.', 'มี.ย.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+        'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
+      ];
+      const monthLabel = thaiMonthsShort[monthNum - 1] || 'ม.ค.';
+      const key = `${yearStr}-${monthNum.toString().padStart(2, '0')}`;
+
+      if (!groups[key]) {
+        groups[key] = { receivable: 0, payable: 0 };
+      }
+      if (c.type === 'receivable') {
+        groups[key].receivable += c.amount;
+      } else {
+        groups[key].payable += c.amount;
+      }
+    });
+
+    // Sort keys chronologically
+    return Object.keys(groups)
+      .sort()
+      .map(key => {
+        const yearStr = key.split('-')[0];
+        const monthNum = parseInt(key.split('-')[1], 10);
+        const thaiMonthsShort = [
+          'ม.ค.', 'ก.พ.', 'มี.ย.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+          'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
+        ];
+        const monthLabel = thaiMonthsShort[monthNum - 1] || 'ม.ค.';
+        const displayLabel = `${monthLabel} ${parseInt(yearStr, 10).toString().slice(-2)}`;
+        
+        return {
+          month: displayLabel,
+          'ยอดเงินเช็ครับ': groups[key].receivable,
+          'ยอดเงินเช็คจ่าย': groups[key].payable,
+          'ส่วนต่างสุทธิ': groups[key].receivable - groups[key].payable
+        };
+      });
+  }, [cheques]);
+
+  // 3. Cheques by Bank Data
+  const bankChartData = useMemo(() => {
+    const bankGroups: Record<string, { receivable: number; payable: number; count: number }> = {};
+    
+    cheques.forEach(c => {
+      // Clean up bank label for visual presentation, e.g. "ธนาคารกสิกรไทย (KBANK)" -> "KBANK"
+      let shortBank = c.bank;
+      const match = c.bank.match(/\(([^)]+)\)/);
+      if (match && match[1]) {
+        shortBank = match[1];
+      } else {
+        shortBank = c.bank.replace('ธนาคาร', '');
+      }
+
+      if (!bankGroups[shortBank]) {
+        bankGroups[shortBank] = { receivable: 0, payable: 0, count: 0 };
+      }
+      if (c.type === 'receivable') {
+        bankGroups[shortBank].receivable += c.amount;
+      } else {
+        bankGroups[shortBank].payable += c.amount;
+      }
+      bankGroups[shortBank].count += 1;
+    });
+
+    // Sort by total amount descending and take top 5 or 6
+    return Object.keys(bankGroups)
+      .map(bankName => ({
+        bank: bankName,
+        'ยอดเช็ครับ': bankGroups[bankName].receivable,
+        'ยอดเช็คจ่าย': bankGroups[bankName].payable,
+        'จำนวนตั๋ว (ฉบับ)': bankGroups[bankName].count
+      }))
+      .sort((a, b) => (b.ยอดเช็ครับ + b.ยอดเช็คจ่าย) - (a.ยอดเช็ครับ + a.ยอดเช็คจ่าย))
+      .slice(0, 6);
+  }, [cheques]);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -336,6 +471,21 @@ export default function PartnerChequeManagement({
         <div className="flex gap-2">
           <button
             onClick={() => {
+              setShowAnalytics(!showAnalytics);
+              playNotificationSound();
+            }}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-sm text-xs font-mono font-bold uppercase tracking-wider shadow-xs transition cursor-pointer border ${
+              showAnalytics 
+                ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200' 
+                : 'bg-indigo-600 hover:bg-indigo-700 text-white border-transparent'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" /> 
+            {showAnalytics ? 'ซ่อนกราฟวิเคราะห์' : 'แสดงกราฟวิเคราะห์'}
+          </button>
+
+          <button
+            onClick={() => {
               setFormType('receivable');
               setIsAddOpen(true);
             }}
@@ -408,6 +558,141 @@ export default function PartnerChequeManagement({
         </div>
 
       </div>
+
+      {/* Cheque Analytics & Forecasting Graphs */}
+      {showAnalytics && (
+        <div id="cheque-analytics-section" className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          
+          {/* Chart 1: Status Distribution */}
+          <div className="bg-white border border-slate-200 rounded-sm p-5 shadow-2xs">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
+              <div>
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5 font-sans">
+                  <BarChart3 className="w-4 h-4 text-emerald-600" />
+                  มูลค่าเช็คตามสถานะ (Cheque Value by Status)
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">ยอดเงินรวมเปรียบเทียบระหว่างเช็ครับและเช็คจ่าย</p>
+              </div>
+            </div>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={statusChartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="status" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis 
+                    tick={{ fill: '#64748b', fontSize: 9 }} 
+                    axisLine={false} 
+                    tickLine={false}
+                    tickFormatter={(val) => `฿${(val / 1000).toLocaleString()}K`} 
+                  />
+                  <RechartsTooltip 
+                    formatter={(val: any) => [`฿${Number(val).toLocaleString()}`, '']}
+                    contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '4px', color: '#fff', fontSize: '11px' }}
+                    labelStyle={{ fontWeight: 'bold', color: '#38bdf8' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '5px' }} />
+                  <Bar dataKey="เช็ครับ (Receivable)" fill="#10b981" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="เช็คจ่าย (Payable)" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Chart 2: Cash Flow Timeline (Forecast) */}
+          <div className="bg-white border border-slate-200 rounded-sm p-5 shadow-2xs">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
+              <div>
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5 font-sans">
+                  <TrendingUp className="w-4 h-4 text-indigo-650" />
+                  ประมาณการดิวรับ-จ่ายเช็ครายเดือน (Cash Flow Forecast)
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">ป้องกันปัญหาสภาพคล่องตามวันครบกำหนดตั๋วเงิน</p>
+              </div>
+            </div>
+            <div className="h-64 w-full">
+              {monthlyTimelineData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                  ไม่มีข้อมูลกำหนดรับจ่ายในระบบ
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={monthlyTimelineData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                    <defs>
+                      <linearGradient id="colorRec" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorPay" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis 
+                      tick={{ fill: '#64748b', fontSize: 9 }} 
+                      axisLine={false} 
+                      tickLine={false}
+                      tickFormatter={(val) => `฿${(val / 1000).toLocaleString()}K`} 
+                    />
+                    <RechartsTooltip 
+                      formatter={(val: any) => [`฿${Number(val).toLocaleString()}`, '']}
+                      contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '4px', color: '#fff', fontSize: '11px' }}
+                      labelStyle={{ fontWeight: 'bold', color: '#38bdf8' }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '5px' }} />
+                    <Area type="monotone" dataKey="ยอดเงินเช็ครับ" stroke="#10b981" fillOpacity={1} fill="url(#colorRec)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="ยอดเงินเช็คจ่าย" stroke="#ef4444" fillOpacity={1} fill="url(#colorPay)" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          {/* Chart 3: Bank Exposures */}
+          <div className="bg-white border border-slate-200 rounded-sm p-5 shadow-2xs">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
+              <div>
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5 font-sans">
+                  <CreditCard className="w-4 h-4 text-blue-600" />
+                  สัดส่วนการขึ้นเงินตามรายธนาคาร (Bank Utilization)
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-0.5 font-sans">6 อันดับธนาคารที่มีการสั่งจ่ายและรับเช็คสูงสุด</p>
+              </div>
+            </div>
+            <div className="h-64 w-full">
+              {bankChartData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                  ไม่มีข้อมูลธนาคารในระบบ
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={bankChartData} layout="vertical" margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                    <XAxis 
+                      type="number" 
+                      tick={{ fill: '#64748b', fontSize: 9 }} 
+                      axisLine={false} 
+                      tickLine={false}
+                      tickFormatter={(val) => `฿${(val / 1000).toLocaleString()}K`} 
+                    />
+                    <YAxis dataKey="bank" type="category" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} width={70} />
+                    <RechartsTooltip 
+                      formatter={(val: any) => [`฿${Number(val).toLocaleString()}`, '']}
+                      contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '4px', color: '#fff', fontSize: '11px' }}
+                      labelStyle={{ fontWeight: 'bold', color: '#38bdf8' }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '5px' }} />
+                    <Bar dataKey="ยอดเช็ครับ" fill="#10b981" stackId="a" radius={[0, 2, 2, 0]} />
+                    <Bar dataKey="ยอดเช็คจ่าย" fill="#3b82f6" stackId="a" radius={[0, 2, 2, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+        </div>
+      )}
 
       {/* Main Filter and Table container */}
       <div className="bg-white border border-slate-200 rounded-sm overflow-hidden shadow-xs">

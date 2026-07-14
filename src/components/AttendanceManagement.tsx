@@ -3,7 +3,7 @@ import { Employee, LeaveRequest, AttendanceStatus, DailyAttendance, DayOffSwap }
 import { 
   Calendar, Users, Check, X, AlertCircle, Plus, Edit2, Trash2, 
   Clock, ArrowLeftRight, Filter, CalendarDays, CheckCircle2, 
-  XCircle, Settings, Download, Info, Search, HelpCircle, Save 
+  XCircle, Settings, Download, Info, Search, HelpCircle, Save, Printer 
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -621,6 +621,67 @@ export default function AttendanceManagement({
     window.print();
   };
 
+  // Export Attendance to CSV
+  const handleDownloadCSV = () => {
+    const headers = [
+      'รหัสพนักงาน',
+      'ชื่อพนักงาน',
+      'แผนก',
+      'มาทำงาน (วัน)',
+      'ขาดงาน (วัน)',
+      'ลางาน (วัน)',
+      'มาสาย (วัน)',
+      'รวมเวลาสาย (นาที)',
+      ...daysArray.map(day => `วันที่ ${day}`)
+    ];
+
+    const escapeCSV = (val: string | number) => {
+      const str = String(val === null || val === undefined ? '' : val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const rows = employeesSummary.map(({ employee, present, absent, leave, late, totalLateMinutes }) => {
+      const dailyStatuses = daysArray.map(day => {
+        const dateStr = getFormattedDateString(day);
+        const resolved = resolveAttendanceStatus(employee.id, dateStr);
+        let ThaiStatus = 'มาทำงาน';
+        if (resolved.status === 'absent') ThaiStatus = 'ขาดงาน';
+        else if (resolved.status === 'leave') ThaiStatus = 'ลางาน';
+        else if (resolved.status === 'late') ThaiStatus = `มาสาย (${resolved.lateMinutes || 0}น.)`;
+        else if (resolved.status === 'holiday') ThaiStatus = 'วันหยุด';
+        else if (resolved.status === 'swap_off') ThaiStatus = 'สลับวันหยุด';
+        return ThaiStatus;
+      });
+
+      return [
+        employee.id,
+        employee.name,
+        employee.department,
+        present,
+        absent,
+        leave,
+        late,
+        totalLateMinutes,
+        ...dailyStatuses
+      ].map(escapeCSV).join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    const monthName = THAI_MONTHS.find(m => m.value === currentMonth)?.label || 'เดือน';
+    link.setAttribute('download', `รายงานเวลาทำงาน_${monthName}_${currentYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6">
       
@@ -653,7 +714,13 @@ export default function AttendanceManagement({
             onClick={handlePrintTable}
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-950 text-white rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 cursor-pointer shadow-xs"
           >
-            <Download className="w-3.5 h-3.5" /> พิมพ์รายงาน / PDF
+            <Printer className="w-3.5 h-3.5" /> พิมพ์รายงาน / PDF
+          </button>
+          <button
+            onClick={handleDownloadCSV}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+          >
+            <Download className="w-3.5 h-3.5" /> ดาวน์โหลด CSV
           </button>
         </div>
       </div>

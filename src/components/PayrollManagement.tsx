@@ -15,9 +15,12 @@ import {
   Calendar, 
   Hash, 
   Coins,
-  Calculator
+  Calculator,
+  Download
 } from 'lucide-react';
 import { convertToThaiBahtText } from '../lib/thaiBaht';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface PayrollManagementProps {
   payroll: PayrollRecord[];
@@ -43,6 +46,7 @@ export default function PayrollManagement({
   // Modal states
   const [selectedRecord, setSelectedRecord] = useState<PayrollRecord | null>(null);
   const [modalViewType, setModalViewType] = useState<'payslip' | 'voucher'>('payslip');
+  const [pdfLoading, setPdfLoading] = useState(false);
   
   const THAI_MONTHS = [
     'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -404,6 +408,113 @@ export default function PayrollManagement({
     return generateVoucherNo(p.year, p.month, p.period || '1-15', p.employeeId);
   };
 
+  // Export Payroll Table to CSV
+  const handleDownloadCSV = () => {
+    const headers = [
+      'รหัสพนักงาน',
+      'ชื่อพนักงาน',
+      'งวดการจ่าย',
+      'เดือน',
+      'ปี',
+      'เลขที่ใบสำคัญจ่าย',
+      'เงินเดือนฐาน (บาท)',
+      'ค่าวิชาชีพ/สวัสดิการ (บาท)',
+      'ภาษีหัก ณ ที่จ่าย (บาท)',
+      'ประกันสังคม (บาท)',
+      'หักอื่นๆ (บาท)',
+      'รวมรายการหัก (บาท)',
+      'รายรับสุทธิ (บาท)',
+      'สถานะการจ่ายเงิน'
+    ];
+
+    const escapeCSV = (val: string | number) => {
+      const str = String(val === null || val === undefined ? '' : val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const rows = filteredPayroll.map(p => {
+      const totalDeductionItem = p.tax + p.socialSecurity + p.deductions;
+      const statusText = p.status === 'paid' ? 'จ่ายแล้ว' : 'ค้างจ่าย';
+      return [
+        p.employeeId,
+        p.employeeName,
+        getPeriodLabel(p.period),
+        p.month,
+        p.year,
+        getVoucherNo(p),
+        p.baseSalary,
+        p.allowances,
+        p.tax,
+        p.socialSecurity,
+        p.deductions,
+        totalDeductionItem,
+        p.netSalary,
+        statusText
+      ].map(escapeCSV).join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    const displayMonth = monthFilter === 'all' ? 'ทุกเดือน' : monthFilter;
+    link.setAttribute('download', `รายงานเงินเดือน_${displayMonth}_${yearFilter}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Export Selected Payroll Slip (or Voucher) to PDF using html2canvas & jsPDF
+  const handleDownloadPDF = async () => {
+    if (!selectedRecord) return;
+    const element = document.getElementById('print-envelope');
+    if (!element) return;
+
+    setPdfLoading(true);
+    try {
+      // Create high-resolution snapshot
+      const canvas = await html2canvas(element, {
+        scale: 2, // 2x resolution for excellent crisp text quality
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      
+      // Calculate A4 sizing proportions
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      let position = 0;
+      
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      
+      const docTitle = modalViewType === 'payslip' ? 'Payslip' : 'Voucher';
+      pdf.save(`สลิป_${docTitle}_${selectedRecord.employeeName}_${selectedRecord.month}_${selectedRecord.year}.pdf`);
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   return (
     <div id="payroll-management-container" className="space-y-6 relative">
       {/* Custom Floating Toast Notification */}
@@ -542,10 +653,16 @@ export default function PayrollManagement({
 
       {/* Payroll Statement List Table */}
       <div id="payroll-table-card" className="bg-white border border-slate-200 rounded-sm overflow-hidden shadow-2xs">
-        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+        <div className="px-6 py-3 border-b border-slate-200 bg-slate-50 flex justify-between items-center flex-wrap gap-2">
           <span className="text-xs font-bold text-slate-500 tracking-widest font-sans uppercase">
             บัญชีแสดงรายละเอียดเงินเดือนพนักงาน ({filteredPayroll.length} รายการ)
           </span>
+          <button
+            onClick={handleDownloadCSV}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+          >
+            <Download className="w-3.5 h-3.5" /> ดาวน์โหลด CSV
+          </button>
         </div>
 
         <div className="overflow-x-auto">
@@ -616,15 +733,15 @@ export default function PayrollManagement({
                             </button>
                           )}
                           <button
-                            id={`payslip-btn-${p.id}`}
+                            id={`preview-paycheck-btn-${p.id}`}
                             onClick={() => {
                               setSelectedRecord(p);
                               setModalViewType('payslip');
                             }}
-                            className="p-1 hover:bg-slate-100 text-slate-500 hover:text-blue-650 rounded-sm transition cursor-pointer"
-                            title="พิมพ์เอกสาร / สลิปเงินเดือน / ใบสำคัญจ่าย"
+                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10.5px] font-bold rounded-sm transition flex items-center gap-1 cursor-pointer"
+                            title="ดูตัวอย่างสลิปเงินเดือน / Preview Paycheck"
                           >
-                            <FileText className="w-4 h-4" />
+                            <FileText className="w-3.5 h-3.5" /> Preview Paycheck
                           </button>
                           <button
                             onClick={() => handleOpenEditForm(p)}
@@ -927,6 +1044,23 @@ export default function PayrollManagement({
                   className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-650 rounded-sm transition flex items-center gap-1 text-xs font-bold cursor-pointer"
                 >
                   <Printer className="w-3.5 h-3.5" /> พิมพ์เอกสาร
+                </button>
+                <button
+                  id="download-payslip-pdf-btn"
+                  onClick={handleDownloadPDF}
+                  disabled={pdfLoading}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-sm transition flex items-center gap-1.5 text-xs font-bold cursor-pointer shadow-xs disabled:cursor-not-allowed"
+                >
+                  {pdfLoading ? (
+                    <>
+                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      กำลังสร้าง PDF...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5" /> ดาวน์โหลด PDF
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={() => setSelectedRecord(null)}

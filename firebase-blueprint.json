@@ -229,6 +229,21 @@
         "socialSecurityMaxCap": { "type": "number" },
         "withholdingTaxRate": { "type": "number" }
       }
+    },
+    "counter_duties": {
+      "title": "Counter Duties",
+      "description": "Counter duty shift schedules",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "month": { "type": "string" },
+        "year": { "type": "integer" },
+        "poolEmployeeIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "assignments": { "type": "object" }
+      }
     }
   },
   "firestore": {
@@ -291,6 +306,10 @@
     "system_settings/{id}": {
       "schema": "system_settings",
       "description": "System settings collection"
+    },
+    "counter_duties/{id}": {
+      "schema": "counter_duties",
+      "description": "Counter duty shift schedules collection"
     }
   }
 }
