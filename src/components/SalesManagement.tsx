@@ -40,6 +40,8 @@ import {
   Area,
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -57,16 +59,113 @@ interface SalesManagementProps {
   onDeleteSale: (id: string) => void;
 }
 
+interface ComparisonData {
+  [year: number]: {
+    [month: number]: number; // index 0-11
+  };
+}
+
+const DEFAULT_COMPARISON_DATA: ComparisonData = {
+  2024: {
+    0: 85000, 1: 90000, 2: 110000, 3: 95000, 4: 105000, 5: 120000,
+    6: 115000, 7: 125000, 8: 130000, 9: 140000, 10: 155000, 11: 180000
+  },
+  2025: {
+    0: 110000, 1: 125000, 2: 145000, 3: 130000, 4: 140000, 5: 165000,
+    6: 155000, 7: 160000, 8: 175000, 9: 190000, 10: 210000, 11: 250000
+  },
+  2026: {
+    0: 150000, 1: 165000, 2: 195000, 3: 170000, 4: 185000, 5: 220000,
+    6: 210000, 7: 215000, 8: 230000, 9: 245000, 10: 280000, 11: 320000
+  }
+};
+
+const MONTHS_THAI_LIST = [
+  "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+  "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+];
+
 
 
 // -------------------------------------------------------------
 // MAIN SALES MANAGEMENT COMPONENT
 // -------------------------------------------------------------
 export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDeleteSale }: SalesManagementProps) {
-  // Tabs for aggregation: 'all_records' | 'daily' | 'monthly' | 'yearly'
-  const [activeTab, setActiveTab] = useState<'all_records' | 'daily' | 'monthly' | 'yearly'>('daily');
+  // Tabs for aggregation: 'all_records' | 'daily' | 'monthly' | 'yearly' | 'comparison'
+  const [activeTab, setActiveTab] = useState<'all_records' | 'daily' | 'monthly' | 'yearly' | 'comparison'>('daily');
   // Sub-tabs for KPI visualization
   const [chartTab, setChartTab] = useState<'trends' | 'breakdown'>('trends');
+
+  // Sales Comparison Data States
+  const [comparisonData, setComparisonData] = useState<ComparisonData>(() => {
+    try {
+      const saved = localStorage.getItem('apiwat_sales_comparison_data');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error('Failed to parse saved comparison data', e);
+    }
+    return DEFAULT_COMPARISON_DATA;
+  });
+
+  const [isEditingComparison, setIsEditingComparison] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('apiwat_sales_comparison_data', JSON.stringify(comparisonData));
+    } catch (e) {
+      console.error('Failed to save comparison data', e);
+    }
+  }, [comparisonData]);
+
+  const handleCellChange = (year: number, monthIdx: number, value: string) => {
+    const numVal = value === '' ? 0 : parseFloat(value);
+    if (isNaN(numVal)) return;
+    setComparisonData(prev => ({
+      ...prev,
+      [year]: {
+        ...prev[year],
+        [monthIdx]: numVal
+      }
+    }));
+  };
+
+  const loadActualsFromSystem = () => {
+    const updated = { ...comparisonData };
+    [2024, 2025, 2026].forEach(yr => {
+      if (!updated[yr]) updated[yr] = {};
+      for (let mIdx = 0; mIdx < 12; mIdx++) {
+        const monthStr = (mIdx + 1).toString().padStart(2, '0');
+        const targetPrefix = `${yr}-${monthStr}`;
+        const actualAmount = sales
+          .filter(item => item.date.startsWith(targetPrefix))
+          .reduce((sum, item) => sum + item.amount, 0);
+        
+        if (actualAmount > 0) {
+          updated[yr][mIdx] = actualAmount;
+        }
+      }
+    });
+    setComparisonData(updated);
+    showToast("ดึงยอดเงินจริงจากประวัติธุรกรรมระบบเรียบร้อยแล้ว (จะแสดงยอดเงินจริงหากมีธุรกรรมบันทึกอยู่)", "ดึงข้อมูลสำเร็จ", "success");
+  };
+
+  const resetToBaseline = () => {
+    setComparisonData(DEFAULT_COMPARISON_DATA);
+    showToast("รีเซ็ตเป็นข้อมูลเปรียบเทียบมาตรฐานเรียบร้อยแล้ว", "รีเซ็ตสำเร็จ", "success");
+  };
+
+  const getComparisonChartData = () => {
+    return MONTHS_THAI_LIST.map((monthName, idx) => {
+      return {
+        name: monthName.slice(0, 3),
+        'ปี 2567 (2024)': comparisonData[2024]?.[idx] || 0,
+        'ปี 2568 (2025)': comparisonData[2025]?.[idx] || 0,
+        'ปี 2569 (2026)': comparisonData[2026]?.[idx] || 0,
+      };
+    });
+  };
   
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -915,6 +1014,18 @@ export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDele
               </button>
 
               <button
+                onClick={() => setActiveTab('comparison')}
+                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition rounded-sm cursor-pointer whitespace-nowrap ${
+                  activeTab === 'comparison'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
+                <span>เปรียบเทียบยอดขาย 3 ปี (67-68-69)</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab('all_records')}
                 className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition rounded-sm cursor-pointer whitespace-nowrap ${
                   activeTab === 'all_records'
@@ -1122,6 +1233,368 @@ export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDele
                       )}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* TAB: SALES COMPARISON (67-68-69) */}
+              {activeTab === 'comparison' && (
+                <div className="p-6 space-y-6">
+                  {/* Description and Tool Buttons */}
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 p-4 border border-slate-200/60 rounded-sm">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-slate-800">เครื่องมือจำลองและวิเคราะห์เปรียบเทียบยอดขาย 3 ปี (พ.ศ. 2567 - 2569)</h4>
+                      <p className="text-[11px] text-slate-500 leading-relaxed max-w-2xl">
+                        ตารางจำลองและวิเคราะห์ข้อมูลเปรียบเทียบยอดขายสุทธิ 12 เดือนของ ปี 2569 (69), 2568 (68) และ 2567 (67) 
+                        คุณสามารถปรับเปลี่ยนและแก้ไขยอดเงินในแต่ละเดือนได้โดยตรงในตารางเพื่อจำลองเป้าหมายการขาย (Simulation) หรือดึงข้อมูลยอดขายจริงจากระบบได้
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingComparison(!isEditingComparison)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-sans rounded-sm border cursor-pointer transition ${
+                          isEditingComparison 
+                            ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700 shadow-md' 
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        {isEditingComparison ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>เสร็จสิ้นการแก้ไข (Save)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>เปิดโหมดแก้ไขตาราง (Edit Mode)</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={loadActualsFromSystem}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-sans bg-blue-50 text-blue-700 border border-blue-200 rounded-sm hover:bg-blue-100 cursor-pointer transition"
+                        title="สแกนและดึงข้อมูลยอดขายสุทธิตามจริงจากบัญชีธุรกรรมระบบ"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>ดึงข้อมูลจริงจากระบบ</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={resetToBaseline}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-sans bg-slate-100 text-slate-700 border border-slate-200 rounded-sm hover:bg-slate-200 cursor-pointer transition"
+                        title="รีเซ็ตตารางให้เป็นค่าตั้งต้นเพื่อเปรียบเทียบเชิงสถิติ"
+                      >
+                        <span>ข้อมูลเปรียบเทียบตัวอย่าง</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* YoY Trend Comparison Line Chart */}
+                  <div className="bg-white border border-slate-200/80 rounded-sm p-4 space-y-3 shadow-xs">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <TrendingUp className="w-3.5 h-3.5 text-blue-500" />
+                        กราฟเส้นเปรียบเทียบแนวโน้มยอดขายรายเดือน 3 ปี (Month-on-Month Trends)
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">หน่วยเงิน: บาท (฿)</span>
+                    </div>
+
+                    <div className="h-72 w-full pt-2">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={getComparisonChartData()}
+                          margin={{ top: 15, right: 25, left: 15, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                          <XAxis 
+                            dataKey="name" 
+                            tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }} 
+                            axisLine={{ stroke: '#e2e8f0' }}
+                          />
+                          <YAxis 
+                            tick={{ fontSize: 9, fill: '#64748b' }} 
+                            axisLine={{ stroke: '#e2e8f0' }}
+                            tickFormatter={(value) => `฿${Number(value).toLocaleString()}`}
+                          />
+                          <RechartsTooltip
+                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '6px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                            labelStyle={{ color: '#94a3b8', fontSize: '11px', fontWeight: 'bold' }}
+                            itemStyle={{ fontSize: '12px', fontWeight: 'bold', padding: '1px 0' }}
+                            formatter={(value: any, name: any) => [`฿${Number(value).toLocaleString()}`, name]}
+                          />
+                          <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
+                          
+                          <Line 
+                            type="monotone" 
+                            dataKey="ปี 2567 (2024)" 
+                            stroke="#10b981" 
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                            activeDot={{ r: 5 }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="ปี 2568 (2025)" 
+                            stroke="#f59e0b" 
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                            activeDot={{ r: 5 }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="ปี 2569 (2026)" 
+                            stroke="#3b82f6" 
+                            strokeWidth={3}
+                            dot={{ r: 4 }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Stats Cards of Totals */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {(() => {
+                      const total67 = Object.values(comparisonData[2024] || {}).reduce((sum, v) => sum + v, 0);
+                      const total68 = Object.values(comparisonData[2025] || {}).reduce((sum, v) => sum + v, 0);
+                      const total69 = Object.values(comparisonData[2026] || {}).reduce((sum, v) => sum + v, 0);
+                      
+                      const growth68_67 = total67 > 0 ? ((total68 - total67) / total67) * 100 : 0;
+                      const growth69_68 = total68 > 0 ? ((total69 - total68) / total68) * 100 : 0;
+
+                      return (
+                        <>
+                          <div className="bg-slate-50 border border-slate-200/80 rounded-sm p-4 space-y-1">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block font-mono">SUMMARY YEAR 2567 (2024)</span>
+                            <div className="text-xl font-bold text-slate-800 font-mono">
+                              ฿{total67.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <p className="text-[10px] text-slate-500 font-sans">
+                              ยอดจำหน่ายสะสมรวมทั้ง 12 เดือนของ ปี พ.ศ. 2567
+                            </p>
+                          </div>
+
+                          <div className="bg-amber-50/50 border border-amber-200/80 rounded-sm p-4 space-y-1">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest block font-mono">SUMMARY YEAR 2568 (2025)</span>
+                              {total67 > 0 && (
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${growth68_67 >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                  {growth68_67 >= 0 ? '▲' : '▼'} {growth68_67.toFixed(1)}% YoY
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xl font-bold text-slate-800 font-mono">
+                              ฿{total68.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <p className="text-[10px] text-slate-500 font-sans">
+                              อัตราการเติบโตยอดขายเมื่อเทียบกับปีก่อนหน้า
+                            </p>
+                          </div>
+
+                          <div className="bg-blue-50/50 border border-blue-200/80 rounded-sm p-4 space-y-1">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest block font-mono">SUMMARY YEAR 2569 (2026)</span>
+                              {total68 > 0 && (
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${growth69_68 >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                  {growth69_68 >= 0 ? '▲' : '▼'} {growth69_68.toFixed(1)}% YoY
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xl font-bold text-slate-800 font-mono">
+                              ฿{total69.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <p className="text-[10px] text-slate-500 font-sans">
+                              เป้าหมาย / ยอดขายจริงรวมของปีปัจจุบัน พ.ศ. 2569
+                            </p>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Main Comparison Grid Table */}
+                  <div className="overflow-x-auto border border-slate-200 rounded-sm">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-wider font-mono">
+                          <th className="py-3 px-4 w-32 border-r border-slate-800">เดือน (Month)</th>
+                          <th className="py-3 px-4 text-right">ยอดขายปี 67 (2024)</th>
+                          <th className="py-3 px-4 text-right bg-amber-950/40 border-l border-r border-slate-800">ยอดขายปี 68 (2025)</th>
+                          <th className="py-3.5 px-4 text-center border-r border-slate-800">เติบโต 68 vs 67</th>
+                          <th className="py-3 px-4 text-right bg-blue-950/40 border-r border-slate-800">ยอดขายปี 69 (2026)</th>
+                          <th className="py-3.5 px-4 text-center">เติบโต 69 vs 68</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 bg-white font-sans text-xs">
+                        {MONTHS_THAI_LIST.map((monthName, idx) => {
+                          const val67 = comparisonData[2024]?.[idx] || 0;
+                          const val68 = comparisonData[2025]?.[idx] || 0;
+                          const val69 = comparisonData[2026]?.[idx] || 0;
+
+                          const renderGrowthLocal = (current: number, previous: number) => {
+                            if (previous === 0) return <span className="text-slate-400 font-mono text-[10px]">-</span>;
+                            const growth = ((current - previous) / previous) * 100;
+                            if (growth > 0) {
+                              return <span className="text-emerald-600 font-mono font-bold">+{growth.toFixed(1)}%</span>;
+                            } else if (growth < 0) {
+                              return <span className="text-rose-600 font-mono font-bold">{growth.toFixed(1)}%</span>;
+                            }
+                            return <span className="text-slate-500 font-mono">0.0%</span>;
+                          };
+
+                          return (
+                            <tr key={monthName} className="hover:bg-slate-50 transition-colors">
+                              <td className="py-2.5 px-4 font-bold text-slate-800 border-r border-slate-200 bg-slate-50/50">
+                                {monthName}
+                              </td>
+                              
+                              {/* 2024 (67) */}
+                              <td className="py-2.5 px-4 text-right">
+                                {isEditingComparison ? (
+                                  <input
+                                    type="number"
+                                    value={comparisonData[2024]?.[idx] ?? ''}
+                                    onChange={(e) => handleCellChange(2024, idx, e.target.value)}
+                                    className="w-full px-2 py-1 text-right border border-slate-300 rounded-xs bg-slate-50 focus:bg-white text-xs font-mono font-bold"
+                                  />
+                                ) : (
+                                  <span className="font-mono text-slate-700">
+                                    ฿{val67.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* 2025 (68) */}
+                              <td className="py-2.5 px-4 text-right bg-amber-50/20 border-l border-r border-slate-200 font-semibold">
+                                {isEditingComparison ? (
+                                  <input
+                                    type="number"
+                                    value={comparisonData[2025]?.[idx] ?? ''}
+                                    onChange={(e) => handleCellChange(2025, idx, e.target.value)}
+                                    className="w-full px-2 py-1 text-right border border-amber-300 rounded-xs bg-slate-50 focus:bg-white text-xs font-mono font-bold"
+                                  />
+                                ) : (
+                                  <span className="font-mono text-slate-800">
+                                    ฿{val68.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Growth 68 vs 67 */}
+                              <td className="py-2.5 px-4 text-center border-r border-slate-200 bg-slate-50/30">
+                                {renderGrowthLocal(val68, val67)}
+                              </td>
+
+                              {/* 2026 (69) */}
+                              <td className="py-2.5 px-4 text-right bg-blue-50/20 border-r border-slate-200 font-bold">
+                                {isEditingComparison ? (
+                                  <input
+                                    type="number"
+                                    value={comparisonData[2026]?.[idx] ?? ''}
+                                    onChange={(e) => handleCellChange(2026, idx, e.target.value)}
+                                    className="w-full px-2 py-1 text-right border border-blue-300 rounded-xs bg-slate-50 focus:bg-white text-xs font-mono font-bold text-blue-900"
+                                  />
+                                ) : (
+                                  <span className="font-mono text-blue-900">
+                                    ฿{val69.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Growth 69 vs 68 */}
+                              <td className="py-2.5 px-4 text-center bg-slate-50/30">
+                                {renderGrowthLocal(val69, val68)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                        {/* Sum Totals Row */}
+                        {(() => {
+                          const sum67 = Object.values(comparisonData[2024] || {}).reduce((sum, v) => sum + v, 0);
+                          const sum68 = Object.values(comparisonData[2025] || {}).reduce((sum, v) => sum + v, 0);
+                          const sum69 = Object.values(comparisonData[2026] || {}).reduce((sum, v) => sum + v, 0);
+
+                          const renderGrowthLocal = (current: number, previous: number) => {
+                            if (previous === 0) return <span className="text-slate-400 font-mono text-[10px]">-</span>;
+                            const growth = ((current - previous) / previous) * 100;
+                            if (growth > 0) {
+                              return <span className="text-emerald-400 font-mono font-bold">+{growth.toFixed(1)}%</span>;
+                            } else if (growth < 0) {
+                              return <span className="text-rose-400 font-mono font-bold">{growth.toFixed(1)}%</span>;
+                            }
+                            return <span className="text-slate-400 font-mono">0.0%</span>;
+                          };
+
+                          return (
+                            <tr className="bg-slate-900 text-white font-bold text-xs border-t-2 border-slate-900">
+                              <td className="py-3 px-4 border-r border-slate-800">
+                                รวมทั้งสิ้น (Total)
+                              </td>
+                              <td className="py-3 px-4 text-right font-mono">
+                                ฿{sum67.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-3 px-4 text-right font-mono bg-slate-800/85 border-l border-r border-slate-800">
+                                ฿{sum68.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-3 px-4 text-center border-r border-slate-800 font-mono">
+                                {renderGrowthLocal(sum68, sum67)}
+                              </td>
+                              <td className="py-3 px-4 text-right font-mono bg-slate-800/85 border-r border-slate-800">
+                                ฿{sum69.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-3 px-4 text-center font-mono">
+                                {renderGrowthLocal(sum69, sum68)}
+                              </td>
+                            </tr>
+                          );
+                        })()}
+
+                        {/* Averages Row */}
+                        {(() => {
+                          const sum67 = Object.values(comparisonData[2024] || {}).reduce((sum, v) => sum + v, 0);
+                          const sum68 = Object.values(comparisonData[2025] || {}).reduce((sum, v) => sum + v, 0);
+                          const sum69 = Object.values(comparisonData[2026] || {}).reduce((sum, v) => sum + v, 0);
+                          
+                          const avg67 = sum67 / 12;
+                          const avg68 = sum68 / 12;
+                          const avg69 = sum69 / 12;
+
+                          return (
+                            <tr className="bg-slate-100 text-slate-800 font-bold text-xs">
+                              <td className="py-3 px-4 border-r border-slate-200">
+                                เฉลี่ย/เดือน (Avg)
+                              </td>
+                              <td className="py-3 px-4 text-right font-mono text-slate-700">
+                                ฿{avg67.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-3 px-4 text-right font-mono border-l border-r border-slate-200 text-slate-800 bg-amber-50/10">
+                                ฿{avg68.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-3 px-4 text-center border-r border-slate-200">
+                                -
+                              </td>
+                              <td className="py-3 px-4 text-right font-mono border-r border-slate-200 text-blue-900 bg-blue-50/10">
+                                ฿{avg69.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                -
+                              </td>
+                            </tr>
+                          );
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Tips */}
+                  <p className="text-[10px] text-slate-400 italic font-sans leading-relaxed">
+                    * หมายเหตุ: ปี 69 ตรงกับปี ค.ศ. 2026, ปี 68 ตรงกับปี ค.ศ. 2025, และปี 67 ตรงกับปี ค.ศ. 2024. อัตราความเปลี่ยนแปลงคำนวณแบบ Year-over-Year (YoY) เปรียบเทียบกับปีก่อนหน้าในรายเดือนตามความจริง
+                  </p>
                 </div>
               )}
 
