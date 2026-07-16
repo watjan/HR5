@@ -401,7 +401,7 @@ export default function DashboardOverview({
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 font-mono">
-                        Date: {request.startDate} to {request.endDate} ({request.days} Days)
+                        Date: {request.startDate} to {request.endDate} ({request.durationUnit === 'hours' ? `${request.hours || (request.days * 8)} Hours` : `${request.days} Days`})
                       </p>
                       <p className="text-xs text-slate-600 italic bg-slate-50 p-2.5 border border-slate-200/50 rounded-sm font-sans mt-1">
                         &ldquo;{request.reason}&rdquo;

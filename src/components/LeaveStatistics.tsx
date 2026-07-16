@@ -816,7 +816,7 @@ export default function LeaveStatistics({ leaves, employees }: LeaveStatisticsPr
                           <span className="text-[9px] text-slate-400 block font-mono">ถึง {leave.endDate}</span>
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-700">
-                          {leave.days} วัน
+                          {leave.durationUnit === 'hours' ? `${leave.hours || (leave.days * 8)} ชม.` : `${leave.days} วัน`}
                         </td>
                         <td className="py-2.5 px-3 text-slate-600 font-sans italic max-w-[150px] truncate" title={leave.reason}>
                           {leave.reason}

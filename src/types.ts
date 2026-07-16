@@ -31,6 +31,8 @@ export interface LeaveRequest {
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   appliedDate: string;
+  durationUnit?: 'days' | 'hours';
+  hours?: number;
 }
 
 export interface PayrollRecord {

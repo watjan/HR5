@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { safeStorage } from '../lib/safeStorage';
 import { PartnerCheque, PartnerCompany } from '../types';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   CreditCard, 
   ArrowUpRight, 
@@ -284,6 +285,14 @@ export default function PartnerChequeManagement({
   // Modal registration form state
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingCheque, setEditingCheque] = useState<PartnerCheque | null>(null);
+  const [alertMsg, setAlertMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  const triggerAlert = (type: 'success' | 'error', text: string) => {
+    setAlertMsg({ type, text });
+    setTimeout(() => {
+      setAlertMsg(null);
+    }, 4000);
+  };
   
   // Custom delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState<PartnerCheque | null>(null);
@@ -420,44 +429,92 @@ export default function PartnerChequeManagement({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formChequeNumber || !formBank || !formPartnerName || !formAmount || !formDueDate) {
-      alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน");
+    
+    if (!formChequeNumber) {
+      triggerAlert('error', 'บันทึกไม่สำเร็จ: กรุณาระบุเลขที่เช็ค');
+      return;
+    }
+    if (!formBank) {
+      triggerAlert('error', 'บันทึกไม่สำเร็จ: กรุณาเลือกสถาบันธนาคาร');
+      return;
+    }
+    if (!formPartnerName || !formPartnerName.trim()) {
+      triggerAlert('error', 'บันทึกไม่สำเร็จ: กรุณาระบุหรือเลือกชื่อคู่ค้า/ลูกค้า');
+      return;
+    }
+    if (!formAmount || isNaN(parseFloat(formAmount)) || parseFloat(formAmount) <= 0) {
+      triggerAlert('error', 'บันทึกไม่สำเร็จ: กรุณาระบุจำนวนเงินให้ถูกต้อง (มากกว่า 0)');
+      return;
+    }
+    if (!formDueDate) {
+      triggerAlert('error', 'บันทึกไม่สำเร็จ: กรุณาระบุวันที่ครบกำหนด');
       return;
     }
 
-    if (editingCheque) {
-      const updatedCheque: PartnerCheque = {
-        ...editingCheque,
-        type: formType,
-        chequeNumber: formChequeNumber,
-        bank: formBank,
-        partnerName: formPartnerName,
-        amount: parseFloat(formAmount),
-        dueDate: formDueDate,
-        notes: formNotes
-      };
-      onEditCheque(updatedCheque);
-    } else {
-      const newCheque: PartnerCheque = {
-        id: `CHQ-${Date.now().toString().slice(-4)}`,
-        type: formType,
-        chequeNumber: formChequeNumber,
-        bank: formBank,
-        partnerName: formPartnerName,
-        amount: parseFloat(formAmount),
-        dueDate: formDueDate,
-        issueDate: new Date().toISOString().split('T')[0],
-        status: 'pending',
-        notes: formNotes
-      };
-      onAddCheque(newCheque);
-    }
+    try {
+      const displayType = formType === 'receivable' ? 'เช็ครับลูกค้า' : 'เช็คสั่งจ่ายคู่ค้า';
 
-    handleCloseModal();
+      if (editingCheque) {
+        const updatedCheque: PartnerCheque = {
+          ...editingCheque,
+          type: formType,
+          chequeNumber: formChequeNumber,
+          bank: formBank,
+          partnerName: formPartnerName,
+          amount: parseFloat(formAmount),
+          dueDate: formDueDate,
+          notes: formNotes
+        };
+        onEditCheque(updatedCheque);
+        triggerAlert('success', `บันทึกสำเร็จ: แก้ไขข้อมูล${displayType} เลขที่ ${formChequeNumber} เรียบร้อยแล้ว`);
+      } else {
+        const newCheque: PartnerCheque = {
+          id: `CHQ-${Date.now().toString().slice(-4)}`,
+          type: formType,
+          chequeNumber: formChequeNumber,
+          bank: formBank,
+          partnerName: formPartnerName,
+          amount: parseFloat(formAmount),
+          dueDate: formDueDate,
+          issueDate: new Date().toISOString().split('T')[0],
+          status: 'pending',
+          notes: formNotes
+        };
+        onAddCheque(newCheque);
+        triggerAlert('success', `บันทึกสำเร็จ: เพิ่มข้อมูล${displayType} เลขที่ ${formChequeNumber} เรียบร้อยแล้ว`);
+      }
+
+      handleCloseModal();
+    } catch (error: any) {
+      console.error("Save cheque failed:", error);
+      triggerAlert('error', `บันทึกไม่สำเร็จ: ${error.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล'}`);
+    }
   };
 
   return (
     <div className="space-y-6">
+      {/* Toast Alert */}
+      <AnimatePresence>
+        {alertMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className={`fixed top-4 right-4 z-50 px-5 py-3 rounded-md shadow-lg border flex items-center gap-3 no-print font-sans transition-all ${
+              alertMsg.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-rose-50 border-rose-200 text-rose-800'
+            }`}
+          >
+            {alertMsg.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+            )}
+            <span className="text-xs font-bold tracking-wide">{alertMsg.text}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* Header section with Actions */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

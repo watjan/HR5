@@ -867,20 +867,28 @@ export default function EmployeeDirectory({
 
                     <div className="border-t border-slate-100 pt-3.5">
                       <span className="text-slate-400 block mb-2 font-medium">สิทธิ์วันคงเหลือคงเหลือ:</span>
-                      <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
-                        <div className="bg-rose-50 border border-rose-100/50 p-1.5 rounded-lg">
-                          <span className="block font-semibold text-rose-700">{selectedEmployee.leaveBalance.sick} วัน</span>
-                          <span className="text-[10px] text-slate-400">ลาป่วย</span>
-                        </div>
-                        <div className="bg-amber-50 border border-amber-100/50 p-1.5 rounded-lg">
-                          <span className="block font-semibold text-amber-700">{selectedEmployee.leaveBalance.personal} วัน</span>
-                          <span className="text-[10px] text-slate-400">ลากิจ</span>
-                        </div>
-                        <div className="bg-blue-50 border border-blue-100/50 p-1.5 rounded-lg">
-                          <span className="block font-semibold text-blue-700">{selectedEmployee.leaveBalance.annual} วัน</span>
-                          <span className="text-[10px] text-slate-400">ลาพักร้อน</span>
-                        </div>
-                      </div>
+                      {(() => {
+                        const stats = getEmployeeStats2026(selectedEmployee.id);
+                        const sickRemaining = Math.max(0, 15 - stats.breakdown.sick);
+                        const personalRemaining = Math.max(0, 6 - stats.breakdown.personal);
+                        const annualRemaining = Math.max(0, 12 - stats.breakdown.annual);
+                        return (
+                          <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                            <div className="bg-rose-50 border border-rose-100/50 p-1.5 rounded-lg">
+                              <span className="block font-semibold text-rose-700">{sickRemaining} วัน</span>
+                              <span className="text-[10px] text-slate-400">ลาป่วย</span>
+                            </div>
+                            <div className="bg-amber-50 border border-amber-100/50 p-1.5 rounded-lg">
+                              <span className="block font-semibold text-amber-700">{personalRemaining} วัน</span>
+                              <span className="text-[10px] text-slate-400">ลากิจ</span>
+                            </div>
+                            <div className="bg-blue-50 border border-blue-100/50 p-1.5 rounded-lg">
+                              <span className="block font-semibold text-blue-700">{annualRemaining} วัน</span>
+                              <span className="text-[10px] text-slate-400">ลาพักร้อน</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Accumulated Absences, Leaves, Lateness Table */}
