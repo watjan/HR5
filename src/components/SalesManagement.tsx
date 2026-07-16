@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { SalesRecord } from '../types';
 import { 
   TrendingUp, 
@@ -65,26 +65,12 @@ interface ComparisonData {
   };
 }
 
-const DEFAULT_COMPARISON_DATA: ComparisonData = {
-  2024: {
-    0: 85000, 1: 90000, 2: 110000, 3: 95000, 4: 105000, 5: 120000,
-    6: 115000, 7: 125000, 8: 130000, 9: 140000, 10: 155000, 11: 180000
-  },
-  2025: {
-    0: 110000, 1: 125000, 2: 145000, 3: 130000, 4: 140000, 5: 165000,
-    6: 155000, 7: 160000, 8: 175000, 9: 190000, 10: 210000, 11: 250000
-  },
-  2026: {
-    0: 150000, 1: 165000, 2: 195000, 3: 170000, 4: 185000, 5: 220000,
-    6: 210000, 7: 215000, 8: 230000, 9: 245000, 10: 280000, 11: 320000
-  }
-};
-
 const MONTHS_THAI_LIST = [
   "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
   "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
 ];
 
+const YEAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#ef4444', '#14b8a6', '#6366f1'];
 
 
 // -------------------------------------------------------------
@@ -96,74 +82,187 @@ export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDele
   // Sub-tabs for KPI visualization
   const [chartTab, setChartTab] = useState<'trends' | 'breakdown'>('trends');
 
-  // Sales Comparison Data States
-  const [comparisonData, setComparisonData] = useState<ComparisonData>(() => {
+  // Dynamic selected years state
+  const [selectedYears, setSelectedYears] = useState<number[]>(() => {
     try {
-      const saved = localStorage.getItem('apiwat_sales_comparison_data');
+      const saved = localStorage.getItem('apiwat_sales_comparison_years');
       if (saved) {
         return JSON.parse(saved);
       }
     } catch (e) {
-      console.error('Failed to parse saved comparison data', e);
+      console.error(e);
     }
-    return DEFAULT_COMPARISON_DATA;
+    return [2024, 2025, 2026];
   });
 
-  const [isEditingComparison, setIsEditingComparison] = useState(false);
+  // State to hold year adding input
+  const [newYearInput, setNewYearInput] = useState('');
 
+  // Save selected years to localStorage for persistence
   useEffect(() => {
     try {
-      localStorage.setItem('apiwat_sales_comparison_data', JSON.stringify(comparisonData));
+      localStorage.setItem('apiwat_sales_comparison_years', JSON.stringify(selectedYears));
     } catch (e) {
-      console.error('Failed to save comparison data', e);
+      console.error(e);
     }
-  }, [comparisonData]);
+  }, [selectedYears]);
 
-  const handleCellChange = (year: number, monthIdx: number, value: string) => {
-    const numVal = value === '' ? 0 : parseFloat(value);
-    if (isNaN(numVal)) return;
-    setComparisonData(prev => ({
-      ...prev,
-      [year]: {
-        ...prev[year],
-        [monthIdx]: numVal
+  // Editing state for cells
+  const [isEditingComparison, setIsEditingComparison] = useState(false);
+  const [editGridValues, setEditGridValues] = useState<Record<string, string>>({});
+
+  // Scan all unique years in existing sales database
+  const uniqueYearsInSales = useMemo(() => {
+    const years = sales.map(s => {
+      const y = parseInt(s.date.split('-')[0]);
+      return isNaN(y) ? null : y;
+    }).filter(Boolean) as number[];
+    return Array.from(new Set([2024, 2025, 2026, ...years])).sort((a, b) => b - a);
+  }, [sales]);
+
+  // Ensure selectedYears always has a sorted list
+  const sortedSelectedYears = useMemo(() => {
+    return [...selectedYears].sort((a, b) => a - b);
+  }, [selectedYears]);
+
+  // Dynamic helper functions linked to the live Firebase database:
+  const getRegularSalesSum = (yr: number, monthIdx: number): number => {
+    const monthStr = (monthIdx + 1).toString().padStart(2, '0');
+    const targetPrefix = `${yr}-${monthStr}`;
+    return sales
+      .filter(s => s.date.startsWith(targetPrefix) && !(s.notes && s.notes.includes('ปรับยอดขายเปรียบเทียบ')))
+      .reduce((sum, s) => sum + s.amount, 0);
+  };
+
+  const findAdjustmentRecord = (yr: number, monthIdx: number): SalesRecord | undefined => {
+    const monthStr = (monthIdx + 1).toString().padStart(2, '0');
+    const targetPrefix = `${yr}-${monthStr}`;
+    return sales.find(s => 
+      s.date.startsWith(targetPrefix) && 
+      s.notes && 
+      s.notes.includes('ปรับยอดขายเปรียบเทียบ')
+    );
+  };
+
+  const getCellTotal = (yr: number, monthIdx: number): number => {
+    const monthStr = (monthIdx + 1).toString().padStart(2, '0');
+    const targetPrefix = `${yr}-${monthStr}`;
+    return sales
+      .filter(s => s.date.startsWith(targetPrefix))
+      .reduce((sum, s) => sum + s.amount, 0);
+  };
+
+  const startEditing = () => {
+    const initialVals: Record<string, string> = {};
+    selectedYears.forEach(yr => {
+      for (let mIdx = 0; mIdx < 12; mIdx++) {
+        const val = getCellTotal(yr, mIdx);
+        initialVals[`${yr}_${mIdx}`] = val > 0 ? val.toFixed(2) : '';
       }
+    });
+    setEditGridValues(initialVals);
+    setIsEditingComparison(true);
+  };
+
+  const handleCellEdit = (year: number, monthIdx: number, value: string) => {
+    setEditGridValues(prev => ({
+      ...prev,
+      [`${year}_${monthIdx}`]: value
     }));
   };
 
-  const loadActualsFromSystem = () => {
-    const updated = { ...comparisonData };
-    [2024, 2025, 2026].forEach(yr => {
-      if (!updated[yr]) updated[yr] = {};
+  const saveComparisonChanges = async () => {
+    let addCount = 0;
+    let updateCount = 0;
+    let deleteCount = 0;
+
+    // Loop through cells and perform appropriate database operations
+    for (const yr of selectedYears) {
       for (let mIdx = 0; mIdx < 12; mIdx++) {
-        const monthStr = (mIdx + 1).toString().padStart(2, '0');
-        const targetPrefix = `${yr}-${monthStr}`;
-        const actualAmount = sales
-          .filter(item => item.date.startsWith(targetPrefix))
-          .reduce((sum, item) => sum + item.amount, 0);
-        
-        if (actualAmount > 0) {
-          updated[yr][mIdx] = actualAmount;
+        const inputStr = editGridValues[`${yr}_${mIdx}`] || '';
+        const newTotal = inputStr === '' ? 0 : parseFloat(inputStr);
+        if (isNaN(newTotal)) continue;
+
+        const currentTotal = getCellTotal(yr, mIdx);
+        if (Math.abs(newTotal - currentTotal) < 0.01) {
+          continue; // No changes in this cell
+        }
+
+        const regularSum = getRegularSalesSum(yr, mIdx);
+        const neededAdjustment = newTotal - regularSum;
+        const adjRecord = findAdjustmentRecord(yr, mIdx);
+
+        if (Math.abs(neededAdjustment) < 0.01) {
+          // If the total entered equals regular sales sum, we don't need any adjustment record
+          if (adjRecord) {
+            onDeleteSale(adjRecord.id);
+            deleteCount++;
+          }
+        } else {
+          if (adjRecord) {
+            // Update the existing adjustment record
+            onUpdateSale({
+              ...adjRecord,
+              amount: neededAdjustment
+            });
+            updateCount++;
+          } else {
+            // Create a new adjustment record for this month
+            const monthStr = (mIdx + 1).toString().padStart(2, '0');
+            const newAdj: SalesRecord = {
+              id: `adj_${yr}_${monthStr}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+              date: `${yr}-${monthStr}-01`,
+              amount: neededAdjustment,
+              notes: 'ปรับยอดขายเปรียบเทียบ (ระบบสร้างอัตโนมัติ)',
+              paymentChannel: 'transfer',
+              customerName: 'ปรับปรุงยอดขายสุทธิ',
+              receiptNumber: `ADJ-${yr}-${monthStr}`
+            };
+            onAddSale(newAdj);
+            addCount++;
+          }
         }
       }
-    });
-    setComparisonData(updated);
-    showToast("ดึงยอดเงินจริงจากประวัติธุรกรรมระบบเรียบร้อยแล้ว (จะแสดงยอดเงินจริงหากมีธุรกรรมบันทึกอยู่)", "ดึงข้อมูลสำเร็จ", "success");
+    }
+
+    setIsEditingComparison(false);
+    showToast(`บันทึกข้อมูลปรับปรุงยอดขายเปรียบเทียบลงระบบสำเร็จ (เพิ่ม: ${addCount}, แก้ไข: ${updateCount}, ลบ: ${deleteCount})`, "บันทึกฐานข้อมูลสำเร็จ", "success");
   };
 
-  const resetToBaseline = () => {
-    setComparisonData(DEFAULT_COMPARISON_DATA);
-    showToast("รีเซ็ตเป็นข้อมูลเปรียบเทียบมาตรฐานเรียบร้อยแล้ว", "รีเซ็ตสำเร็จ", "success");
+  const handleAddYearToCompare = () => {
+    const yr = parseInt(newYearInput);
+    if (isNaN(yr) || yr < 1900 || yr > 2100) {
+      showToast("กรุณาระบุปี ค.ศ. ที่ถูกต้อง (เช่น 2026 หรือ 2025)", "ข้อผิดพลาด", "error");
+      return;
+    }
+    if (selectedYears.includes(yr)) {
+      showToast("ปีนี้ถูกเลือกอยู่แล้วในการเปรียบเทียบ", "ข้อผิดพลาด", "error");
+      return;
+    }
+    setSelectedYears(prev => [...prev, yr].sort((a, b) => a - b));
+    setNewYearInput('');
+    showToast(`เพิ่มปี ค.ศ. ${yr} (พ.ศ. ${yr + 543}) เข้าสู่การเปรียบเทียบเรียบร้อย`, "เพิ่มสำเร็จ", "success");
+  };
+
+  const toggleYearSelection = (yr: number) => {
+    if (selectedYears.includes(yr)) {
+      if (selectedYears.length <= 1) {
+        showToast("ต้องระบุอย่างน้อย 1 ปีสำหรับการเปรียบเทียบ", "แจ้งเตือน", "error");
+        return;
+      }
+      setSelectedYears(prev => prev.filter(y => y !== yr));
+    } else {
+      setSelectedYears(prev => [...prev, yr].sort((a, b) => a - b));
+    }
   };
 
   const getComparisonChartData = () => {
     return MONTHS_THAI_LIST.map((monthName, idx) => {
-      return {
-        name: monthName.slice(0, 3),
-        'ปี 2567 (2024)': comparisonData[2024]?.[idx] || 0,
-        'ปี 2568 (2025)': comparisonData[2025]?.[idx] || 0,
-        'ปี 2569 (2026)': comparisonData[2026]?.[idx] || 0,
-      };
+      const row: any = { name: monthName.slice(0, 3) };
+      selectedYears.forEach(yr => {
+        row[`ปี พ.ศ. ${yr + 543} (${yr})`] = getCellTotal(yr, idx);
+      });
+      return row;
     });
   };
   
@@ -1236,59 +1335,113 @@ export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDele
                 </div>
               )}
 
-              {/* TAB: SALES COMPARISON (67-68-69) */}
+              {/* TAB: SALES COMPARISON (DYNAMIC DUAL-DATABASE SYNCED) */}
               {activeTab === 'comparison' && (
                 <div className="p-6 space-y-6">
-                  {/* Description and Tool Buttons */}
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 p-4 border border-slate-200/60 rounded-sm">
+                  {/* Year Selection Panel & New Year Input */}
+                  <div className="bg-slate-50 border border-slate-200 p-4 rounded-sm space-y-4">
+                    <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                          <Filter className="w-4 h-4 text-slate-600" />
+                          <span>เลือกปี พ.ศ. ที่ต้องการเปรียบเทียบ (เปรียบเทียบกี่ปีก็ได้)</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500 leading-relaxed max-w-2xl">
+                          ระบบจะดึงยอดขายจริงทั้งหมดตามเงื่อนไขจากฐานข้อมูล Firebase Firestore แบบ Real-time มาคำนวณและวิเคราะห์แยกรายเดือนโดยอัตโนมัติ
+                        </p>
+                      </div>
+
+                      {/* Add Year Input */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs font-bold text-slate-600">เพิ่มปีอื่น (ค.ศ.):</span>
+                        <div className="flex items-center">
+                          <input
+                            type="number"
+                            min="1900"
+                            max="2100"
+                            placeholder="เช่น 2027"
+                            value={newYearInput}
+                            onChange={(e) => setNewYearInput(e.target.value)}
+                            className="w-24 px-2 py-1 text-xs border border-slate-300 rounded-l-xs bg-white text-slate-800 font-mono focus:border-blue-500 outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddYearToCompare}
+                            className="flex items-center gap-1 px-3 py-1 text-xs font-bold font-sans bg-slate-900 text-white border border-slate-900 rounded-r-xs hover:bg-slate-800 transition cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>เพิ่มปี</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Checkbox pills */}
+                    <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-200">
+                      {uniqueYearsInSales.map(yr => {
+                        const isSelected = selectedYears.includes(yr);
+                        return (
+                          <button
+                            key={yr}
+                            type="button"
+                            onClick={() => toggleYearSelection(yr)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-bold font-sans transition cursor-pointer border ${
+                              isSelected
+                                ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className={`w-3 h-3 rounded-full flex items-center justify-center border ${isSelected ? 'bg-white border-white text-blue-600' : 'border-slate-300 bg-slate-50'}`}>
+                              {isSelected && <Check className="w-2.5 h-2.5 stroke-[4]" />}
+                            </div>
+                            <span>พ.ศ. {yr + 543} ({yr})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Main Header / Control Actions */}
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900 text-white p-4 rounded-sm shadow-xs">
                     <div className="space-y-1">
-                      <h4 className="text-sm font-bold text-slate-800">เครื่องมือจำลองและวิเคราะห์เปรียบเทียบยอดขาย 3 ปี (พ.ศ. 2567 - 2569)</h4>
-                      <p className="text-[11px] text-slate-500 leading-relaxed max-w-2xl">
-                        ตารางจำลองและวิเคราะห์ข้อมูลเปรียบเทียบยอดขายสุทธิ 12 เดือนของ ปี 2569 (69), 2568 (68) และ 2567 (67) 
-                        คุณสามารถปรับเปลี่ยนและแก้ไขยอดเงินในแต่ละเดือนได้โดยตรงในตารางเพื่อจำลองเป้าหมายการขาย (Simulation) หรือดึงข้อมูลยอดขายจริงจากระบบได้
+                      <h4 className="text-sm font-bold flex items-center gap-1.5">
+                        <TrendingUp className="w-4 h-4 text-emerald-400 animate-pulse" />
+                        <span>รายงานจำลองและเปรียบเทียบยอดขายสุทธิสะสมรายเดือน</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-300 leading-relaxed max-w-2xl">
+                        ตารางคำนวณและวิเคราะห์เปรียบเทียบการเติบโตแบบรายเดือนของปีที่เลือกจริงจากฐานข้อมูล คุณสามารถปรับแก้เป้าหมายหรือปรับตัวเลขเพื่อเก็บลงฐานข้อมูล Firebase ได้
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setIsEditingComparison(!isEditingComparison)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-sans rounded-sm border cursor-pointer transition ${
-                          isEditingComparison 
-                            ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700 shadow-md' 
-                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        {isEditingComparison ? (
-                          <>
+                      {isEditingComparison ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={saveComparisonChanges}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-sans bg-emerald-600 text-white border border-emerald-700 rounded-sm hover:bg-emerald-700 shadow-md cursor-pointer transition"
+                          >
                             <Check className="w-3.5 h-3.5" />
-                            <span>เสร็จสิ้นการแก้ไข (Save)</span>
-                          </>
-                        ) : (
-                          <>
-                            <Edit2 className="w-3.5 h-3.5" />
-                            <span>เปิดโหมดแก้ไขตาราง (Edit Mode)</span>
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={loadActualsFromSystem}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-sans bg-blue-50 text-blue-700 border border-blue-200 rounded-sm hover:bg-blue-100 cursor-pointer transition"
-                        title="สแกนและดึงข้อมูลยอดขายสุทธิตามจริงจากบัญชีธุรกรรมระบบ"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>ดึงข้อมูลจริงจากระบบ</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={resetToBaseline}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-sans bg-slate-100 text-slate-700 border border-slate-200 rounded-sm hover:bg-slate-200 cursor-pointer transition"
-                        title="รีเซ็ตตารางให้เป็นค่าตั้งต้นเพื่อเปรียบเทียบเชิงสถิติ"
-                      >
-                        <span>ข้อมูลเปรียบเทียบตัวอย่าง</span>
-                      </button>
+                            <span>บันทึกข้อมูล (Save to Firebase)</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingComparison(false)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-sans bg-slate-700 text-slate-100 border border-slate-600 rounded-sm hover:bg-slate-600 cursor-pointer transition"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <span>ยกเลิก (Cancel)</span>
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={startEditing}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-sans bg-blue-600 text-white border border-blue-700 rounded-sm hover:bg-blue-700 shadow-md cursor-pointer transition"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>เปิดโหมดแก้ไขเป้าหมาย/ยอดขาย (Edit Mode)</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1297,7 +1450,7 @@ export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDele
                     <div className="flex justify-between items-center pb-2 border-b border-slate-100">
                       <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
                         <TrendingUp className="w-3.5 h-3.5 text-blue-500" />
-                        กราฟเส้นเปรียบเทียบแนวโน้มยอดขายรายเดือน 3 ปี (Month-on-Month Trends)
+                        กราฟเส้นเปรียบเทียบแนวโน้มยอดขายรายเดือน (Month-on-Month Trends)
                       </span>
                       <span className="text-[10px] text-slate-400 font-mono">หน่วยเงิน: บาท (฿)</span>
                     </div>
@@ -1327,93 +1480,61 @@ export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDele
                           />
                           <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
                           
-                          <Line 
-                            type="monotone" 
-                            dataKey="ปี 2567 (2024)" 
-                            stroke="#10b981" 
-                            strokeWidth={2}
-                            dot={{ r: 3 }}
-                            activeDot={{ r: 5 }}
-                          />
-                          <Line 
-                            type="monotone" 
-                            dataKey="ปี 2568 (2025)" 
-                            stroke="#f59e0b" 
-                            strokeWidth={2}
-                            dot={{ r: 3 }}
-                            activeDot={{ r: 5 }}
-                          />
-                          <Line 
-                            type="monotone" 
-                            dataKey="ปี 2569 (2026)" 
-                            stroke="#3b82f6" 
-                            strokeWidth={3}
-                            dot={{ r: 4 }}
-                            activeDot={{ r: 6 }}
-                          />
+                          {sortedSelectedYears.map((yr, idx) => {
+                            const color = YEAR_COLORS[idx % YEAR_COLORS.length];
+                            return (
+                              <Line 
+                                key={yr}
+                                type="monotone" 
+                                dataKey={`ปี พ.ศ. ${yr + 543} (${yr})`} 
+                                stroke={color} 
+                                strokeWidth={idx === sortedSelectedYears.length - 1 ? 3 : 2}
+                                dot={{ r: 3 }}
+                                activeDot={{ r: 5 }}
+                              />
+                            );
+                          })}
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
 
                   {/* Stats Cards of Totals */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {(() => {
-                      const total67 = Object.values(comparisonData[2024] || {}).reduce((sum, v) => sum + v, 0);
-                      const total68 = Object.values(comparisonData[2025] || {}).reduce((sum, v) => sum + v, 0);
-                      const total69 = Object.values(comparisonData[2026] || {}).reduce((sum, v) => sum + v, 0);
-                      
-                      const growth68_67 = total67 > 0 ? ((total68 - total67) / total67) * 100 : 0;
-                      const growth69_68 = total68 > 0 ? ((total69 - total68) / total68) * 100 : 0;
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {sortedSelectedYears.map((yr, sIdx) => {
+                      let yearTotal = 0;
+                      for (let i = 0; i < 12; i++) yearTotal += getCellTotal(yr, i);
+
+                      const prevYr = sortedSelectedYears[sIdx - 1];
+                      let prevYearTotal = 0;
+                      if (prevYr !== undefined) {
+                        for (let i = 0; i < 12; i++) prevYearTotal += getCellTotal(prevYr, i);
+                      }
+
+                      const growth = prevYearTotal > 0 ? ((yearTotal - prevYearTotal) / prevYearTotal) * 100 : 0;
 
                       return (
-                        <>
-                          <div className="bg-slate-50 border border-slate-200/80 rounded-sm p-4 space-y-1">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block font-mono">SUMMARY YEAR 2567 (2024)</span>
-                            <div className="text-xl font-bold text-slate-800 font-mono">
-                              ฿{total67.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                            <p className="text-[10px] text-slate-500 font-sans">
-                              ยอดจำหน่ายสะสมรวมทั้ง 12 เดือนของ ปี พ.ศ. 2567
-                            </p>
+                        <div key={yr} className="bg-white border border-slate-200 rounded-sm p-4 space-y-1.5 shadow-xs relative overflow-hidden">
+                          <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500" style={{ backgroundColor: YEAR_COLORS[sIdx % YEAR_COLORS.length] }}></div>
+                          <div className="flex justify-between items-center pl-2">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                              YEAR พ.ศ. {yr + 543} ({yr})
+                            </span>
+                            {prevYr !== undefined && prevYearTotal > 0 && (
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${growth >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                {growth >= 0 ? '▲' : '▼'} {growth.toFixed(1)}% YoY
+                              </span>
+                            )}
                           </div>
-
-                          <div className="bg-amber-50/50 border border-amber-200/80 rounded-sm p-4 space-y-1">
-                            <div className="flex justify-between items-center">
-                              <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest block font-mono">SUMMARY YEAR 2568 (2025)</span>
-                              {total67 > 0 && (
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${growth68_67 >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                                  {growth68_67 >= 0 ? '▲' : '▼'} {growth68_67.toFixed(1)}% YoY
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xl font-bold text-slate-800 font-mono">
-                              ฿{total68.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                            <p className="text-[10px] text-slate-500 font-sans">
-                              อัตราการเติบโตยอดขายเมื่อเทียบกับปีก่อนหน้า
-                            </p>
+                          <div className="text-lg font-bold text-slate-800 font-mono pl-2">
+                            ฿{yearTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
-
-                          <div className="bg-blue-50/50 border border-blue-200/80 rounded-sm p-4 space-y-1">
-                            <div className="flex justify-between items-center">
-                              <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest block font-mono">SUMMARY YEAR 2569 (2026)</span>
-                              {total68 > 0 && (
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${growth69_68 >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                                  {growth69_68 >= 0 ? '▲' : '▼'} {growth69_68.toFixed(1)}% YoY
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xl font-bold text-slate-800 font-mono">
-                              ฿{total69.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                            <p className="text-[10px] text-slate-500 font-sans">
-                              เป้าหมาย / ยอดขายจริงรวมของปีปัจจุบัน พ.ศ. 2569
-                            </p>
-                          </div>
-                        </>
+                          <p className="text-[10px] text-slate-500 font-sans pl-2">
+                            เฉลี่ยต่อเดือน: <span className="font-mono font-semibold">฿{(yearTotal / 12).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                          </p>
+                        </div>
                       );
-                    })()}
+                    })}
                   </div>
 
                   {/* Main Comparison Grid Table */}
@@ -1422,178 +1543,150 @@ export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDele
                       <thead>
                         <tr className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-wider font-mono">
                           <th className="py-3 px-4 w-32 border-r border-slate-800">เดือน (Month)</th>
-                          <th className="py-3 px-4 text-right">ยอดขายปี 67 (2024)</th>
-                          <th className="py-3 px-4 text-right bg-amber-950/40 border-l border-r border-slate-800">ยอดขายปี 68 (2025)</th>
-                          <th className="py-3.5 px-4 text-center border-r border-slate-800">เติบโต 68 vs 67</th>
-                          <th className="py-3 px-4 text-right bg-blue-950/40 border-r border-slate-800">ยอดขายปี 69 (2026)</th>
-                          <th className="py-3.5 px-4 text-center">เติบโต 69 vs 68</th>
+                          {sortedSelectedYears.map((yr, idx) => {
+                            const prevYr = sortedSelectedYears[idx - 1];
+                            return (
+                              <Fragment key={yr}>
+                                <th className="py-3 px-4 text-right">ยอดขาย พ.ศ. {yr + 543} ({yr})</th>
+                                {prevYr !== undefined && (
+                                  <th className="py-3.5 px-4 text-center border-l border-r border-slate-800">เติบโต {yr + 543} vs {prevYr + 543}</th>
+                                )}
+                              </Fragment>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 bg-white font-sans text-xs">
                         {MONTHS_THAI_LIST.map((monthName, idx) => {
-                          const val67 = comparisonData[2024]?.[idx] || 0;
-                          const val68 = comparisonData[2025]?.[idx] || 0;
-                          const val69 = comparisonData[2026]?.[idx] || 0;
-
-                          const renderGrowthLocal = (current: number, previous: number) => {
-                            if (previous === 0) return <span className="text-slate-400 font-mono text-[10px]">-</span>;
-                            const growth = ((current - previous) / previous) * 100;
-                            if (growth > 0) {
-                              return <span className="text-emerald-600 font-mono font-bold">+{growth.toFixed(1)}%</span>;
-                            } else if (growth < 0) {
-                              return <span className="text-rose-600 font-mono font-bold">{growth.toFixed(1)}%</span>;
-                            }
-                            return <span className="text-slate-500 font-mono">0.0%</span>;
-                          };
-
                           return (
                             <tr key={monthName} className="hover:bg-slate-50 transition-colors">
                               <td className="py-2.5 px-4 font-bold text-slate-800 border-r border-slate-200 bg-slate-50/50">
                                 {monthName}
                               </td>
-                              
-                              {/* 2024 (67) */}
-                              <td className="py-2.5 px-4 text-right">
-                                {isEditingComparison ? (
-                                  <input
-                                    type="number"
-                                    value={comparisonData[2024]?.[idx] ?? ''}
-                                    onChange={(e) => handleCellChange(2024, idx, e.target.value)}
-                                    className="w-full px-2 py-1 text-right border border-slate-300 rounded-xs bg-slate-50 focus:bg-white text-xs font-mono font-bold"
-                                  />
-                                ) : (
-                                  <span className="font-mono text-slate-700">
-                                    ฿{val67.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </span>
-                                )}
-                              </td>
+                              {sortedSelectedYears.map((yr, sIdx) => {
+                                const val = getCellTotal(yr, idx);
+                                const prevYr = sortedSelectedYears[sIdx - 1];
+                                const prevVal = prevYr !== undefined ? getCellTotal(prevYr, idx) : null;
 
-                              {/* 2025 (68) */}
-                              <td className="py-2.5 px-4 text-right bg-amber-50/20 border-l border-r border-slate-200 font-semibold">
-                                {isEditingComparison ? (
-                                  <input
-                                    type="number"
-                                    value={comparisonData[2025]?.[idx] ?? ''}
-                                    onChange={(e) => handleCellChange(2025, idx, e.target.value)}
-                                    className="w-full px-2 py-1 text-right border border-amber-300 rounded-xs bg-slate-50 focus:bg-white text-xs font-mono font-bold"
-                                  />
-                                ) : (
-                                  <span className="font-mono text-slate-800">
-                                    ฿{val68.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Growth 68 vs 67 */}
-                              <td className="py-2.5 px-4 text-center border-r border-slate-200 bg-slate-50/30">
-                                {renderGrowthLocal(val68, val67)}
-                              </td>
-
-                              {/* 2026 (69) */}
-                              <td className="py-2.5 px-4 text-right bg-blue-50/20 border-r border-slate-200 font-bold">
-                                {isEditingComparison ? (
-                                  <input
-                                    type="number"
-                                    value={comparisonData[2026]?.[idx] ?? ''}
-                                    onChange={(e) => handleCellChange(2026, idx, e.target.value)}
-                                    className="w-full px-2 py-1 text-right border border-blue-300 rounded-xs bg-slate-50 focus:bg-white text-xs font-mono font-bold text-blue-900"
-                                  />
-                                ) : (
-                                  <span className="font-mono text-blue-900">
-                                    ฿{val69.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Growth 69 vs 68 */}
-                              <td className="py-2.5 px-4 text-center bg-slate-50/30">
-                                {renderGrowthLocal(val69, val68)}
-                              </td>
+                                return (
+                                  <Fragment key={yr}>
+                                    {/* Sales Cell */}
+                                    <td className="py-2.5 px-4 text-right">
+                                      {isEditingComparison ? (
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          value={editGridValues[`${yr}_${idx}`] ?? ''}
+                                          onChange={(e) => handleCellEdit(yr, idx, e.target.value)}
+                                          className="w-full px-2 py-1 text-right border border-blue-300 rounded-xs bg-blue-50/10 focus:bg-white text-xs font-mono font-bold text-slate-800"
+                                        />
+                                      ) : (
+                                        <span className="font-mono text-slate-700">
+                                          ฿{val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </span>
+                                      )}
+                                    </td>
+                                    {/* Growth Cell */}
+                                    {prevYr !== undefined && (
+                                      <td className="py-2.5 px-4 text-center border-l border-r border-slate-200 bg-slate-50/30">
+                                        {prevVal !== null && prevVal !== undefined ? (
+                                          (() => {
+                                            if (prevVal === 0) return <span className="text-slate-400 font-mono text-[10px]">-</span>;
+                                            const growth = ((val - prevVal) / prevVal) * 100;
+                                            if (growth > 0) {
+                                              return <span className="text-emerald-600 font-mono font-bold">+{growth.toFixed(1)}%</span>;
+                                            } else if (growth < 0) {
+                                              return <span className="text-rose-600 font-mono font-bold">{growth.toFixed(1)}%</span>;
+                                            }
+                                            return <span className="text-slate-500 font-mono">0.0%</span>;
+                                          })()
+                                        ) : (
+                                          <span className="text-slate-400 font-mono text-[10px]">-</span>
+                                        )}
+                                      </td>
+                                    )}
+                                  </Fragment>
+                                );
+                              })}
                             </tr>
                           );
                         })}
 
                         {/* Sum Totals Row */}
-                        {(() => {
-                          const sum67 = Object.values(comparisonData[2024] || {}).reduce((sum, v) => sum + v, 0);
-                          const sum68 = Object.values(comparisonData[2025] || {}).reduce((sum, v) => sum + v, 0);
-                          const sum69 = Object.values(comparisonData[2026] || {}).reduce((sum, v) => sum + v, 0);
+                        <tr className="bg-slate-900 text-white font-bold text-xs border-t-2 border-slate-900">
+                          <td className="py-3 px-4 border-r border-slate-800">
+                            รวมทั้งสิ้น (Total)
+                          </td>
+                          {sortedSelectedYears.map((yr, sIdx) => {
+                            let yearTotal = 0;
+                            for (let i = 0; i < 12; i++) yearTotal += getCellTotal(yr, i);
 
-                          const renderGrowthLocal = (current: number, previous: number) => {
-                            if (previous === 0) return <span className="text-slate-400 font-mono text-[10px]">-</span>;
-                            const growth = ((current - previous) / previous) * 100;
-                            if (growth > 0) {
-                              return <span className="text-emerald-400 font-mono font-bold">+{growth.toFixed(1)}%</span>;
-                            } else if (growth < 0) {
-                              return <span className="text-rose-400 font-mono font-bold">{growth.toFixed(1)}%</span>;
+                            const prevYr = sortedSelectedYears[sIdx - 1];
+                            let prevYearTotal = 0;
+                            if (prevYr !== undefined) {
+                              for (let i = 0; i < 12; i++) prevYearTotal += getCellTotal(prevYr, i);
                             }
-                            return <span className="text-slate-400 font-mono">0.0%</span>;
-                          };
 
-                          return (
-                            <tr className="bg-slate-900 text-white font-bold text-xs border-t-2 border-slate-900">
-                              <td className="py-3 px-4 border-r border-slate-800">
-                                รวมทั้งสิ้น (Total)
-                              </td>
-                              <td className="py-3 px-4 text-right font-mono">
-                                ฿{sum67.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-3 px-4 text-right font-mono bg-slate-800/85 border-l border-r border-slate-800">
-                                ฿{sum68.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-3 px-4 text-center border-r border-slate-800 font-mono">
-                                {renderGrowthLocal(sum68, sum67)}
-                              </td>
-                              <td className="py-3 px-4 text-right font-mono bg-slate-800/85 border-r border-slate-800">
-                                ฿{sum69.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-3 px-4 text-center font-mono">
-                                {renderGrowthLocal(sum69, sum68)}
-                              </td>
-                            </tr>
-                          );
-                        })()}
+                            return (
+                              <Fragment key={yr}>
+                                <td className="py-3 px-4 text-right font-mono">
+                                  ฿{yearTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                                {prevYr !== undefined && (
+                                  <td className="py-3 px-4 text-center font-mono border-l border-r border-slate-800">
+                                    {prevYearTotal === 0 ? (
+                                      <span className="text-slate-400">-</span>
+                                    ) : (
+                                      (() => {
+                                        const growth = ((yearTotal - prevYearTotal) / prevYearTotal) * 100;
+                                        if (growth > 0) {
+                                          return <span className="text-emerald-400 font-bold">+{growth.toFixed(1)}%</span>;
+                                        } else if (growth < 0) {
+                                          return <span className="text-rose-400 font-bold">{growth.toFixed(1)}%</span>;
+                                        }
+                                        return <span className="text-slate-400">0.0%</span>;
+                                      })()
+                                    )}
+                                  </td>
+                                )}
+                              </Fragment>
+                            );
+                          })}
+                        </tr>
 
                         {/* Averages Row */}
-                        {(() => {
-                          const sum67 = Object.values(comparisonData[2024] || {}).reduce((sum, v) => sum + v, 0);
-                          const sum68 = Object.values(comparisonData[2025] || {}).reduce((sum, v) => sum + v, 0);
-                          const sum69 = Object.values(comparisonData[2026] || {}).reduce((sum, v) => sum + v, 0);
-                          
-                          const avg67 = sum67 / 12;
-                          const avg68 = sum68 / 12;
-                          const avg69 = sum69 / 12;
+                        <tr className="bg-slate-100 text-slate-800 font-bold text-xs">
+                          <td className="py-3 px-4 border-r border-slate-200">
+                            เฉลี่ย/เดือน (Avg)
+                          </td>
+                          {sortedSelectedYears.map((yr, sIdx) => {
+                            let yearTotal = 0;
+                            for (let i = 0; i < 12; i++) yearTotal += getCellTotal(yr, i);
+                            const avg = yearTotal / 12;
 
-                          return (
-                            <tr className="bg-slate-100 text-slate-800 font-bold text-xs">
-                              <td className="py-3 px-4 border-r border-slate-200">
-                                เฉลี่ย/เดือน (Avg)
-                              </td>
-                              <td className="py-3 px-4 text-right font-mono text-slate-700">
-                                ฿{avg67.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-3 px-4 text-right font-mono border-l border-r border-slate-200 text-slate-800 bg-amber-50/10">
-                                ฿{avg68.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-3 px-4 text-center border-r border-slate-200">
-                                -
-                              </td>
-                              <td className="py-3 px-4 text-right font-mono border-r border-slate-200 text-blue-900 bg-blue-50/10">
-                                ฿{avg69.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-3 px-4 text-center">
-                                -
-                              </td>
-                            </tr>
-                          );
-                        })()}
+                            const prevYr = sortedSelectedYears[sIdx - 1];
+
+                            return (
+                              <Fragment key={yr}>
+                                <td className="py-3 px-4 text-right font-mono text-slate-700">
+                                  ฿{avg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                                {prevYr !== undefined && (
+                                  <td className="py-3 px-4 text-center border-l border-r border-slate-200">
+                                    -
+                                  </td>
+                                )}
+                              </Fragment>
+                            );
+                          })}
+                        </tr>
                       </tbody>
                     </table>
                   </div>
 
                   {/* Tips */}
                   <p className="text-[10px] text-slate-400 italic font-sans leading-relaxed">
-                    * หมายเหตุ: ปี 69 ตรงกับปี ค.ศ. 2026, ปี 68 ตรงกับปี ค.ศ. 2025, และปี 67 ตรงกับปี ค.ศ. 2024. อัตราความเปลี่ยนแปลงคำนวณแบบ Year-over-Year (YoY) เปรียบเทียบกับปีก่อนหน้าในรายเดือนตามความจริง
+                    * หมายเหตุ: อัตราการเปลี่ยนแปลงคำนวณแบบ Year-over-Year (YoY) เปรียบเทียบกับปีก่อนหน้าที่เลือกไว้ในระบบ การแก้ไขข้อมูลจะสร้างหรืออัปเดตเอกสารยอดขายจริงในฐานข้อมูล Firebase Firestore โดยอัตโนมัติ
                   </p>
                 </div>
               )}
