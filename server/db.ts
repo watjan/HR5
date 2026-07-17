@@ -118,13 +118,15 @@ export async function syncToDualDatabases(payload: SyncPayload, mysqlConfig?: My
     firebase: { success: false, error: "" }
   };
 
-  // 1. Always save a local copy as a backup
+  // 1. Always save a local copy as a backup (Omit counterDuties for strict Firebase storage)
   try {
     const parentDir = path.dirname(LOCAL_DB_PATH);
     if (!fs.existsSync(parentDir)) {
       fs.mkdirSync(parentDir, { recursive: true });
     }
-    fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify(payload, null, 2), "utf8");
+    const localPayload = { ...payload };
+    delete localPayload.counterDuties;
+    fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify(localPayload, null, 2), "utf8");
   } catch (error: any) {
     console.error("Local backup save error:", error);
   }
@@ -243,7 +245,7 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
           dayoffSwaps: parsed.dayoffSwaps || [],
           partnerCompanies: parsed.partnerCompanies || [],
           systemSettings: parsed.systemSettings || {},
-          counterDuties: parsed.counterDuties || []
+          counterDuties: [] // STRICT: Load counterDuties strictly from Firebase only, never from local backup fallback
         };
         console.log("Loaded data from local backup file (Firebase fallback)");
       }

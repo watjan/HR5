@@ -328,7 +328,6 @@ export default function App() {
               if (parsed.evaluations) setEvaluations(parsed.evaluations);
               if (parsed.dayoffSwaps) setDayOffSwaps(parsed.dayoffSwaps);
               if (parsed.partnerCompanies) setPartnerCompanies(parsed.partnerCompanies);
-              if (parsed.counterDuties) setCounterDuties(parsed.counterDuties);
 
               if (parsed.attendance) {
                 const attendanceMap: any = {};
@@ -662,7 +661,7 @@ export default function App() {
         dayoffSwaps: dayOffSwaps || [],
         partnerCompanies: partnerCompanies || [],
         systemSettings: [{ id: "current", ...systemSettings }],
-        counterDuties: counterDuties || []
+        counterDuties: [] // OMIT: Counter duties must be saved to Firebase only
       };
 
       if (typeof window !== 'undefined' && window.localStorage) {
