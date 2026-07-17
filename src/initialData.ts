@@ -36,6 +36,8 @@ export const INITIAL_SYSTEM_SETTINGS: SystemSettings = {
   socialSecurityRate: 5,
   socialSecurityMaxCap: 750,
   withholdingTaxRate: 3,
+  lineNotifyToken: "",
+  lineNotifyEnabled: false,
   admins: [
     {
       id: "watjan",

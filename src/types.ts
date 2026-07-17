@@ -215,6 +215,8 @@ export interface SystemSettings {
   socialSecurityMaxCap: number; // e.g. 750
   withholdingTaxRate: number; // e.g. 3
   admins?: AdminUser[];
+  lineNotifyToken?: string;
+  lineNotifyEnabled?: boolean;
 }
 
 export interface AuditLogEntry {

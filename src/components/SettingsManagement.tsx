@@ -29,7 +29,9 @@ import {
   UserPlus,
   Users,
   Key,
-  ShieldCheck
+  ShieldCheck,
+  MessageSquare,
+  Send
 } from 'lucide-react';
 
 interface SettingsManagementProps {
@@ -55,7 +57,7 @@ export default function SettingsManagement({
   onClearAuditLogs,
   currentAdminId = 'watjan'
 }: SettingsManagementProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'shift' | 'tax' | 'database' | 'audit_logs' | 'admins'>('profile');
+  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'shift' | 'tax' | 'database' | 'audit_logs' | 'admins' | 'line'>('profile');
   
   const [isLSOn, setIsLSOn] = useState(() => isLocalStorageEnabled());
   const [lsToggleMessage, setLsToggleMessage] = useState<string | null>(null);
@@ -85,6 +87,43 @@ export default function SettingsManagement({
   const [socialSecurityMaxCap, setSocialSecurityMaxCap] = useState(settings.socialSecurityMaxCap);
   const [withholdingTaxRate, setWithholdingTaxRate] = useState(settings.withholdingTaxRate);
 
+  const [lineNotifyToken, setLineNotifyToken] = useState(settings.lineNotifyToken || '');
+  const [lineNotifyEnabled, setLineNotifyEnabled] = useState(settings.lineNotifyEnabled || false);
+
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTestLineNotify = async () => {
+    if (!lineNotifyToken) {
+      alert("กรุณากรอก LINE Notify Token ก่อนทดสอบ");
+      return;
+    }
+    setTestSending(true);
+    setTestResult(null);
+    try {
+      const response = await fetch("/api/line-notify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: `🔔 [ทดสอบ] เชื่อมต่อ LINE Notify สำหรับส่งรายงานยอดขายร้านค้าสำเร็จเรียบร้อยแล้ว!`,
+          token: lineNotifyToken
+        })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setTestResult({ success: true, message: "ทดสอบส่งการแจ้งเตือนสำเร็จ! กรุณาตรวจสอบในห้องแชท LINE ของคุณ" });
+      } else {
+        setTestResult({ success: false, message: data.error || "เกิดข้อผิดพลาดในการส่งข้อความทดสอบ" });
+      }
+    } catch (e: any) {
+      setTestResult({ success: false, message: e.message || "เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์" });
+    } finally {
+      setTestSending(false);
+    }
+  };
+
   // Audit Logs states
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAction, setFilterAction] = useState<string>('ALL');
@@ -112,6 +151,8 @@ export default function SettingsManagement({
       setSocialSecurityRate(settings.socialSecurityRate ?? 5);
       setSocialSecurityMaxCap(settings.socialSecurityMaxCap ?? 750);
       setWithholdingTaxRate(settings.withholdingTaxRate ?? 3);
+      setLineNotifyToken(settings.lineNotifyToken || '');
+      setLineNotifyEnabled(settings.lineNotifyEnabled || false);
     }
   }, [settings]);
 
@@ -175,6 +216,8 @@ export default function SettingsManagement({
       socialSecurityRate: Number(socialSecurityRate),
       socialSecurityMaxCap: Number(socialSecurityMaxCap),
       withholdingTaxRate: Number(withholdingTaxRate),
+      lineNotifyToken,
+      lineNotifyEnabled,
       admins: settings?.admins || adminsList
     };
     onUpdateSettings(updated);
@@ -493,6 +536,18 @@ export default function SettingsManagement({
           >
             <ShieldAlert className="w-4 h-4 shrink-0" />
             <span>สิทธิ์ผู้ดูแลระบบ (Admin RBAC)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('line')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-sm text-xs font-bold transition font-sans ${
+              activeSubTab === 'line'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4 shrink-0" />
+            <span>ตั้งค่าส่งยอดไลน์อัตโนมัติ</span>
           </button>
         </div>
 
@@ -1692,6 +1747,141 @@ export default function SettingsManagement({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* TAB 7: LINE NOTIFY SETTINGS */}
+          {activeSubTab === 'line' && (
+            <form onSubmit={handleSave} className="bg-white border border-slate-200 rounded-sm overflow-hidden animate-fade-in">
+              <div className="p-6 border-b border-slate-100 bg-emerald-50/20">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-emerald-100 text-emerald-800 rounded-sm">
+                    <MessageSquare className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider font-sans">ตั้งค่าส่งยอดขายผ่าน LINE Notify อัตโนมัติ (Automated LINE Reporting)</h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5 font-sans">
+                      ส่งรายงานยอดขายรายวันและประวัติธุรกรรมยอดขายเข้ากลุ่มไลน์หรือบัญชีส่วนตัวทันทีที่บันทึกยอดขายใหม่
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Enable/Disable Toggle */}
+                <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-sm">
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide font-sans">เปิดการแจ้งเตือนยอดขายอัตโนมัติ (Enable Auto Notifications)</h4>
+                    <p className="text-[10.5px] text-slate-500 font-sans leading-relaxed">
+                      หากเปิดใช้งาน ระบบจะยิงข้อมูลรายงานสรุปยอดขายเข้าห้องแชท LINE ที่ติดตั้ง Token ไว้โดยอัตโนมัติทุกครั้งที่มีรายการขายใหม่
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-sm border ${
+                      lineNotifyEnabled 
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                        : 'bg-slate-50 text-slate-500 border-slate-200'
+                    }`}>
+                      {lineNotifyEnabled ? 'เปิดทำงาน (ACTIVE)' : 'ปิดทำงาน (INACTIVE)'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setLineNotifyEnabled(!lineNotifyEnabled)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        lineNotifyEnabled ? 'bg-emerald-600' : 'bg-slate-200'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                          lineNotifyEnabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Token Input */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-slate-600 uppercase font-sans flex items-center gap-1">
+                    <span>LINE Notify API Token (รหัสโทเค็นกลุ่มไลน์)</span>
+                    <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="password" 
+                      placeholder="กรอกรหัสโทเค็น LINE Notify (เช่น rX8K9N7...)"
+                      value={lineNotifyToken}
+                      onChange={(e) => setLineNotifyToken(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-sm text-xs font-mono focus:outline-none focus:border-emerald-500 transition"
+                    />
+                  </div>
+                  <div className="text-[10.5px] text-slate-500 leading-relaxed space-y-1 font-sans">
+                    <p>💡 <strong>วิธีการเชื่อมต่อ LINE Notify:</strong></p>
+                    <ol className="list-decimal pl-4 space-y-1">
+                      <li>เข้าเว็บไซต์ <a href="https://notify-bot.line.me/" target="_blank" rel="noreferrer" className="text-emerald-600 font-bold hover:underline">LINE Notify Bot</a> แล้วลงชื่อเข้าใช้ด้วยบัญชี LINE ของคุณ</li>
+                      <li>ไปที่หน้า "หน้าของฉัน" (My Page) แล้วคลิก "ออกโทเค็น" (Generate token)</li>
+                      <li>เลือกห้องแชทหรือกลุ่มไลน์ที่ต้องการให้ส่งยอดขาย (เช่น กลุ่ม "สรุปยอดขายร้านค้า")</li>
+                      <li>คัดลอก Token ที่ได้รับมาวางในกล่องข้อความด้านบน แล้วกดบันทึก</li>
+                      <li><strong>สำคัญ:</strong> อย่าลืมดึง LINE Notify บอทเข้ากลุ่มแชทที่เลือกไว้ด้วย ไม่เช่นนั้นบอทจะไม่สามารถส่งข้อความได้</li>
+                    </ol>
+                  </div>
+                </div>
+
+                {/* Test Send Button & Result */}
+                <div className="pt-4 border-t border-slate-100">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <h4 className="text-xs font-bold text-slate-800 font-sans">ทดสอบการส่งข้อความแจ้งเตือน</h4>
+                      <p className="text-[10.5px] text-slate-500 font-sans">
+                        คลิกปุ่มด้านขวาเพื่อส่งข้อความตัวอย่างสรุปยอดขายไปยังกลุ่มไลน์เพื่อทดสอบ Token
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleTestLineNotify}
+                      disabled={testSending || !lineNotifyToken}
+                      className="px-4 py-2 border border-slate-200 hover:border-emerald-400 text-slate-700 hover:text-emerald-700 font-bold rounded-sm text-xs transition cursor-pointer flex items-center gap-1.5 bg-slate-50 hover:bg-emerald-50 disabled:opacity-50"
+                    >
+                      {testSending ? (
+                        <>
+                          <div className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+                          <span>กำลังทดสอบส่ง...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>ทดสอบส่งข้อความ (Test Notify)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {testResult && (
+                    <div className={`mt-3 p-3 rounded-sm border text-xs font-sans flex items-start gap-1.5 ${
+                      testResult.success 
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                        : 'bg-rose-50 border-rose-200 text-rose-800'
+                    }`}>
+                      <div className="shrink-0 mt-0.5">
+                        {testResult.success ? <Check className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-rose-600" />}
+                      </div>
+                      <div>
+                        <strong className="block">{testResult.success ? 'ส่งข้อความสำเร็จ!' : 'ไม่สามารถส่งข้อความได้!'}</strong>
+                        <span className="text-[11px] leading-tight block mt-0.5">{testResult.message}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-sm text-xs font-bold font-sans flex items-center gap-2 cursor-pointer transition shadow-xs"
+                >
+                  <Save className="w-4 h-4" /> บันทึกการตั้งค่า LINE Notify
+                </button>
+              </div>
+            </form>
           )}
         </div>
       </div>

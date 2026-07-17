@@ -113,6 +113,41 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+// API endpoint to send a message via LINE Notify
+app.post("/api/line-notify", async (req, res) => {
+  const { message, token } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: "Message is required" });
+  }
+
+  if (!token) {
+    return res.status(400).json({ error: "LINE Notify Token is not configured" });
+  }
+
+  try {
+    const response = await fetch("https://notify-api.line.me/api/notify", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Bearer ${token}`
+      },
+      body: new URLSearchParams({ message })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      res.json({ success: true, data });
+    } else {
+      const errText = await response.text();
+      res.status(response.status).json({ error: `LINE Notify error (Status ${response.status}): ${errText}` });
+    }
+  } catch (error: any) {
+    console.error("LINE Notify API error:", error);
+    res.status(500).json({ error: error.message || "Failed to send LINE Notify" });
+  }
+});
+
 // Download full project code as ZIP
 app.get("/api/download-zip", (req, res) => {
   try {

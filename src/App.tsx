@@ -1425,10 +1425,83 @@ export default function App() {
     setPartnerCompanies(prev => prev.filter(item => item.id !== id));
   };
 
+  const triggerLineNotifyForSale = async (sale: SalesRecord, action: 'create' | 'update' | 'delete') => {
+    if (!systemSettings.lineNotifyEnabled || !systemSettings.lineNotifyToken) {
+      return;
+    }
+
+    let emoji = '💰';
+    let actionText = '';
+    if (action === 'create') {
+      emoji = '🎉';
+      actionText = 'บันทึกยอดขายใหม่สำเร็จ!';
+    } else if (action === 'update') {
+      emoji = '✏️';
+      actionText = 'อัปเดตข้อมูลยอดขายสำเร็จ!';
+    } else {
+      emoji = '❌';
+      actionText = 'ลบข้อมูลยอดขาย!';
+    }
+
+    // Format Date from YYYY-MM-DD to Thai format
+    let formattedDate = sale.date;
+    try {
+      const parts = sale.date.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0]) + 543;
+        const monthNames = [
+          "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+          "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
+        ];
+        const month = monthNames[parseInt(parts[1]) - 1];
+        const day = parseInt(parts[2]);
+        formattedDate = `${day} ${month} ${year}`;
+      }
+    } catch (e) {}
+
+    let paymentText = 'ไม่ได้ระบุ';
+    if (sale.paymentChannel === 'cash') paymentText = '💵 เงินสด';
+    else if (sale.paymentChannel === 'transfer') paymentText = '📱 โอนเงินผ่านธนาคาร';
+    else if (sale.paymentChannel === 'credit_card') paymentText = '💳 บัตรเครดิต';
+    else if (sale.paymentChannel === 'qr') paymentText = '📲 QR Code / PromptPay';
+    else if (sale.paymentChannel) paymentText = sale.paymentChannel;
+
+    const message = `
+${emoji} [รายงานยอดขายร้านค้า]
+📢 ${actionText}
+
+🧾 เลขที่ใบเสร็จ: ${sale.receiptNumber || 'ไม่ได้ระบุ'}
+📅 วันที่ขาย: ${formattedDate}
+👤 ลูกค้า: ${sale.customerName || 'ทั่วไป / walk-in'}
+💵 ยอดรวมสุทธิ: ${sale.amount.toLocaleString('th-TH')} บาท
+🏦 ช่องทางการรับเงิน: ${paymentText}
+📝 หมายเหตุ: ${sale.notes || 'ไม่มี'}
+⏱️ เวลาทำรายการ: ${new Date().toLocaleTimeString('th-TH')} น.
+
+---------------------------
+📱 ติดตามและบริหารระบบร้านค้าของคุณแบบ Real-time`;
+
+    try {
+      await fetch("/api/line-notify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message,
+          token: systemSettings.lineNotifyToken
+        })
+      });
+    } catch (e) {
+      console.error("Failed to trigger automated LINE Notify:", e);
+    }
+  };
+
   // Sales Ledger actions
   const handleAddSale = (newSale: SalesRecord) => {
     setSales(prev => [newSale, ...prev]);
     addAuditLog('CREATE', 'ยอดขายรายวันเดือนปี', `บันทึกยอดขายใหม่: วันที่ ${newSale.date} ยอดเงิน ${newSale.amount.toLocaleString()} บาท`);
+    triggerLineNotifyForSale(newSale, 'create');
   };
 
   const handleUpdateSale = (updatedSale: SalesRecord) => {
@@ -1437,12 +1510,14 @@ export default function App() {
       addAuditLog('UPDATE', 'ยอดขายรายวันเดือนปี', `แก้ไขยอดขาย วันที่ ${updatedSale.date}: ปรับยอดเงินจาก ${oldS.amount.toLocaleString()} เป็น ${updatedSale.amount.toLocaleString()} บาท`);
     }
     setSales(prev => prev.map(item => item.id === updatedSale.id ? updatedSale : item));
+    triggerLineNotifyForSale(updatedSale, 'update');
   };
 
   const handleDeleteSale = (id: string) => {
     const s = sales.find(item => item.id === id);
     if (s) {
       addAuditLog('DELETE', 'ยอดขายรายวันเดือนปี', `ลบยอดขาย วันที่ ${s.date} ยอดเงิน ${s.amount.toLocaleString()} บาท`);
+      triggerLineNotifyForSale(s, 'delete');
     }
     setSales(prev => prev.filter(item => item.id !== id));
   };
