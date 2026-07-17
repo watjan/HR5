@@ -125,26 +125,57 @@ app.post("/api/line-notify", async (req, res) => {
     return res.status(400).json({ error: "LINE Notify Token is not configured" });
   }
 
+  // Trim token to handle copy-paste whitespaces or newline characters
+  const cleanToken = token.trim();
+
   try {
     const response = await fetch("https://notify-api.line.me/api/notify", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Bearer ${token}`
+        "Authorization": `Bearer ${cleanToken}`
       },
-      body: new URLSearchParams({ message })
+      body: `message=${encodeURIComponent(message)}`
     });
 
     if (response.ok) {
       const data = await response.json();
       res.json({ success: true, data });
     } else {
-      const errText = await response.text();
-      res.status(response.status).json({ error: `LINE Notify error (Status ${response.status}): ${errText}` });
+      const status = response.status;
+      let errorMsg = `เกิดข้อผิดพลาดในการเชื่อมต่อ (รหัส ${status})`;
+      try {
+        const errJson = await response.json();
+        const lineMsg = errJson.message || '';
+        if (status === 401 || lineMsg.toLowerCase().includes('invalid')) {
+          errorMsg = `รหัสโทเค็น (LINE Notify Token) ไม่ถูกต้อง หรือหมดอายุ กรุณาตรวจสอบรหัสใหม่อีกครั้ง (Status 401)`;
+        } else if (status === 400) {
+          errorMsg = `ข้อมูลส่งไปยังไลน์ไม่ถูกต้อง หรือข้อความว่างเปล่าเกินไป (Status 400)`;
+        } else {
+          errorMsg = `LINE Notify Error: ${lineMsg} (Status ${status})`;
+        }
+      } catch (e) {
+        const errText = await response.text().catch(() => '');
+        if (status === 401) {
+          errorMsg = `รหัสโทเค็น (LINE Notify Token) ไม่ถูกต้อง กรุณาตรวจสอบและตั้งค่ารหัสโทเค็นใหม่อีกครั้ง (Status 401)`;
+        } else {
+          errorMsg = `ไม่สามารถส่งข้อความได้ (Status ${status}): ${errText || 'เซิร์ฟเวอร์ LINE ปฏิเสธการเชื่อมต่อ'}`;
+        }
+      }
+      res.status(status).json({ error: errorMsg });
     }
   } catch (error: any) {
     console.error("LINE Notify API error:", error);
-    res.status(500).json({ error: error.message || "Failed to send LINE Notify" });
+    let errorMessage = error.message || "Failed to send LINE Notify";
+    if (
+      error.code === 'ENOTFOUND' || 
+      (error.cause && error.cause.code === 'ENOTFOUND') || 
+      errorMessage.includes('ENOTFOUND') || 
+      errorMessage.includes('fetch failed')
+    ) {
+      errorMessage = "ไม่สามารถเชื่อมต่อระบบ LINE Notify ได้ (เกตเวย์หรือ DNS ขัดข้อง): เซิร์ฟเวอร์ Sandbox ของ AI Studio อาจถูกบล็อกหรือจำกัดไม่ให้เข้าถึงอินเทอร์เน็ตภายนอก จึงไม่สามารถแปลรหัสโฮสต์ notify-api.line.me ได้ ขออภัยในความไม่สะดวก";
+    }
+    res.status(500).json({ error: errorMessage });
   }
 });
 

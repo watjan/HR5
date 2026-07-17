@@ -118,7 +118,18 @@ export async function syncToDualDatabases(payload: SyncPayload, mysqlConfig?: My
     firebase: { success: false, error: "" }
   };
 
-  // 1. Always save a local copy as a backup (Omit counterDuties for strict Firebase storage)
+  // 1. Read existing local database copy to detect what actually changed
+  let previousPayload: any = null;
+  try {
+    if (fs.existsSync(LOCAL_DB_PATH)) {
+      const fileData = fs.readFileSync(LOCAL_DB_PATH, "utf8");
+      previousPayload = JSON.parse(fileData);
+    }
+  } catch (error) {
+    console.warn("Failed to read previous database payload for change detection:", error);
+  }
+
+  // 2. Always save a local copy as a backup (Omit counterDuties for strict Firebase storage)
   try {
     const parentDir = path.dirname(LOCAL_DB_PATH);
     if (!fs.existsSync(parentDir)) {
@@ -131,10 +142,11 @@ export async function syncToDualDatabases(payload: SyncPayload, mysqlConfig?: My
     console.error("Local backup save error:", error);
   }
 
-  // 2. Sync to Firebase Firestore
+  // 3. Sync to Firebase Firestore (ONLY write changed collections to optimize Spark quota usage)
   try {
     const db = getFirestoreInstance();
     const batch = writeBatch(db);
+    let queuedWritesCount = 0;
 
     for (const item of COLLECTION_KEYS) {
       let val = (payload as any)[item.key];
@@ -148,13 +160,41 @@ export async function syncToDualDatabases(payload: SyncPayload, mysqlConfig?: My
         }
       }
 
-      const docRef = doc(db, item.path);
-      batch.set(docRef, { data: val });
+      // Check change detection
+      let hasChanged = true;
+      if (previousPayload) {
+        let prevVal = previousPayload[item.key];
+        if (prevVal === undefined || prevVal === null) {
+          if (item.key === "systemSettings") {
+            prevVal = {};
+          } else if (item.key === "attendance") {
+            prevVal = {};
+          } else {
+            prevVal = [];
+          }
+        }
+        
+        // Quick structural JSON comparison
+        if (JSON.stringify(val) === JSON.stringify(prevVal)) {
+          hasChanged = false;
+        }
+      }
+
+      if (hasChanged) {
+        const docRef = doc(db, item.path);
+        batch.set(docRef, { data: val });
+        queuedWritesCount++;
+        console.log(`[Firestore Sync] Queueing change for collection: ${item.key}`);
+      }
     }
 
-    await batch.commit();
+    if (queuedWritesCount > 0) {
+      await batch.commit();
+      console.log(`Successfully synced ${queuedWritesCount} modified collections to Firebase Firestore!`);
+    } else {
+      console.log("[Firestore Sync] No collections changed. Skipped Firestore write batch to conserve free daily quota.");
+    }
     results.firebase.success = true;
-    console.log("Successfully synced all collections to Firebase Firestore!");
   } catch (error: any) {
     console.error("Firebase Firestore Sync Error:", error);
     results.firebase.success = false;
