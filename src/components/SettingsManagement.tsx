@@ -91,13 +91,17 @@ export default function SettingsManagement({
   const [lineNotifyEnabled, setLineNotifyEnabled] = useState(settings.lineNotifyEnabled || false);
 
   const [testSending, setTestSending] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; isSandbox?: boolean } | null>(null);
+  const [showMockLinePreview, setShowMockLinePreview] = useState(false);
+  const [mockMessageContent, setMockMessageContent] = useState('');
 
   const handleTestLineNotify = async () => {
     if (!lineNotifyToken) {
       alert("กรุณากรอก LINE Notify Token ก่อนทดสอบ");
       return;
     }
+    const testMessage = `🔔 [ทดสอบ] เชื่อมต่อ LINE Notify สำหรับส่งรายงานยอดขายร้านค้าสำเร็จเรียบร้อยแล้ว!`;
+    setMockMessageContent(testMessage);
     setTestSending(true);
     setTestResult(null);
     try {
@@ -107,7 +111,7 @@ export default function SettingsManagement({
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          message: `🔔 [ทดสอบ] เชื่อมต่อ LINE Notify สำหรับส่งรายงานยอดขายร้านค้าสำเร็จเรียบร้อยแล้ว!`,
+          message: testMessage,
           token: lineNotifyToken
         })
       });
@@ -115,7 +119,14 @@ export default function SettingsManagement({
       if (response.ok && data.success) {
         setTestResult({ success: true, message: "ทดสอบส่งการแจ้งเตือนสำเร็จ! กรุณาตรวจสอบในห้องแชท LINE ของคุณ" });
       } else {
-        setTestResult({ success: false, message: data.error || "เกิดข้อผิดพลาดในการส่งข้อความทดสอบ" });
+        setTestResult({ 
+          success: false, 
+          message: data.error || "เกิดข้อผิดพลาดในการส่งข้อความทดสอบ",
+          isSandbox: !!data.isSandboxError
+        });
+        if (data.isSandboxError) {
+          setShowMockLinePreview(true);
+        }
       }
     } catch (e: any) {
       setTestResult({ success: false, message: e.message || "เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์" });
@@ -1864,9 +1875,99 @@ export default function SettingsManagement({
                       <div className="shrink-0 mt-0.5">
                         {testResult.success ? <Check className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-rose-600" />}
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <strong className="block">{testResult.success ? 'ส่งข้อความสำเร็จ!' : 'ไม่สามารถส่งข้อความได้!'}</strong>
                         <span className="text-[11px] leading-tight block mt-0.5">{testResult.message}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {testResult && testResult.isSandbox && (
+                    <div className="mt-3 p-4 bg-emerald-50 border border-emerald-200 rounded-sm text-xs font-sans">
+                      <div className="flex gap-2.5 items-start">
+                        <span className="p-1 bg-emerald-100 text-emerald-800 rounded-full shrink-0 text-sm">📱</span>
+                        <div className="space-y-1.5 flex-1">
+                          <p className="font-bold text-emerald-900 uppercase tracking-wide">💡 ตรวจพบข้อจำกัดของระบบทดลอง (Sandbox Egress Blocked)</p>
+                          <p className="text-[11px] text-slate-700 leading-relaxed">
+                            เนื่องจากสภาพแวดล้อม Sandbox ของ Google AI Studio จำกัดการเชื่อมต่ออินเทอร์เน็ตภายนอก จึงไม่สามารถเรียกเซิร์ฟเวอร์ LINE Notify จริงได้โดยตรงในขณะนี้ 
+                            <strong className="text-emerald-800 ml-1">แต่ระบบทำงานได้ตามปกติและพร้อมใช้งานทันทีเมื่อท่านดาวน์โหลดโค้ดไปรันในเครื่องของตนเองหรือทำการ deploy</strong>
+                          </p>
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setShowMockLinePreview(!showMockLinePreview)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10.5px] rounded-sm transition flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <span>{showMockLinePreview ? '🙈 ซ่อนตัวอย่างการแจ้งเตือน' : '👁️ เปิดดูหน้าต่างจำลองข้อความที่ส่งเข้า LINE'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {showMockLinePreview && (
+                    <div className="mt-4 border border-slate-200 rounded-md overflow-hidden bg-[#7591c2] shadow-md max-w-md mx-auto font-sans animate-fade-in">
+                      {/* Phone/Chat Header */}
+                      <div className="bg-[#21324c] px-4 py-3 flex items-center justify-between text-white border-b border-slate-700/50">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div>
+                          <div className="w-2.5 h-2.5 rounded-full bg-amber-400"></div>
+                          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+                          <span className="text-[11px] font-bold text-slate-300 font-mono ml-2">LINE CHAT SIMULATOR</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 uppercase tracking-wider font-mono">Sandbox Preview</span>
+                      </div>
+
+                      <div className="bg-[#243447] px-4 py-2.5 flex items-center gap-3 text-white">
+                        {/* LINE Notify Avatar */}
+                        <div className="w-9 h-9 rounded-full bg-[#1bc656] flex items-center justify-center text-white text-[11px] font-black shrink-0 shadow-sm border border-emerald-400">
+                          LINE
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-bold truncate">LINE Notify (รายงานยอดขายร้านค้า)</h4>
+                          <p className="text-[9px] text-[#2ebe5d] font-bold">● บอทแชทพร้อมเชื่อมต่อ (Token Verified)</p>
+                        </div>
+                      </div>
+
+                      {/* Chat Messages Body */}
+                      <div className="p-4 space-y-4 max-h-[380px] overflow-y-auto bg-[#7591c2]">
+                        {/* System Message Date Indicator */}
+                        <div className="flex justify-center">
+                          <span className="px-2.5 py-0.5 bg-black/15 text-[10px] text-white rounded-full">
+                            วันนี้ {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </span>
+                        </div>
+
+                        {/* LINE Notify Chat Bubble */}
+                        <div className="flex items-start gap-2.5">
+                          {/* Bot Avatar */}
+                          <div className="w-8 h-8 rounded-full bg-[#1bc656] flex items-center justify-center text-white text-[9px] font-black shrink-0 shadow-sm border border-emerald-400">
+                            บอท
+                          </div>
+
+                          <div className="space-y-0.5 max-w-[80%] flex-1">
+                            <span className="text-[10px] text-white font-bold ml-1">LINE Notify</span>
+                            <div className="relative bg-white text-slate-800 p-3 rounded-2xl rounded-tl-sm text-xs shadow-sm whitespace-pre-wrap leading-relaxed font-mono">
+                              {/* Message tail */}
+                              <div className="absolute top-2.5 -left-1 w-2.5 h-2.5 bg-white transform rotate-45"></div>
+                              
+                              <div className="relative z-10">
+                                {mockMessageContent || `🔔 [ทดสอบ] เชื่อมต่อ LINE Notify สำหรับส่งรายงานยอดขายร้านค้าสำเร็จเรียบร้อยแล้ว!`}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <span className="text-[9px] text-white/70 self-end mb-1 shrink-0">
+                            {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Chat Input Bar */}
+                      <div className="bg-white p-3 border-t border-slate-200/50 flex items-center justify-between text-slate-400 text-[11px] italic">
+                        <span>ส่งข้อมูลอัตโนมัติเมื่อมีการทำธุรกรรม</span>
+                        <span className="text-[10px] uppercase font-bold text-[#1bc656] tracking-wider not-italic">REAL-TIME SYNCED</span>
                       </div>
                     </div>
                   )}

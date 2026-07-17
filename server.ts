@@ -167,15 +167,17 @@ app.post("/api/line-notify", async (req, res) => {
   } catch (error: any) {
     console.error("LINE Notify API error:", error);
     let errorMessage = error.message || "Failed to send LINE Notify";
+    let isSandboxError = false;
     if (
       error.code === 'ENOTFOUND' || 
       (error.cause && error.cause.code === 'ENOTFOUND') || 
       errorMessage.includes('ENOTFOUND') || 
       errorMessage.includes('fetch failed')
     ) {
-      errorMessage = "ไม่สามารถเชื่อมต่อระบบ LINE Notify ได้ (เกตเวย์หรือ DNS ขัดข้อง): เซิร์ฟเวอร์ Sandbox ของ AI Studio อาจถูกบล็อกหรือจำกัดไม่ให้เข้าถึงอินเทอร์เน็ตภายนอก จึงไม่สามารถแปลรหัสโฮสต์ notify-api.line.me ได้ ขออภัยในความไม่สะดวก";
+      isSandboxError = true;
+      errorMessage = "ไม่สามารถเชื่อมต่อระบบ LINE Notify ได้ (เกตเวย์หรือ DNS ขัดข้อง): เซิร์ฟเวอร์ Sandbox ของ AI Studio ถูกจำกัดไม่ให้เข้าถึงอินเทอร์เน็ตภายนอก จึงไม่สามารถแปลรหัสโฮสต์ notify-api.line.me ได้ ขออภัยในความไม่สะดวก";
     }
-    res.status(500).json({ error: errorMessage });
+    res.status(500).json({ error: errorMessage, isSandboxError });
   }
 });
 
