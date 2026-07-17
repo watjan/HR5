@@ -128,6 +128,14 @@ app.post("/api/line-notify", async (req, res) => {
   // Trim token to handle copy-paste whitespaces or newline characters
   const cleanToken = token.trim();
 
+  // Validate that the token is valid ASCII to prevent ByteString TypeErrors on fetch headers
+  const isAscii = /^[\x20-\x7E]*$/.test(cleanToken);
+  if (!isAscii) {
+    return res.status(400).json({ 
+      error: "รหัสโทเค็น (LINE Notify Token) ไม่ถูกต้อง เนื่องจากมีอักษรภาษาไทยหรืออักขระพิเศษ กรุณาใช้รหัส Token ภาษาอังกฤษยาว 43 ตัวอักษรที่คัดลอกมาจากระบบ LINE เท่านั้น" 
+    });
+  }
+
   try {
     const response = await fetch("https://notify-api.line.me/api/notify", {
       method: "POST",
