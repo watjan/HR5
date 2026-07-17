@@ -23,8 +23,11 @@ import {
   X,
   FileSpreadsheet,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  FileDown
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { Employee, LeaveRequest, CounterDuty, CounterDutyAssignment } from '../types';
 
 interface CounterDutyManagementProps {
@@ -530,39 +533,115 @@ export default function CounterDutyManagement({
     window.print();
   };
 
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  const handleExportPDF = async () => {
+    const element = document.getElementById('duty-calendar-table-container');
+    if (!element) {
+      triggerAlert('error', 'ไม่พบตารางเวรสำหรับการส่งออก PDF');
+      return;
+    }
+
+    setIsExportingPdf(true);
+    triggerAlert('success', 'กำลังเตรียมไฟล์ PDF กรุณารอสักครู่...');
+
+    try {
+      // Temporarily hide any focus or editing rings or outline effects during capture
+      element.classList.add('pdf-capture-mode');
+
+      // Add a small delay to let UI adjust if needed
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const canvas = await html2canvas(element, {
+        scale: 2, // 2x resolution for super crisp text & grids
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        ignoreElements: (el) => {
+          // Ignore anything marked no-print
+          return el.classList.contains('no-print');
+        }
+      });
+
+      element.classList.remove('pdf-capture-mode');
+
+      const imgData = canvas.toDataURL('image/png');
+      
+      // Landscape A4 PDF dimensions (297mm x 210mm)
+      const pdf = new jsPDF('l', 'mm', 'a4');
+      const pdfWidth = 297;
+      const pdfHeight = 210;
+
+      // Calculate sizes to maintain aspect ratio with nice margins
+      const margin = 12; // 12mm margin
+      const contentWidth = pdfWidth - (margin * 2); // 273mm
+      const contentHeight = (canvas.height * contentWidth) / canvas.width;
+
+      // Vertically center the content if it fits easily
+      let yOffset = margin;
+      if (contentHeight < pdfHeight - (margin * 2)) {
+        yOffset = (pdfHeight - contentHeight) / 2;
+      }
+
+      pdf.addImage(imgData, 'PNG', margin, yOffset, contentWidth, contentHeight, undefined, 'FAST');
+      
+      const fileName = `ตารางเวรเฝ้าเคาเตอร์_${TH_MONTHS[parseInt(currentSchedule?.month || '01') - 1]}_${currentSchedule?.year || 2026}.pdf`;
+      
+      // Use Blob URL download trigger - highly compatible with iframe sandboxes
+      try {
+        const blob = pdf.output('blob');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 150);
+      } catch (blobError) {
+        console.warn('Blob download rejected, falling back to standard pdf.save()', blobError);
+        pdf.save(fileName);
+      }
+      
+      triggerAlert('success', 'ดาวน์โหลดไฟล์ PDF เรียบร้อยแล้ว! (หากไม่มีการดาวน์โหลด กรุณาใช้ปุ่ม "พิมพ์ / บันทึกเป็น PDF" ข้างกัน)');
+    } catch (error) {
+      console.error('PDF Generation Error:', error);
+      triggerAlert('error', 'เกิดข้อผิดพลาดในการสร้างไฟล์ PDF');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       
-      {/* Print Styles */}
+      {/* Print Styles - Perfect isolation for duty-calendar-table-container */}
       <style>{`
         @media print {
-          body {
-            background-color: white !important;
-            color: black !important;
-            font-size: 11px !important;
+          body * {
+            visibility: hidden !important;
+          }
+          #duty-calendar-table-container, #duty-calendar-table-container * {
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          #duty-calendar-table-container {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
           }
           .no-print {
             display: none !important;
           }
-          .print-full-width {
-            width: 100% !important;
-            max-width: 100% !important;
-            grid-column: span 3 / span 3 !important;
-          }
-          .print-border-thick {
-            border: 2px solid #000 !important;
-          }
-          .print-p-0 {
-            padding: 0 !important;
-          }
-          .print-shadow-none {
-            box-shadow: none !important;
-          }
           .print-grid {
             grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
-          }
-          header, nav, aside, footer, button, .alert-box {
-            display: none !important;
           }
         }
       `}</style>
@@ -599,6 +678,14 @@ export default function CounterDutyManagement({
         <div className="flex items-center gap-2">
           {currentSchedule && (
             <>
+              <button 
+                onClick={handleExportPDF}
+                disabled={isExportingPdf}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-sm flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FileDown className="w-4 h-4" /> 
+                {isExportingPdf ? 'กำลังสร้าง PDF...' : 'ดาวน์โหลด PDF (เฉพาะตารางเวร)'}
+              </button>
               <button 
                 onClick={handlePrint}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-sm flex items-center justify-center gap-1.5 border border-slate-200 transition cursor-pointer"
@@ -947,102 +1034,113 @@ export default function CounterDutyManagement({
           {currentSchedule ? (
             <div className="bg-white p-6 rounded-sm border border-slate-200 space-y-6 shadow-sm print-border-thick print-p-0 print-shadow-none">
               
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 print-p-0">
-                <div>
-                  <h2 className="text-base font-bold text-slate-800">
-                    ตารางปฏิบัติการเฝ้าเคาเตอร์ ประจำเดือน{TH_MONTHS[parseInt(currentSchedule.month) - 1]} {currentSchedule.year}
-                  </h2>
-                  <p className="text-[11px] text-slate-500 mt-0.5 no-print">
-                    * สามารถคลิกที่กล่องวันที่เพื่อทำการแก้ไขสลับตัวบุคคลปฏิบัติหน้าที่จริงด้วยตนเองได้ทันที
-                  </p>
-                </div>
-              </div>
-
-              {/* Legend */}
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500 bg-slate-50 p-3 rounded-sm border border-slate-100 no-print">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
-                  <span className="font-bold">เวรปฏิบัติหน้าที่ปกติ</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                  <span className="font-bold">เวรทดแทน / สลับด้วยเหตุจำเป็น</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-                  <span className="font-bold">วันลา / วันหยุดบริษัท</span>
-                </div>
-              </div>
-
-              {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-1 print-grid">
-                {WEEKDAYS.map((day, idx) => (
-                  <div key={idx} className="py-2 text-center text-xs font-bold text-slate-600 bg-slate-100/60 rounded-sm border border-slate-200">
-                    {day}
+              <div id="duty-calendar-table-container" className="bg-white p-4 rounded-sm space-y-6">
+                
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 print-p-0">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-800">
+                      ตารางปฏิบัติการเฝ้าเคาเตอร์ ประจำเดือน{TH_MONTHS[parseInt(currentSchedule.month) - 1]} {currentSchedule.year}
+                    </h2>
+                    <p className="text-[11px] text-slate-500 mt-0.5 no-print">
+                      * สามารถคลิกที่กล่องวันที่เพื่อทำการแก้ไขสลับตัวบุคคลปฏิบัติหน้าที่จริงด้วยตนเองได้ทันที
+                    </p>
                   </div>
-                ))}
+                  <button
+                    onClick={handleExportPDF}
+                    disabled={isExportingPdf}
+                    className="no-print self-start sm:self-center px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold rounded-sm flex items-center gap-1 border border-rose-200 transition cursor-pointer disabled:opacity-50"
+                  >
+                    <FileDown className="w-3.5 h-3.5" /> 
+                    {isExportingPdf ? 'กำลังโหลด...' : 'โหลด PDF ตารางเวร'}
+                  </button>
+                </div>
 
-                {calendarDays.map((dayObj, idx) => {
-                  if (!dayObj) {
-                    return <div key={`empty-${idx}`} className="bg-slate-50/50 aspect-square border border-dashed border-slate-100 rounded-sm"></div>;
-                  }
+                {/* Legend */}
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500 bg-slate-50 p-3 rounded-sm border border-slate-100 no-print">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+                    <span className="font-bold">เวรปฏิบัติหน้าที่ปกติ</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                    <span className="font-bold">เวรทดแทน / สลับด้วยเหตุจำเป็น</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                    <span className="font-bold">วันลา / วันหยุดบริษัท</span>
+                  </div>
+                </div>
 
-                  const { day, dateStr, assignment } = dayObj;
-                  const date = new Date(dateStr + "T00:00:00");
-                  const dayOfWeek = date.getDay();
-                  
-                  // Check holiday on this day for the assigned employee
-                  const empId = assignment?.employeeId || "";
-                  const holidayCheck = empId ? checkDayOffOrLeave(empId, dateStr) : { isOff: false, reason: "" };
-                  const isCompanyHoliday = !!companyHolidays[dateStr];
+                {/* Calendar Grid */}
+                <div className="grid grid-cols-7 gap-1 print-grid">
+                  {WEEKDAYS.map((day, idx) => (
+                    <div key={idx} className="py-2 text-center text-xs font-bold text-slate-600 bg-slate-100/60 rounded-sm border border-slate-200">
+                      {day}
+                    </div>
+                  ))}
 
-                  return (
-                    <div 
-                      key={dateStr} 
-                      onClick={() => setEditingDate(dateStr)}
-                      className={`relative p-2.5 border aspect-square rounded-sm flex flex-col justify-between transition cursor-pointer group hover:border-indigo-400 hover:shadow-sm ${
-                        isCompanyHoliday
-                          ? 'bg-rose-50/40 border-rose-200'
-                          : assignment?.isSubstitute 
-                            ? 'bg-amber-50/50 border-amber-300' 
-                            : 'bg-white border-slate-200'
-                      }`}
-                    >
-                      {/* Date label */}
-                      <div className="flex justify-between items-center">
-                        <span className={`text-xs font-bold ${isCompanyHoliday ? 'text-rose-600 font-black' : 'text-slate-700'}`}>
-                          {day}
-                        </span>
-                        {isCompanyHoliday && (
-                          <span className="text-[7px] bg-rose-100 text-rose-700 font-bold px-1 rounded-sm truncate max-w-[45px] no-print" title={companyHolidays[dateStr]}>
-                            หยุดบริษัท
+                  {calendarDays.map((dayObj, idx) => {
+                    if (!dayObj) {
+                      return <div key={`empty-${idx}`} className="bg-slate-50/50 aspect-square border border-dashed border-slate-100 rounded-sm"></div>;
+                    }
+
+                    const { day, dateStr, assignment } = dayObj;
+                    const date = new Date(dateStr + "T00:00:00");
+                    const dayOfWeek = date.getDay();
+                    
+                    // Check holiday on this day for the assigned employee
+                    const empId = assignment?.employeeId || "";
+                    const holidayCheck = empId ? checkDayOffOrLeave(empId, dateStr) : { isOff: false, reason: "" };
+                    const isCompanyHoliday = !!companyHolidays[dateStr];
+
+                    return (
+                      <div 
+                        key={dateStr} 
+                        onClick={() => setEditingDate(dateStr)}
+                        className={`relative p-2.5 border aspect-square rounded-sm flex flex-col justify-between transition cursor-pointer group hover:border-indigo-400 hover:shadow-sm ${
+                          isCompanyHoliday
+                            ? 'bg-rose-50/40 border-rose-200'
+                            : assignment?.isSubstitute 
+                              ? 'bg-amber-50/50 border-amber-300' 
+                              : 'bg-white border-slate-200'
+                        }`}
+                      >
+                        {/* Date label */}
+                        <div className="flex justify-between items-center">
+                          <span className={`text-xs font-bold ${isCompanyHoliday ? 'text-rose-600 font-black' : 'text-slate-700'}`}>
+                            {day}
                           </span>
-                        )}
-                      </div>
-
-                      {/* Assignment name */}
-                      {assignment ? (
-                        <div className="mt-1">
-                          <div className={`text-xs font-bold truncate leading-tight ${assignment.isSubstitute ? 'text-amber-700' : 'text-slate-800'}`}>
-                            {assignment.employeeName}
-                          </div>
-                          {assignment.isSubstitute && (
-                            <div className="text-[8px] text-amber-600 font-semibold mt-0.5 truncate flex items-center gap-0.5" title={`ทดแทนเนื่องจาก: ${assignment.skipReason || assignment.originalEmployeeName}`}>
-                              <Info className="w-2.5 h-2.5 shrink-0" /> แทน{assignment.originalEmployeeName?.split(' ')[0]}
-                            </div>
+                          {isCompanyHoliday && (
+                            <span className="text-[7px] bg-rose-100 text-rose-700 font-bold px-1 rounded-sm truncate max-w-[45px] no-print" title={companyHolidays[dateStr]}>
+                              หยุดบริษัท
+                            </span>
                           )}
                         </div>
-                      ) : (
-                        <span className="text-[9px] text-slate-400 italic">ไม่มีข้อมูลเวร</span>
-                      )}
 
-                      {/* Tooltip on hover */}
-                      <div className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 transition no-print">
-                        <Edit2 className="w-3 h-3 text-slate-400 hover:text-indigo-600" />
+                        {/* Assignment name */}
+                        {assignment ? (
+                          <div className="mt-1">
+                            <div className={`text-xs font-bold truncate leading-tight ${assignment.isSubstitute ? 'text-amber-700' : 'text-slate-800'}`}>
+                              {assignment.employeeName}
+                            </div>
+                            {assignment.isSubstitute && (
+                              <div className="text-[8px] text-amber-600 font-semibold mt-0.5 truncate flex items-center gap-0.5" title={`ทดแทนเนื่องจาก: ${assignment.skipReason || assignment.originalEmployeeName}`}>
+                                <Info className="w-2.5 h-2.5 shrink-0" /> แทน{assignment.originalEmployeeName?.split(' ')[0]}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[9px] text-slate-400 italic">ไม่มีข้อมูลเวร</span>
+                        )}
+
+                        {/* Tooltip on hover */}
+                        <div className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 transition no-print">
+                          <Edit2 className="w-3 h-3 text-slate-400 hover:text-indigo-600" />
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Override / Manual Swap Panel */}
