@@ -404,15 +404,18 @@ export default function App() {
           let isMigratedToMysql = false;
 
           if (result.success && result.data) {
-            const hasMysqlData = result.data.mysql && 
-              (result.data.mysql.employees?.length > 0 || 
-               result.data.mysql.leaves?.length > 0 || 
-               result.data.mysql.payroll?.length > 0);
+            const checkHasData = (payload: any) => {
+              if (!payload) return false;
+              // Check if any array collection contains at least one record
+              return Object.entries(payload).some(([key, value]) => {
+                if (key === 'systemSettings' || key === 'attendance') return false; // skip systemSettings / attendance objects
+                if (Array.isArray(value)) return value.length > 0;
+                return false;
+              });
+            };
 
-            const hasFirebaseData = result.data.firebase && 
-              (result.data.firebase.employees?.length > 0 || 
-               result.data.firebase.leaves?.length > 0 || 
-               result.data.firebase.payroll?.length > 0);
+            const hasMysqlData = checkHasData(result.data.mysql);
+            const hasFirebaseData = checkHasData(result.data.firebase);
 
             if (result.data.mysql && !result.data.mysqlError) {
               if (!hasMysqlData && hasFirebaseData) {

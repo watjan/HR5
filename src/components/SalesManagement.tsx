@@ -137,7 +137,7 @@ export default function SalesManagement({
     return [...selectedYears].sort((a, b) => a - b);
   }, [selectedYears]);
 
-  // Dynamic helper functions linked to the live Firebase database:
+  // Dynamic helper functions linked to the live Hostinger MySQL database:
   const getRegularSalesSum = (yr: number, monthIdx: number): number => {
     const monthStr = (monthIdx + 1).toString().padStart(2, '0');
     const targetPrefix = `${yr}-${monthStr}`;
@@ -1374,7 +1374,7 @@ export default function SalesManagement({
                           <span>เลือกปี พ.ศ. ที่ต้องการเปรียบเทียบ (เปรียบเทียบกี่ปีก็ได้)</span>
                         </h4>
                         <p className="text-[11px] text-slate-500 leading-relaxed max-w-2xl">
-                          ระบบจะดึงยอดขายจริงทั้งหมดตามเงื่อนไขจากฐานข้อมูล Firebase Firestore แบบ Real-time มาคำนวณและวิเคราะห์แยกรายเดือนโดยอัตโนมัติ
+                          ระบบจะดึงยอดขายจริงทั้งหมดตามเงื่อนไขจากฐานข้อมูลหลัก Hostinger MySQL แบบ Real-time มาคำนวณและวิเคราะห์แยกรายเดือนโดยอัตโนมัติ
                         </p>
                       </div>
 
@@ -1436,7 +1436,7 @@ export default function SalesManagement({
                         <span>รายงานจำลองและเปรียบเทียบยอดขายสุทธิสะสมรายเดือน</span>
                       </h4>
                       <p className="text-[11px] text-slate-300 leading-relaxed max-w-2xl">
-                        ตารางคำนวณและวิเคราะห์เปรียบเทียบการเติบโตแบบรายเดือนของปีที่เลือกจริงจากฐานข้อมูล คุณสามารถปรับแก้เป้าหมายหรือปรับตัวเลขเพื่อเก็บลงฐานข้อมูล Firebase ได้
+                        ตารางคำนวณและวิเคราะห์เปรียบเทียบการเติบโตแบบรายเดือนของปีที่เลือกจริงจากฐานข้อมูล คุณสามารถปรับแก้เป้าหมายหรือปรับตัวเลขเพื่อเก็บลงฐานข้อมูลหลัก Hostinger MySQL ได้
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2 shrink-0">
@@ -1448,7 +1448,7 @@ export default function SalesManagement({
                             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-sans bg-emerald-600 text-white border border-emerald-700 rounded-sm hover:bg-emerald-700 shadow-md cursor-pointer transition"
                           >
                             <Check className="w-3.5 h-3.5" />
-                            <span>บันทึกข้อมูล (Save to Firebase)</span>
+                            <span>บันทึกข้อมูล (Save to Hostinger MySQL)</span>
                           </button>
                           <button
                             type="button"
@@ -1713,7 +1713,7 @@ export default function SalesManagement({
 
                   {/* Tips */}
                   <p className="text-[10px] text-slate-400 italic font-sans leading-relaxed">
-                    * หมายเหตุ: อัตราการเปลี่ยนแปลงคำนวณแบบ Year-over-Year (YoY) เปรียบเทียบกับปีก่อนหน้าที่เลือกไว้ในระบบ การแก้ไขข้อมูลจะสร้างหรืออัปเดตเอกสารยอดขายจริงในฐานข้อมูล Firebase Firestore โดยอัตโนมัติ
+                    * หมายเหตุ: อัตราการเปลี่ยนแปลงคำนวณแบบ Year-over-Year (YoY) เปรียบเทียบกับปีก่อนหน้าที่เลือกไว้ในระบบ การแก้ไขข้อมูลจะสร้างหรืออัปเดตเอกสารยอดขายจริงในฐานข้อมูลหลัก Hostinger MySQL โดยอัตโนมัติ
                   </p>
                 </div>
               )}
