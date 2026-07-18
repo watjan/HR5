@@ -598,6 +598,77 @@ export default function BackupRestoreManagement({
     }
   };
 
+  // Copy Firestore database directly into Hostinger MySQL
+  const handleCopyFirebaseToMysql = async () => {
+    if (!remoteDbData || !remoteDbData.firebase) {
+      alert('ไม่พบข้อมูลที่จะนำเข้าจากคลาวด์ Firebase Firestore');
+      return;
+    }
+
+    if (window.confirm('⚠️ ยืนยันคัดลอกข้อมูลทั้งหมดจาก Google Cloud Firebase Firestore ไปเขียนทับใส่ Hostinger MySQL (ตัวหลัก) หรือไม่?')) {
+      setLoadingDbData(true);
+      try {
+        const response = await fetch('/api/db/copy-firebase-to-mysql', {
+          method: 'POST',
+        });
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+          // Trigger local state import as well, so that the client matches the copied database!
+          const sourceData = remoteDbData.firebase;
+          const formattedPayload = {
+            hr_employees: sourceData.employees || [],
+            hr_leaves: sourceData.leaves || [],
+            hr_payroll: sourceData.payroll || [],
+            hr_sales: sourceData.sales || [],
+            hr_cashflow: sourceData.cashflow || [],
+            hr_cheques: sourceData.cheques || [],
+            hr_partner_billings: sourceData.partnerBillings || [],
+            hr_audit_logs: sourceData.auditLogs || [],
+            hr_jobs: sourceData.jobs || [],
+            hr_applicants: sourceData.applicants || [],
+            hr_evaluations: sourceData.evaluations || [],
+            hr_attendance: sourceData.attendance || {},
+            hr_dayoff_swaps: sourceData.dayoffSwaps || [],
+            hr_partner_companies: sourceData.partnerCompanies || [],
+            hr_counter_duties: sourceData.counterDuties || [],
+            hr_system_settings: sourceData.systemSettings || {
+              companyName: "บริษัท ซิงโครไนซ์ จำกัด",
+              taxId: "0105566000012",
+              address: "123 อาคารสิริ พญาไท กรุงเทพฯ 10400",
+              payrollDate: 25,
+              socialSecurityRate: 5,
+              taxRate: 3,
+              currency: "THB"
+            }
+          };
+          onImportAllData(JSON.stringify(formattedPayload));
+
+          setNotification({ 
+            type: 'success', 
+            message: '🎉 คัดลอกข้อมูลจาก Firebase Firestore ลง Hostinger MySQL (ตัวหลัก) และเชื่อมพิกัดระบบสำเร็จแล้ว!' 
+          });
+          
+          setTimeout(() => {
+            window.location.reload();
+          }, 1500);
+        } else {
+          setNotification({ 
+            type: 'error', 
+            message: `เกิดข้อผิดพลาด: ${result.error || 'ไม่สามารถบันทึกข้อมูลลง MySQL ได้'}` 
+          });
+        }
+      } catch (error: any) {
+        setNotification({ 
+          type: 'error', 
+          message: `ล้มเหลวในการเชื่อมโยงพิกัดข้อมูล: ${error.message || error}` 
+        });
+      } finally {
+        setLoadingDbData(false);
+      }
+    }
+  };
+
   // Restore/Import selected DB source into browser
   const handleRestoreFromRemote = (source: 'mysql' | 'firebase') => {
     if (!remoteDbData || !remoteDbData[source]) {
@@ -1302,12 +1373,23 @@ export default function BackupRestoreManagement({
                       <div className="text-[10.5px] text-slate-600 space-y-1 font-sans">
                         <p>👥 พนักงาน: {remoteDbData.firebase.employees?.length || 0} คน | 📅 บันทึกใบลา: {remoteDbData.firebase.leaves?.length || 0} รายการ</p>
                         <p>💰 จ่ายเงินเดือน: {remoteDbData.firebase.payroll?.length || 0} รายการ | 💵 รับ-จ่าย: {remoteDbData.firebase.cashflow?.length || 0} รายการ</p>
-                        <button
-                          onClick={() => handleRestoreFromRemote('firebase')}
-                          className="w-full mt-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10.5px] rounded-xs flex items-center justify-center gap-1 cursor-pointer transition"
-                        >
-                          <ArrowRight className="w-3.5 h-3.5" /> ติดตั้งและแทนที่ระบบด้วยข้อมูลจากคลาวด์
-                        </button>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1.5">
+                          <button
+                            onClick={() => handleRestoreFromRemote('firebase')}
+                            className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10.5px] rounded-xs flex items-center justify-center gap-1 cursor-pointer transition"
+                            title="นำข้อมูลจาก Cloud Firestore ลงมาติดตั้งใช้งานบนเบราว์เซอร์เครื่องนี้"
+                          >
+                            <ArrowRight className="w-3.5 h-3.5" /> ติดตั้งข้อมูลจากคลาวด์ลงเครื่อง
+                          </button>
+                          <button
+                            onClick={handleCopyFirebaseToMysql}
+                            disabled={loadingDbData}
+                            className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10.5px] rounded-xs flex items-center justify-center gap-1 cursor-pointer transition disabled:opacity-50"
+                            title="ดึงข้อมูลจาก Cloud Firebase Firestore ไปเขียนทับลงในฐานข้อมูลหลัก Hostinger MySQL ทันที"
+                          >
+                            <Database className="w-3.5 h-3.5" /> คัดลอกไป Hostinger MySQL (ตัวหลัก)
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <p className="text-[10.5px] text-slate-400 font-sans">ตรวจไม่พบข้อมูลสำรอง หรือไม่ได้ตั้งสิทธิ์บนเซิร์ฟเวอร์</p>

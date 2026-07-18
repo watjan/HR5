@@ -455,6 +455,41 @@ app.post("/api/db/clear", async (req, res) => {
   }
 });
 
+// POST DB Copy Firebase to MySQL - fetch Firebase Firestore data and copy/migrate it directly to Hostinger MySQL
+app.post("/api/db/copy-firebase-to-mysql", async (req, res) => {
+  const mysqlConfig = getMySQLConfig();
+  if (!mysqlConfig || !mysqlConfig.host) {
+    return res.status(400).json({ success: false, error: "Hostinger MySQL ไม่ได้รับการตั้งค่าหรือยังไม่ได้เชื่อมต่อโฮสต์" });
+  }
+
+  try {
+    // 1. Fetch remote dual database payload
+    const remoteData = await loadFromDualDatabases(mysqlConfig);
+    if (!remoteData.firebase) {
+      return res.status(404).json({ success: false, error: "ตรวจไม่พบข้อมูลบนคลาวด์ Firebase Firestore หรือเกิดปัญหาโควตาเต็ม" });
+    }
+
+    // 2. Synchronize the Firebase dataset directly into Hostinger MySQL
+    const syncResults = await syncToDualDatabases(remoteData.firebase, mysqlConfig);
+
+    if (syncResults.mysql.success) {
+      res.json({ 
+        success: true, 
+        message: "คัดลอกข้อมูลจาก Firebase Firestore ไปยัง Hostinger MySQL สำเร็จ!",
+        results: syncResults
+      });
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        error: syncResults.mysql.error || "ไม่สามารถเขียนข้อมูลลงในฐานข้อมูล Hostinger MySQL ได้" 
+      });
+    }
+  } catch (error: any) {
+    console.error("Copy Firebase to MySQL Error:", error);
+    res.status(500).json({ success: false, error: error.message || "Failed to copy Firebase to MySQL" });
+  }
+});
+
 // Integrate Vite as Middleware
 async function initializeServer() {
   const isProduction = process.env.NODE_ENV === "production";
