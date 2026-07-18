@@ -66,7 +66,7 @@ export default function DatabaseInspector({
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Database source states
-  const [dataSource, setDataSource] = useState<'local' | 'firebase' | 'mysql'>('firebase');
+  const [dataSource, setDataSource] = useState<'local' | 'firebase' | 'mysql'>('mysql');
   const [isLSOn, setIsLSOn] = useState(() => isLocalStorageEnabled());
   const [remoteData, setRemoteData] = useState<any>(null);
   const [dbConfig, setDbConfig] = useState<any>(null);
@@ -487,7 +487,7 @@ export default function DatabaseInspector({
         
         <div className="flex items-center gap-2 self-stretch md:self-auto font-mono">
           <span className="px-2.5 py-1 bg-indigo-50 border border-indigo-150 text-indigo-700 text-[10px] font-bold rounded-sm uppercase tracking-wider">
-            {dataSource === 'local' ? 'LocalStorage Powered' : 'Firebase Firestore Live'}
+            {dataSource === 'local' ? 'LocalStorage Powered' : dataSource === 'mysql' ? 'Hostinger MySQL Live' : 'Firebase Firestore Live'}
           </span>
           <span className="px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold rounded-sm uppercase tracking-wider">
             Total Tables: {tablesMetadata.length}
