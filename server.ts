@@ -12,7 +12,10 @@ import {
   getFirebaseConfig, 
   syncToDualDatabases, 
   loadFromDualDatabases,
-  clearFirestoreDatabase
+  clearFirestoreDatabase,
+  getMySQLTableStatus,
+  createMySQLTables,
+  beautifyMySQLError
 } from "./server/db";
 
 dotenv.config();
@@ -330,7 +333,7 @@ app.get("/api/db/config", async (req, res) => {
         await connection.end();
       } catch (err: any) {
         statuses.mysql.connected = false;
-        statuses.mysql.error = err.message || "Failed to connect to MySQL";
+        statuses.mysql.error = beautifyMySQLError(err, mysqlConfig.host);
       }
     } else {
       statuses.mysql.error = "ยังไม่มีการตั้งค่าเชื่อมต่อ Hostinger MySQL (กรุณากรอกข้อมูลโฮสต์)";
@@ -409,11 +412,33 @@ app.post("/api/db/config", async (req, res) => {
       message: "เชื่อมต่อกับฐานข้อมูล Hostinger MySQL สำเร็จเรียบร้อยแล้วและตารางพร้อมใช้งาน!" 
     });
   } catch (err: any) {
-    console.error("MySQL connection save check error:", err);
+    console.warn("MySQL connection save check error:", err.message);
     res.json({ 
       success: true, // we still return success to save the configuration, but add a warning message about connection failure so they can fix credentials
-      warning: `บันทึกข้อมูลการตั้งค่าสำเร็จแล้ว แต่ไม่สามารถทดสอบเชื่อมต่อ Host ได้: ${err.message || err}`
+      warning: `บันทึกข้อมูลการตั้งค่าสำเร็จแล้ว แต่ไม่สามารถทดสอบเชื่อมต่อ Host ได้: ${beautifyMySQLError(err, config.host)}`
     });
+  }
+});
+
+// GET Database Ledger status - inspect Hostinger MySQL tables
+app.get("/api/db/ledger", async (req, res) => {
+  try {
+    const result = await getMySQLTableStatus();
+    res.json(result);
+  } catch (error: any) {
+    console.error("Get database ledger status error:", error);
+    res.status(500).json({ success: false, error: error.message || "Failed to inspect database tables" });
+  }
+});
+
+// POST Database Ledger create - auto-create all missing relational tables in MySQL
+app.post("/api/db/ledger/create", async (req, res) => {
+  try {
+    const result = await createMySQLTables();
+    res.json(result);
+  } catch (error: any) {
+    console.error("Create database tables error:", error);
+    res.status(500).json({ success: false, error: error.message || "Failed to create missing database tables" });
   }
 });
 

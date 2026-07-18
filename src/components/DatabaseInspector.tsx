@@ -65,6 +65,95 @@ export default function DatabaseInspector({
   const [viewMode, setViewMode] = useState<'table' | 'json'>('table');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // System Database Ledger states
+  const [ledgerTables, setLedgerTables] = useState<any[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const [ledgerSuccessMessage, setLedgerSuccessMessage] = useState<string | null>(null);
+
+  const fetchLedgerStatus = async () => {
+    setLedgerLoading(true);
+    setLedgerError(null);
+    setLedgerSuccessMessage(null);
+    try {
+      const res = await fetch('/api/db/ledger');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          setLedgerTables(json.tables || []);
+        } else {
+          setLedgerError(json.error || 'ล้มเหลวในการดึงประวัติตารางข้อมูลสัมพันธ์');
+        }
+      } else {
+        setLedgerError(`ข้อผิดพลาดจากเซิร์ฟเวอร์: ${res.status}`);
+      }
+    } catch (err: any) {
+      setLedgerError(err.message || 'เกิดข้อผิดพลาดขณะติดต่อ Ledger API');
+    } finally {
+      setLedgerLoading(false);
+    }
+  };
+
+  const handleAutoCreateAndSync = async () => {
+    setLedgerLoading(true);
+    setLedgerError(null);
+    setLedgerSuccessMessage(null);
+    try {
+      // 1. Post to create missing tables
+      const createRes = await fetch('/api/db/ledger/create', { method: 'POST' });
+      if (!createRes.ok) {
+        throw new Error(`สร้างตารางไม่สำเร็จ: รหัส ${createRes.status}`);
+      }
+      const createJson = await createRes.json();
+      if (!createJson.success) {
+        throw new Error(createJson.message || 'การสร้างตารางสัมพันธ์ล้มเหลว');
+      }
+
+      // 2. Perform a full synchronization from local in-memory state to save/seed the MySQL database
+      const syncPayload = {
+        employees,
+        payroll,
+        leaves,
+        sales,
+        cheques,
+        cashflow: cashFlow,
+        partnerBillings,
+        auditLogs,
+        jobs,
+        applicants,
+        evaluations,
+        attendance: attendanceRecords,
+        dayoffSwaps: dayOffSwaps,
+        partnerCompanies,
+        systemSettings,
+        counterDuties: []
+      };
+
+      const syncRes = await fetch('/api/db/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(syncPayload)
+      });
+
+      if (!syncRes.ok) {
+        throw new Error(`การบันทึกข้อมูลล้มเหลว: รหัส ${syncRes.status}`);
+      }
+      
+      const syncJson = await syncRes.json();
+      if (!syncJson.success) {
+        throw new Error(syncJson.error || 'ล้มเหลวในการเขียนข้อมูลลง MySQL สำเร็จรูป');
+      }
+
+      setLedgerSuccessMessage('ตรวจสอบความถูกต้องและจัดโครงสร้างตารางข้อมูล MySQL สัมพันธ์ (Relational Tables) ครบถ้วน พร้อมซิงค์ข้อมูลสำเร็จรูป!');
+      fetchLedgerStatus();
+      fetchRemoteDataAndConfig();
+    } catch (err: any) {
+      setLedgerError(err.message || 'เกิดข้อผิดพลาดในการตรวจสอบหรือสร้างตาราง');
+    } finally {
+      setLedgerLoading(false);
+    }
+  };
+
   // Database source states
   const [dataSource, setDataSource] = useState<'local' | 'firebase' | 'mysql'>('mysql');
   const [isLSOn, setIsLSOn] = useState(() => isLocalStorageEnabled());
@@ -81,6 +170,11 @@ export default function DatabaseInspector({
   // Clear table confirmation states
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const [clearingTableName, setClearingTableName] = useState<string | null>(null);
+
+  // Run ledger inspection on mount and on dataSource switch
+  useEffect(() => {
+    fetchLedgerStatus();
+  }, [dataSource]);
 
   // Helper to flatten attendance records for inspector viewing
   const flatAttendance = useMemo(() => {
@@ -661,6 +755,108 @@ export default function DatabaseInspector({
             {isLSOn ? 'สลับเป็น ปิดใช้งาน (Disable)' : 'สลับเป็น เปิดใช้งาน (Enable)'}
           </button>
         </div>
+      </div>
+
+      {/* SYSTEM DATABASE LEDGER BOARD */}
+      <div className="bg-white border border-slate-200 rounded-sm p-5 space-y-4 shadow-xs">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-3 border-b border-slate-100">
+          <div className="space-y-1">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+              <Server className="w-4 h-4 text-indigo-500" /> สถานะโครงสร้างตารางฐานข้อมูลหลัก (Hostinger MySQL Tables Integrity)
+            </h3>
+            <p className="text-xs text-slate-500 font-sans">
+              ตัวตรวจสอบตารางฐานข้อมูลเพื่อยืนยันว่า โครงสร้างแถวและคอลัมน์ของตารางสัมพันธ์ในระบบ Hostinger MySQL ครบถ้วนและพร้อมใช้งาน
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={fetchLedgerStatus}
+              disabled={ledgerLoading}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-sm border border-slate-200 flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${ledgerLoading ? 'animate-spin' : ''}`} />
+              ตรวจสอบสถานะตารางสด
+            </button>
+            <button
+              onClick={handleAutoCreateAndSync}
+              disabled={ledgerLoading}
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-sm flex items-center gap-1.5 transition shadow-xs disabled:opacity-50 cursor-pointer"
+            >
+              <Check className="w-3.5 h-3.5" />
+              สร้างตารางและบันทึก Hostinger MySQL ลงฐานข้อมูล (Auto-Build & Seed)
+            </button>
+          </div>
+        </div>
+
+        {ledgerError && (
+          <div className="bg-rose-50 border border-rose-150 text-rose-800 text-xs p-3.5 rounded-sm flex gap-2 items-start font-sans">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">ตรวจสอบฐานข้อมูลไม่สำเร็จ:</p>
+              <p className="font-mono text-[11px] mt-0.5 text-rose-700 bg-rose-100/50 p-2 rounded-sm border border-rose-150">{ledgerError}</p>
+            </div>
+          </div>
+        )}
+
+        {ledgerSuccessMessage && (
+          <div className="bg-emerald-50 border border-emerald-150 text-emerald-800 text-xs p-3.5 rounded-sm flex gap-2 items-center font-sans">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <p className="font-bold">{ledgerSuccessMessage}</p>
+          </div>
+        )}
+
+        {ledgerTables.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-1">
+            {ledgerTables.map((t) => (
+              <div 
+                key={t.name}
+                className={`p-3 border rounded-sm flex flex-col justify-between space-y-2 transition hover:border-slate-350 ${
+                  t.exists 
+                    ? 'bg-slate-50 border-slate-200' 
+                    : 'bg-rose-50/40 border-rose-200 text-rose-900'
+                }`}
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[11px] font-bold truncate text-slate-800" title={t.name}>
+                      {t.name}
+                    </span>
+                    <span className={`w-2 h-2 rounded-full ${t.exists ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-mono">
+                    {t.exists ? `Row count: ${t.rowCount}` : 'ไม่มีตารางนี้ใน MySQL'}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-1">
+                  {t.exists ? (
+                    <span className="text-[9px] font-mono font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-sm border border-emerald-150">
+                      ตารางครบ ({t.columns?.length || 0} cols)
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-mono font-bold uppercase tracking-wider bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded-sm border border-rose-150">
+                      MISSING
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          !ledgerLoading && (
+            <div className="text-center py-4 text-slate-400 text-xs font-sans">
+              ไม่มีรายงานตารางข้อมูลเชื่อมต่ออยู่ หรือยังไม่ได้รับการตรวจประวัติสด กรุณากดปุ่มเพื่อสแกน
+            </div>
+          )
+        )}
+
+        {ledgerLoading && (
+          <div className="flex items-center justify-center py-4 gap-2 text-xs font-mono text-indigo-600 bg-indigo-50/40 border border-indigo-100 rounded-sm">
+            <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
+            กำลังตรวจเช็คและปรับโครงสร้างตารางข้อมูล Hostinger MySQL และนำเข้าชุดข้อมูลสำรองข้อมูลสัมพันธ์แบบสด...
+          </div>
+        )}
       </div>
 
       {/* ERROR STATUS ROW */}

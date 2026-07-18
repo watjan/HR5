@@ -431,6 +431,9 @@ export default function App() {
               dbPayload = result.data.firebase;
               sourceName = "Firebase Firestore (Backup)";
             }
+            if (sourceName) {
+              setActiveDbSource(sourceName);
+            }
           }
 
           if (dbPayload) {
@@ -513,6 +516,9 @@ export default function App() {
             if (!loadFromDisasterRecoveryBackup()) {
               console.log("No browser backup found. Using local mock data fallback...");
               loadDefaultMockData();
+              setActiveDbSource("Local Mock Data (ค่าเริ่มต้นระบบ)");
+            } else {
+              setActiveDbSource("Browser Backup (สำรองบนเว็บเบราว์เซอร์)");
             }
           }
         } else {
@@ -520,6 +526,9 @@ export default function App() {
           if (!loadFromDisasterRecoveryBackup()) {
             console.warn("No browser backup found. Using local mock data fallback...");
             loadDefaultMockData();
+            setActiveDbSource("Local Mock Data (ค่าเริ่มต้นระบบ)");
+          } else {
+            setActiveDbSource("Browser Backup (สำรองบนเว็บเบราว์เซอร์)");
           }
         }
       } catch (error) {
@@ -527,6 +536,9 @@ export default function App() {
         if (!loadFromDisasterRecoveryBackup()) {
           console.error("No browser backup found. Using local mock data fallback...");
           loadDefaultMockData();
+          setActiveDbSource("Local Mock Data (ค่าเริ่มต้นระบบ)");
+        } else {
+          setActiveDbSource("Browser Backup (สำรองบนเว็บเบราว์เซอร์)");
         }
       } finally {
         setLoadingServer(false);
@@ -591,8 +603,20 @@ export default function App() {
               });
             }
           }
-        }, (error) => {
-          console.error(`Error in real-time listener for ${key}:`, error);
+        }, (error: any) => {
+          const errMsg = error?.message || String(error);
+          if (
+            errMsg.toLowerCase().includes("quota") ||
+            errMsg.toLowerCase().includes("resource_exhausted") ||
+            errMsg.toLowerCase().includes("limit") ||
+            errMsg.toLowerCase().includes("exhausted")
+          ) {
+            setFirestoreQuotaExceeded(true);
+            setFirestoreQuotaError(errMsg);
+            console.warn(`[Firestore Quota] Real-time listener for ${key} paused due to Firebase daily free quota exhaustion.`);
+          } else {
+            console.error(`Error in real-time listener for ${key}:`, error);
+          }
         });
         unsubscribers.push(unsub);
       } catch (err) {
@@ -654,6 +678,7 @@ export default function App() {
     mysql: { connected: false, error: '' },
     firebase: { connected: false, error: '' }
   });
+  const [activeDbSource, setActiveDbSource] = useState<string>("กำลังตรวจสอบแหล่งข้อมูล...");
   const [firestoreQuotaExceeded, setFirestoreQuotaExceeded] = useState(false);
   const [firestoreQuotaError, setFirestoreQuotaError] = useState('');
   const [hideQuotaWarning, setHideQuotaWarning] = useState(false);
@@ -1926,62 +1951,78 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Real-time Cloud Sync Panel */}
-            <div className="flex items-center gap-2 border border-slate-200 bg-slate-50 rounded-sm py-1 px-2.5 text-xs font-mono select-none">
-              <div className="flex items-center gap-1.5">
-                {dbStatuses.firebase.connected ? (
+            {/* Real-time DB Status & Sync Panel */}
+            <div className="flex flex-wrap items-center gap-2 select-none no-print">
+              {/* Hostinger MySQL Primary Status */}
+              <div className={`flex items-center gap-1.5 border px-2.5 py-1 rounded-sm text-xs font-mono ${
+                dbStatuses.mysql.connected 
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                  : 'bg-rose-50 border-rose-150 text-rose-800'
+              }`} title={dbStatuses.mysql.connected ? "Hostinger MySQL เชื่อมต่อปกติ และเป็นระบบหลัก" : `Hostinger MySQL ออฟไลน์: ${dbStatuses.mysql.error || 'กรุณาตรวจสอบการตั้งค่า'}`}>
+                {dbStatuses.mysql.connected ? (
                   <span className="flex h-1.5 w-1.5 relative">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                   </span>
                 ) : (
-                  <span className="h-1.5 w-1.5 rounded-full bg-slate-300"></span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
                 )}
-                <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider hidden xs:inline">
-                  {dbStatuses.firebase.connected ? 'Firebase Live' : 'Firebase Off'}
+                <span className="text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 text-slate-800">
+                  <span>🗄️ MySQL:</span>
+                  <span className={dbStatuses.mysql.connected ? 'text-emerald-700' : 'text-rose-600'}>{dbStatuses.mysql.connected ? 'ONLINE' : 'OFFLINE'}</span>
                 </span>
               </div>
-              
-              <div className="w-px h-3 bg-slate-250 mx-0.5"></div>
 
-              <div className="flex items-center gap-1 shrink-0">
-                {loadingServer ? (
-                  <span className="text-[9px] text-amber-500 font-bold animate-pulse">
-                    Firebase Loading...
-                  </span>
-                ) : serverDataLoaded ? (
-                  <span className="text-[9px] text-emerald-600 font-bold">
-                    Firebase Synced ✅
+              {/* Firebase Firestore Backup Status */}
+              <div className={`flex items-center gap-1.5 border px-2 py-1 rounded-sm text-xs font-mono ${
+                dbStatuses.firebase.connected 
+                  ? 'bg-indigo-50 border-indigo-150 text-indigo-800' 
+                  : 'bg-slate-50 border-slate-200 text-slate-500'
+              }`} title={dbStatuses.firebase.connected ? "Firebase Firestore เชื่อมต่อเป็นคลาวด์สำรอง" : "Firebase Firestore ออฟไลน์ชั่วคราว"}>
+                {dbStatuses.firebase.connected ? (
+                  <span className="flex h-1.5 w-1.5 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-500"></span>
                   </span>
                 ) : (
-                  <span className="text-[9px] text-slate-500">
-                    Local Data 💡
-                  </span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-300"></span>
                 )}
+                <span className="text-[9px] font-bold uppercase tracking-wider hidden xs:inline">
+                  🔥 Firebase: {dbStatuses.firebase.connected ? 'Live' : 'Off'}
+                </span>
               </div>
-              
-              <div className="w-px h-3 bg-slate-250 mx-0.5"></div>
-              
-              <label className="flex items-center gap-1 cursor-pointer text-[9px] font-bold text-slate-500 hover:text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={autoSync}
-                  onChange={(e) => setAutoSync(e.target.checked)}
-                  className="rounded-xs border-slate-300 text-indigo-600 focus:ring-indigo-500 w-2.5 h-2.5 cursor-pointer"
-                />
-                Auto-Sync
-              </label>
 
-              <div className="w-px h-3 bg-slate-250 mx-0.5"></div>
+              {/* Active Source indicator */}
+              <div className="hidden lg:flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-sm text-[10px] text-slate-600 font-sans">
+                <span className="font-bold text-slate-500">ข้อมูลปัจจุบัน:</span>
+                <span className="font-extrabold text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-xs font-sans">
+                  {activeDbSource}
+                </span>
+              </div>
 
-              <button
-                onClick={executeManualSync}
-                disabled={isSyncingTop}
-                className={`p-0.5 hover:bg-slate-200 rounded-xs text-slate-500 hover:text-indigo-600 disabled:opacity-50 transition cursor-pointer flex items-center justify-center ${isSyncingTop ? 'animate-spin text-indigo-600' : ''}`}
-                title={lastSyncedTime ? `ซิงก์ล่าสุดเวลา ${lastSyncedTime}` : 'ซิงโครไนซ์ไปยังคลาวด์'}
-              >
-                <RefreshCw className="w-3 h-3" />
-              </button>
+              {/* Auto Sync Toggle & Sync Button */}
+              <div className="flex items-center gap-2 border border-slate-200 bg-slate-50 rounded-sm py-1 px-2 text-xs font-mono">
+                <label className="flex items-center gap-1 cursor-pointer text-[9px] font-bold text-slate-500 hover:text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={autoSync}
+                    onChange={(e) => setAutoSync(e.target.checked)}
+                    className="rounded-xs border-slate-300 text-indigo-600 focus:ring-indigo-500 w-2.5 h-2.5 cursor-pointer"
+                  />
+                  Auto-Sync
+                </label>
+
+                <div className="w-px h-3 bg-slate-250 mx-0.5"></div>
+
+                <button
+                  onClick={executeManualSync}
+                  disabled={isSyncingTop}
+                  className={`p-0.5 hover:bg-slate-200 rounded-xs text-slate-500 hover:text-indigo-600 disabled:opacity-50 transition cursor-pointer flex items-center justify-center ${isSyncingTop ? 'animate-spin text-indigo-600' : ''}`}
+                  title={lastSyncedTime ? `ซิงก์ล่าสุดเวลา ${lastSyncedTime}` : 'ซิงโครไนซ์ข้อมูลตอนนี้'}
+                >
+                  <RefreshCw className="w-3 h-3" />
+                </button>
+              </div>
             </div>
 
             <div className="hidden sm:flex items-center bg-slate-100 px-3 py-1 rounded-sm border border-slate-200 text-slate-600 text-[10px] font-mono tracking-wider font-bold">
