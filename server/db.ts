@@ -129,14 +129,13 @@ export async function syncToDualDatabases(payload: SyncPayload, mysqlConfig?: My
     console.warn("Failed to read previous database payload for change detection:", error);
   }
 
-  // 2. Always save a local copy as a backup (Omit counterDuties for strict Firebase storage)
+  // 2. Always save a local copy as a backup (including counterDuties for local backup resilience)
   try {
     const parentDir = path.dirname(LOCAL_DB_PATH);
     if (!fs.existsSync(parentDir)) {
       fs.mkdirSync(parentDir, { recursive: true });
     }
     const localPayload = { ...payload };
-    delete localPayload.counterDuties;
     fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify(localPayload, null, 2), "utf8");
   } catch (error: any) {
     console.error("Local backup save error:", error);
@@ -212,6 +211,7 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
   };
 
   let loadedFromFirebase = false;
+  let firebaseLoadError: string | null = null;
 
   try {
     const db = getFirestoreInstance();
@@ -228,9 +228,18 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
           } else {
             firebasePayload[item.key] = null;
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error(`Error loading key ${item.key} from Firebase:`, err);
           firebasePayload[item.key] = null;
+          const errMsg = err?.message || String(err);
+          if (
+            errMsg.toLowerCase().includes("quota") || 
+            errMsg.toLowerCase().includes("resource_exhausted") || 
+            errMsg.toLowerCase().includes("limit") || 
+            errMsg.toLowerCase().includes("exhausted")
+          ) {
+            firebaseLoadError = errMsg;
+          }
         }
       })
     );
@@ -285,7 +294,7 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
           dayoffSwaps: parsed.dayoffSwaps || [],
           partnerCompanies: parsed.partnerCompanies || [],
           systemSettings: parsed.systemSettings || {},
-          counterDuties: [] // STRICT: Load counterDuties strictly from Firebase only, never from local backup fallback
+          counterDuties: parsed.counterDuties || []
         };
         console.log("Loaded data from local backup file (Firebase fallback)");
       }
@@ -294,6 +303,7 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
     }
   }
 
+  data.firebaseError = firebaseLoadError;
   return data;
 }
 

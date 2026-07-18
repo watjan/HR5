@@ -371,6 +371,20 @@ export default function App() {
         const res = await fetch('/api/db/load');
         if (res.ok) {
           const result = await res.json();
+          
+          if (result.success && result.data && result.data.firebaseError) {
+            const fbErr = result.data.firebaseError;
+            if (
+              fbErr.toLowerCase().includes("quota") || 
+              fbErr.toLowerCase().includes("resource_exhausted") || 
+              fbErr.toLowerCase().includes("limit") || 
+              fbErr.toLowerCase().includes("exhausted")
+            ) {
+              setFirestoreQuotaExceeded(true);
+              setFirestoreQuotaError(fbErr);
+            }
+          }
+
           if (result.success && result.data && result.data.firebase && result.data.firebase.employees && result.data.firebase.employees.length > 0) {
             const fb = result.data.firebase;
             
@@ -661,7 +675,7 @@ export default function App() {
         dayoffSwaps: dayOffSwaps || [],
         partnerCompanies: partnerCompanies || [],
         systemSettings: [{ id: "current", ...systemSettings }],
-        counterDuties: [] // OMIT: Counter duties must be saved to Firebase only
+        counterDuties: counterDuties || []
       };
 
       if (typeof window !== 'undefined' && window.localStorage) {
@@ -1426,75 +1440,8 @@ export default function App() {
   };
 
   const triggerLineNotifyForSale = async (sale: SalesRecord, action: 'create' | 'update' | 'delete') => {
-    if (!systemSettings.lineNotifyEnabled || !systemSettings.lineNotifyToken) {
-      return;
-    }
-
-    let emoji = '💰';
-    let actionText = '';
-    if (action === 'create') {
-      emoji = '🎉';
-      actionText = 'บันทึกยอดขายใหม่สำเร็จ!';
-    } else if (action === 'update') {
-      emoji = '✏️';
-      actionText = 'อัปเดตข้อมูลยอดขายสำเร็จ!';
-    } else {
-      emoji = '❌';
-      actionText = 'ลบข้อมูลยอดขาย!';
-    }
-
-    // Format Date from YYYY-MM-DD to Thai format
-    let formattedDate = sale.date;
-    try {
-      const parts = sale.date.split('-');
-      if (parts.length === 3) {
-        const year = parseInt(parts[0]) + 543;
-        const monthNames = [
-          "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
-          "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
-        ];
-        const month = monthNames[parseInt(parts[1]) - 1];
-        const day = parseInt(parts[2]);
-        formattedDate = `${day} ${month} ${year}`;
-      }
-    } catch (e) {}
-
-    let paymentText = 'ไม่ได้ระบุ';
-    if (sale.paymentChannel === 'cash') paymentText = '💵 เงินสด';
-    else if (sale.paymentChannel === 'transfer') paymentText = '📱 โอนเงินผ่านธนาคาร';
-    else if (sale.paymentChannel === 'credit_card') paymentText = '💳 บัตรเครดิต';
-    else if (sale.paymentChannel === 'qr') paymentText = '📲 QR Code / PromptPay';
-    else if (sale.paymentChannel) paymentText = sale.paymentChannel;
-
-    const message = `
-${emoji} [รายงานยอดขายร้านค้า]
-📢 ${actionText}
-
-🧾 เลขที่ใบเสร็จ: ${sale.receiptNumber || 'ไม่ได้ระบุ'}
-📅 วันที่ขาย: ${formattedDate}
-👤 ลูกค้า: ${sale.customerName || 'ทั่วไป / walk-in'}
-💵 ยอดรวมสุทธิ: ${sale.amount.toLocaleString('th-TH')} บาท
-🏦 ช่องทางการรับเงิน: ${paymentText}
-📝 หมายเหตุ: ${sale.notes || 'ไม่มี'}
-⏱️ เวลาทำรายการ: ${new Date().toLocaleTimeString('th-TH')} น.
-
----------------------------
-📱 ติดตามและบริหารระบบร้านค้าของคุณแบบ Real-time`;
-
-    try {
-      await fetch("/api/line-notify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          message,
-          token: systemSettings.lineNotifyToken
-        })
-      });
-    } catch (e) {
-      console.error("Failed to trigger automated LINE Notify:", e);
-    }
+    // Disabled / Removed by user request
+    return;
   };
 
   // Sales Ledger actions

@@ -176,10 +176,23 @@ app.post("/api/line-notify", async (req, res) => {
     console.error("LINE Notify API error:", error);
     let errorMessage = error.message || "Failed to send LINE Notify";
     let isSandboxError = false;
-    if (
+
+    const lowerErr = errorMessage.toLowerCase();
+    if (lowerErr.includes("bytestring") || lowerErr.includes("byte string")) {
+      errorMessage = "รหัสโทเค็น (LINE Notify Token) มีอักขระที่ไม่รองรับ (เช่น ภาษาไทย อักขระพิเศษ หรืออักษรเว้นวรรค) กรุณาใช้รหัสอักษรภาษาอังกฤษที่คัดลอกมาจาก LINE เท่านั้น";
+    } else if (
       error.code === 'ENOTFOUND' || 
-      (error.cause && error.cause.code === 'ENOTFOUND') || 
+      error.code === 'EAI_AGAIN' ||
+      error.code === 'ETIMEDOUT' ||
+      error.code === 'ECONNREFUSED' ||
+      (error.cause && (
+        error.cause.code === 'ENOTFOUND' || 
+        error.cause.code === 'EAI_AGAIN' ||
+        error.cause.code === 'ETIMEDOUT' ||
+        error.cause.code === 'ECONNREFUSED'
+      )) || 
       errorMessage.includes('ENOTFOUND') || 
+      errorMessage.includes('EAI_AGAIN') || 
       errorMessage.includes('fetch failed')
     ) {
       isSandboxError = true;

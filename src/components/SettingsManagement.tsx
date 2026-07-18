@@ -548,18 +548,6 @@ export default function SettingsManagement({
             <ShieldAlert className="w-4 h-4 shrink-0" />
             <span>สิทธิ์ผู้ดูแลระบบ (Admin RBAC)</span>
           </button>
-
-          <button
-            onClick={() => setActiveSubTab('line')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-sm text-xs font-bold transition font-sans ${
-              activeSubTab === 'line'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-            }`}
-          >
-            <MessageSquare className="w-4 h-4 shrink-0" />
-            <span>ตั้งค่าส่งยอดไลน์อัตโนมัติ</span>
-          </button>
         </div>
 
         {/* Right Active Sub-Tab Panel */}
@@ -1760,8 +1748,8 @@ export default function SettingsManagement({
             </div>
           )}
 
-          {/* TAB 7: LINE NOTIFY SETTINGS */}
-          {activeSubTab === 'line' && (
+          {/* TAB 7: LINE NOTIFY SETTINGS REMOVED */}
+          {false && (
             <form onSubmit={handleSave} className="bg-white border border-slate-200 rounded-sm overflow-hidden animate-fade-in">
               <div className="p-6 border-b border-slate-100 bg-emerald-50/20">
                 <div className="flex items-center gap-2">
