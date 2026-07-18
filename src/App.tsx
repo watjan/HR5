@@ -398,17 +398,27 @@ export default function App() {
             }
           }
 
-          // Choose the primary database source: Prefer Hostinger MySQL if it has data, fallback to Firebase Firestore
+          // Choose the primary database source: Hostinger MySQL is the primary database. Firebase Firestore is the backup.
           let dbPayload = null;
           let sourceName = "";
 
           if (result.success && result.data) {
-            if (result.data.mysql && result.data.mysql.employees && result.data.mysql.employees.length > 0) {
+            const hasMysqlData = result.data.mysql && 
+              (result.data.mysql.employees?.length > 0 || 
+               result.data.mysql.leaves?.length > 0 || 
+               result.data.mysql.payroll?.length > 0);
+
+            const hasFirebaseData = result.data.firebase && 
+              (result.data.firebase.employees?.length > 0 || 
+               result.data.firebase.leaves?.length > 0 || 
+               result.data.firebase.payroll?.length > 0);
+
+            if (result.data.mysql && !result.data.mysqlError && (hasMysqlData || !hasFirebaseData)) {
               dbPayload = result.data.mysql;
-              sourceName = "Hostinger MySQL";
-            } else if (result.data.firebase && result.data.firebase.employees && result.data.firebase.employees.length > 0) {
+              sourceName = "Hostinger MySQL (Primary)";
+            } else if (result.data.firebase) {
               dbPayload = result.data.firebase;
-              sourceName = "Firebase Firestore";
+              sourceName = "Firebase Firestore (Backup)";
             }
           }
 

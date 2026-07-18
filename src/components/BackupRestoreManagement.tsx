@@ -619,12 +619,14 @@ export default function BackupRestoreManagement({
         hr_cheques: sourceData.cheques || [],
         hr_partner_billings: sourceData.partnerBillings || [],
         hr_audit_logs: sourceData.auditLogs || [],
-        hr_jobs: [], // Fallbacks to empty if missing in simple backend DB representation
-        hr_applicants: [],
-        hr_evaluations: [],
-        hr_attendance: {},
-        hr_dayoff_swaps: [],
-        hr_system_settings: {
+        hr_jobs: sourceData.jobs || [],
+        hr_applicants: sourceData.applicants || [],
+        hr_evaluations: sourceData.evaluations || [],
+        hr_attendance: sourceData.attendance || {},
+        hr_dayoff_swaps: sourceData.dayoffSwaps || [],
+        hr_partner_companies: sourceData.partnerCompanies || [],
+        hr_counter_duties: sourceData.counterDuties || [],
+        hr_system_settings: sourceData.systemSettings || {
           companyName: "บริษัท ซิงโครไนซ์ จำกัด",
           taxId: "0105566000012",
           address: "123 อาคารสิริ พญาไท กรุงเทพฯ 10400",

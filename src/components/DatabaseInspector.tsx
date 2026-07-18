@@ -528,6 +528,19 @@ export default function DatabaseInspector({
             >
               🔥 Cloud Firebase Firestore (คลาวด์)
             </button>
+            <button
+              onClick={() => {
+                setDataSource('mysql');
+                fetchRemoteDataAndConfig();
+              }}
+              className={`px-3 py-1.5 rounded-sm text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+                dataSource === 'mysql' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'bg-slate-850 text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              🗄️ Hostinger MySQL (ตัวหลัก)
+            </button>
           </div>
         </div>
 
