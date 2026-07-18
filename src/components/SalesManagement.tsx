@@ -31,7 +31,8 @@ import {
   Wallet,
   RefreshCw,
   Check,
-  AlertCircle
+  AlertCircle,
+  Database
 } from 'lucide-react';
 
 import {
@@ -57,6 +58,9 @@ interface SalesManagementProps {
   onAddSale: (newSale: SalesRecord) => void;
   onUpdateSale: (updatedSale: SalesRecord) => void;
   onDeleteSale: (id: string) => void;
+  mysqlStatus?: { connected: boolean; error: string };
+  isSyncing?: boolean;
+  lastSyncedTime?: string | null;
 }
 
 interface ComparisonData {
@@ -76,7 +80,15 @@ const YEAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#ef
 // -------------------------------------------------------------
 // MAIN SALES MANAGEMENT COMPONENT
 // -------------------------------------------------------------
-export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDeleteSale }: SalesManagementProps) {
+export default function SalesManagement({ 
+  sales, 
+  onAddSale, 
+  onUpdateSale, 
+  onDeleteSale,
+  mysqlStatus,
+  isSyncing,
+  lastSyncedTime
+}: SalesManagementProps) {
   // Tabs for aggregation: 'all_records' | 'daily' | 'monthly' | 'yearly' | 'comparison'
   const [activeTab, setActiveTab] = useState<'all_records' | 'daily' | 'monthly' | 'yearly' | 'comparison'>('daily');
   // Sub-tabs for KPI visualization
@@ -638,12 +650,27 @@ export default function SalesManagement({ sales, onAddSale, onUpdateSale, onDele
       {/* 1. HEADER SECTION */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 text-[10px] font-black uppercase tracking-widest rounded-xs">FINANCIAL MODULE</span>
             <span className="text-slate-300">|</span>
             <span className="text-slate-500 text-xs font-semibold flex items-center gap-1 font-mono">
               <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" /> LIVE TRACKING & SALES LEDGER
             </span>
+            {mysqlStatus && (
+              <>
+                <span className="text-slate-300">|</span>
+                <div className={`flex items-center gap-1 text-[11.5px] font-bold px-2 py-0.5 rounded-sm ${mysqlStatus.connected ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                  <Database className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <span>Hostinger MySQL (ตัวหลัก): {mysqlStatus.connected ? 'เชื่อมต่อเรียบร้อย' : 'ผิดพลาด/ไม่ได้ตั้งค่า'}</span>
+                  {isSyncing && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping ml-1" />}
+                </div>
+              </>
+            )}
+            {lastSyncedTime && (
+              <span className="text-[10px] text-slate-400 font-mono">
+                ซิงค์ล่าสุด: {lastSyncedTime}
+              </span>
+            )}
           </div>
           <h2 className="text-xl font-light text-slate-900 mt-1">บริหารจัดการและรายงานวิเคราะห์ยอดขาย (Sales Ledger)</h2>
           <p className="text-xs text-slate-500 mt-0.5 font-sans">

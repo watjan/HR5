@@ -2267,6 +2267,9 @@ export default function App() {
               onAddSale={handleAddSale}
               onUpdateSale={handleUpdateSale}
               onDeleteSale={handleDeleteSale}
+              mysqlStatus={dbStatuses.mysql}
+              isSyncing={isSyncingTop}
+              lastSyncedTime={lastSyncedTime}
             />
           )}
 
