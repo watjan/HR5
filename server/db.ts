@@ -479,6 +479,32 @@ export async function clearFirestoreDatabase(): Promise<{ success: boolean; clea
       fs.unlinkSync(LOCAL_DB_PATH);
     }
 
+    // Also clear Hostinger MySQL database collections table if configured to keep both empty
+    const activeMysqlConfig = getMySQLConfig();
+    if (activeMysqlConfig && activeMysqlConfig.host) {
+      let connection: any = null;
+      try {
+        connection = await mysql.createConnection({
+          host: activeMysqlConfig.host,
+          port: Number(activeMysqlConfig.port) || 3306,
+          user: activeMysqlConfig.user,
+          password: activeMysqlConfig.password || "",
+          database: activeMysqlConfig.database,
+          connectTimeout: 4000
+        });
+        await connection.query("TRUNCATE TABLE app_collections");
+        console.log("[MySQL Clear] Successfully truncated app_collections table");
+      } catch (mysqlErr: any) {
+        console.error("[MySQL Clear] Error clearing MySQL:", mysqlErr);
+      } finally {
+        if (connection) {
+          try {
+            await connection.end();
+          } catch (e) {}
+        }
+      }
+    }
+
     return {
       success: true,
       clearedCollections: cleared
