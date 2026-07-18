@@ -5,6 +5,7 @@ import AdmZip from "adm-zip";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { execSync } from "child_process";
+import mysql from "mysql2/promise";
 import { 
   getMySQLConfig, 
   saveMySQLConfig, 
@@ -275,15 +276,16 @@ MYSQL_AUTO_CREATE=true
 app.get("/api/db/config", async (req, res) => {
   try {
     const firebaseConfig = getFirebaseConfig();
+    const mysqlConfig = getMySQLConfig();
 
     const statuses = {
-      mysql: { connected: false, error: "MySQL integration disabled" },
+      mysql: { connected: false, error: "" },
       firebase: { connected: false, error: "" }
     };
 
+    // 1. Test Firebase Connection
     if (firebaseConfig && firebaseConfig.projectId && firebaseConfig.apiKey) {
       try {
-        // Test Firebase Connection via checking config existence & simple REST fetch with a strict 1.5s timeout
         const dbName = firebaseConfig.firestoreDatabaseId || "(default)";
         const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${dbName}/documents/system_settings/current?key=${firebaseConfig.apiKey}`;
         
@@ -313,13 +315,34 @@ app.get("/api/db/config", async (req, res) => {
       statuses.firebase.error = "Firebase config is missing or invalid";
     }
 
+    // 2. Test Hostinger MySQL Connection
+    if (mysqlConfig && mysqlConfig.host) {
+      try {
+        const connection = await mysql.createConnection({
+          host: mysqlConfig.host,
+          port: Number(mysqlConfig.port) || 3306,
+          user: mysqlConfig.user,
+          password: mysqlConfig.password || "",
+          database: mysqlConfig.database,
+          connectTimeout: 2000
+        });
+        statuses.mysql.connected = true;
+        await connection.end();
+      } catch (err: any) {
+        statuses.mysql.connected = false;
+        statuses.mysql.error = err.message || "Failed to connect to MySQL";
+      }
+    } else {
+      statuses.mysql.error = "ยังไม่มีการตั้งค่าเชื่อมต่อ Hostinger MySQL (กรุณากรอกข้อมูลโฮสต์)";
+    }
+
     res.json({
       mysql: {
-        host: "",
-        port: 3306,
-        user: "",
-        database: "",
-        autoCreateDb: false
+        host: mysqlConfig?.host || "",
+        port: mysqlConfig?.port || 3306,
+        user: mysqlConfig?.user || "",
+        database: mysqlConfig?.database || "",
+        autoCreateDb: mysqlConfig?.autoCreateDb || false
       },
       firebase: {
         projectId: firebaseConfig?.projectId || "",
@@ -335,16 +358,63 @@ app.get("/api/db/config", async (req, res) => {
       mysql: { host: "", port: 3306, user: "", database: "", autoCreateDb: false },
       firebase: { projectId: "", apiKey: "", firestoreDatabaseId: "(default)", storageBucket: "" },
       status: {
-        mysql: { connected: false, error: "MySQL integration disabled" },
+        mysql: { connected: false, error: "MySQL status check failed" },
         firebase: { connected: false, error: outerErr?.message || "Failed to resolve DB configuration status" }
       }
     });
   }
 });
 
-// POST Database Config (Saved to Local Storage / local settings)
+// POST Database Config (Saved to local configuration & Connection Tested)
 app.post("/api/db/config", async (req, res) => {
-  res.json({ success: true, message: "เชื่อมต่อกับฐานข้อมูลคลาวด์ Firebase Firestore สำเร็จเรียบร้อยแล้ว" });
+  const config = req.body;
+  
+  // Save config
+  const saved = saveMySQLConfig(config);
+  if (!saved) {
+    return res.status(500).json({ success: false, error: "ไม่สามารถบันทึกการตั้งค่าบนเซิร์ฟเวอร์ได้" });
+  }
+
+  if (!config.host) {
+    return res.json({ 
+      success: true, 
+      message: "บันทึกข้อมูลการตั้งค่าแล้ว แต่กรุณากรอกชื่อ Host เพื่อเริ่มเชื่อมโยงฐานข้อมูล" 
+    });
+  }
+
+  try {
+    const connection = await mysql.createConnection({
+      host: config.host,
+      port: Number(config.port) || 3306,
+      user: config.user,
+      password: config.password || "",
+      database: config.database,
+      connectTimeout: 4000
+    });
+
+    if (config.autoCreateDb) {
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS app_collections (
+          collection_key VARCHAR(100) PRIMARY KEY,
+          collection_data LONGTEXT NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
+    }
+
+    await connection.end();
+
+    res.json({ 
+      success: true, 
+      message: "เชื่อมต่อกับฐานข้อมูล Hostinger MySQL สำเร็จเรียบร้อยแล้วและตารางพร้อมใช้งาน!" 
+    });
+  } catch (err: any) {
+    console.error("MySQL connection save check error:", err);
+    res.json({ 
+      success: true, // we still return success to save the configuration, but add a warning message about connection failure so they can fix credentials
+      warning: `บันทึกข้อมูลการตั้งค่าสำเร็จแล้ว แต่ไม่สามารถทดสอบเชื่อมต่อ Host ได้: ${err.message || err}`
+    });
+  }
 });
 
 // POST DB Sync - synchronize local state to BOTH Hostinger & Firebase

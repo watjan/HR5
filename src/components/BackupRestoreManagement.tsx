@@ -1027,21 +1027,125 @@ export default function BackupRestoreManagement({
                   </div>
                 </div>
 
-                {/* Exclusive Firebase Firestore Configuration Notice */}
-                <div className="p-4 border border-indigo-100 bg-indigo-50/20 rounded-sm flex items-start gap-3 relative overflow-hidden">
-                  <div className="p-2 rounded-full shrink-0 bg-indigo-100 text-indigo-750">
-                    <ShieldCheck className="w-5 h-5" />
+                {/* Hostinger MySQL Connection Status */}
+                <div className={`p-4 border rounded-sm flex items-start gap-3 relative overflow-hidden ${
+                  dbStatuses.mysql.connected ? 'bg-emerald-50/25 border-emerald-200' : 'bg-rose-50/20 border-rose-200'
+                }`}>
+                  <div className={`p-2 rounded-full shrink-0 ${
+                    dbStatuses.mysql.connected ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                  }`}>
+                    <Server className="w-5 h-5" />
                   </div>
-                  <div className="space-y-1 font-sans text-indigo-950">
+                  <div className="space-y-1 font-sans">
                     <div className="flex items-center gap-1.5">
-                      <h4 className="font-bold text-xs text-indigo-900">เชื่อมต่อ Firebase Firestore แบบเดี่ยว (Exclusive Connect)</h4>
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <h4 className="font-bold text-xs text-slate-800">ฐานข้อมูลสำรอง Hostinger MySQL (Relational)</h4>
+                      <span className={`w-2 h-2 rounded-full ${
+                        dbStatuses.mysql.connected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                      }`} />
                     </div>
-                    <p className="text-[10px] text-slate-500 leading-relaxed">
-                      ระบบเชื่อมต่อแบบปลอดภัยตรงไปยัง Google Cloud Firebase Firestore อย่างเป็นทางการเพียงอย่างเดียว โดยข้ามการจัดเก็บประเภทอื่นทั้งหมดเพื่อความน่าเชื่อถือและความเสถียรสูงสุด
+                    <p className="text-[10px] text-slate-500">
+                      ชนิดฐานข้อมูล: relational (MySQL/MariaDB)
+                    </p>
+                    <p className={`text-[10px] font-bold ${
+                      dbStatuses.mysql.connected ? 'text-emerald-700' : 'text-rose-700'
+                    }`}>
+                      {dbStatuses.mysql.connected ? '● เชื่อมต่อและซิงโครไนซ์ข้อมูลสำเร็จ' : `❌ ไม่ออนไลน์: ${dbStatuses.mysql.error || 'ยังไม่มีการตั้งค่าหรือไม่ได้กรอก Host'}`}
                     </p>
                   </div>
                 </div>
+
+                {/* Hostinger MySQL Configuration Form */}
+                <form onSubmit={handleSaveMysqlConfig} className="p-5 border border-slate-200 bg-white rounded-sm space-y-4">
+                  <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                    <Settings className="w-4 h-4 text-emerald-600" />
+                    <h4 className="font-bold text-xs text-slate-800 font-sans uppercase tracking-wider">
+                      ฟอร์มตั้งค่าเชื่อมต่อ Hostinger MySQL
+                    </h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 text-xs font-sans">
+                    <div className="sm:col-span-8 space-y-1">
+                      <label className="font-bold text-[11px] text-slate-600">Database Host (IP / Domain)</label>
+                      <input
+                        type="text"
+                        value={mysqlConfig.host}
+                        onChange={(e) => setMysqlConfig({ ...mysqlConfig, host: e.target.value })}
+                        placeholder="เช่น mysql.hostinger.com หรือ 127.0.0.1"
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-hidden bg-slate-50/50 hover:bg-slate-50 transition"
+                        required
+                      />
+                    </div>
+
+                    <div className="sm:col-span-4 space-y-1">
+                      <label className="font-bold text-[11px] text-slate-600">Port</label>
+                      <input
+                        type="number"
+                        value={mysqlConfig.port}
+                        onChange={(e) => setMysqlConfig({ ...mysqlConfig, port: Number(e.target.value) || 3306 })}
+                        placeholder="3306"
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-hidden bg-slate-50/50 hover:bg-slate-50 transition font-mono"
+                        required
+                      />
+                    </div>
+
+                    <div className="sm:col-span-6 space-y-1">
+                      <label className="font-bold text-[11px] text-slate-600">Database User</label>
+                      <input
+                        type="text"
+                        value={mysqlConfig.user}
+                        onChange={(e) => setMysqlConfig({ ...mysqlConfig, user: e.target.value })}
+                        placeholder="เช่น u123456789_hr"
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-hidden bg-slate-50/50 hover:bg-slate-50 transition font-mono"
+                        required
+                      />
+                    </div>
+
+                    <div className="sm:col-span-6 space-y-1">
+                      <label className="font-bold text-[11px] text-slate-600">Database Password</label>
+                      <input
+                        type="password"
+                        value={mysqlConfig.password}
+                        onChange={(e) => setMysqlConfig({ ...mysqlConfig, password: e.target.value })}
+                        placeholder="รหัสผ่านผู้ใช้งานฐานข้อมูล"
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-hidden bg-slate-50/50 hover:bg-slate-50 transition font-mono"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-12 space-y-1">
+                      <label className="font-bold text-[11px] text-slate-600">Database Name</label>
+                      <input
+                        type="text"
+                        value={mysqlConfig.database}
+                        onChange={(e) => setMysqlConfig({ ...mysqlConfig, database: e.target.value })}
+                        placeholder="เช่น u123456789_hr_db"
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-hidden bg-slate-50/50 hover:bg-slate-50 transition font-mono"
+                        required
+                      />
+                    </div>
+
+                    <div className="sm:col-span-12 pt-1 flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="autoCreateDb"
+                        checked={mysqlConfig.autoCreateDb}
+                        onChange={(e) => setMysqlConfig({ ...mysqlConfig, autoCreateDb: e.target.checked })}
+                        className="w-3.5 h-3.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 accent-emerald-650 cursor-pointer"
+                      />
+                      <label htmlFor="autoCreateDb" className="text-[11px] text-slate-600 font-bold select-none cursor-pointer">
+                        สร้างโครงสร้างตารางข้อมูลอัตโนมัติหากยังไม่มี (Auto Create Tables)
+                      </label>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={testingConnection}
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold rounded-sm flex items-center justify-center gap-2 cursor-pointer transition shadow-xs"
+                  >
+                    <RefreshCcw className={`w-3.5 h-3.5 ${testingConnection ? 'animate-spin' : ''}`} />
+                    {testingConnection ? 'กำลังตรวจสอบสิทธิ์เชื่อมต่อ...' : 'บันทึกค่าและทดสอบการเชื่อมต่อ Hostinger MySQL'}
+                  </button>
+                </form>
               </div>
             </div>
 
@@ -1148,6 +1252,14 @@ export default function BackupRestoreManagement({
                       {syncResult.firebase.success ? '✓ สำเร็จ' : `❌ ล้มเหลว: ${syncResult.firebase.error}`}
                     </span>
                   </p>
+                  {syncResult.mysql && (
+                    <p className="flex justify-between items-center mt-1 border-t border-slate-800/60 pt-1">
+                      <span>Hostinger MySQL Sync Write:</span>
+                      <span className={syncResult.mysql.success ? 'text-emerald-450 font-bold' : 'text-rose-400'}>
+                        {syncResult.mysql.success ? '✓ สำเร็จ' : `❌ ล้มเหลว: ${syncResult.mysql.error}`}
+                      </span>
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -1156,10 +1268,10 @@ export default function BackupRestoreManagement({
             <div className="bg-white border border-slate-200 rounded-sm p-6 shadow-2xs space-y-5">
               <div className="space-y-1">
                 <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans flex items-center gap-1.5">
-                  <Download className="w-4 h-4 text-emerald-600" /> ดึงข้อมูลคลาวด์กลับสู่เครื่อง (Pull & Recover)
+                  <Download className="w-4 h-4 text-emerald-600" /> ดึงข้อมูลฐานข้อมูลกลับสู่เครื่อง (Pull & Recover)
                 </h3>
                 <p className="text-[11px] text-slate-500 font-sans">
-                  ตรวจสอบและดึงชุดข้อมูลล่าสุดที่ถูกบันทึกไว้ในฐานข้อมูลคลาวด์ Firestore กลับมาติดตั้งลงในบราวเซอร์นี้
+                  ตรวจสอบและดึงชุดข้อมูลล่าสุดที่ถูกบันทึกไว้ในระบบฐานข้อมูลคลาวด์หรือ Hostinger MySQL กลับมาติดตั้งลงในบราวเซอร์นี้
                 </p>
               </div>
 
@@ -1169,11 +1281,11 @@ export default function BackupRestoreManagement({
                 className="w-full py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold rounded-sm flex items-center justify-center gap-2 cursor-pointer transition disabled:opacity-50"
               >
                 <RefreshCcw className={`w-3.5 h-3.5 ${loadingDbData ? 'animate-spin' : ''}`} />
-                {loadingDbData ? 'กำลังตรวจสอบคลาวด์...' : 'เรียกค้นข้อมูลฐานข้อมูลคลาวด์ทั้งหมด'}
+                {loadingDbData ? 'กำลังตรวจสอบคลาวด์/MySQL...' : 'เรียกค้นข้อมูลสำรองทั้งหมด (Firestore / MySQL)'}
               </button>
 
               {remoteDbData && (
-                <div className="space-y-3 pt-1 animate-fade-in font-sans">
+                <div className="space-y-4 pt-1 animate-fade-in font-sans">
                   {/* Option: Firebase */}
                   <div className="p-3 border border-slate-200 bg-slate-50/55 rounded-sm space-y-2">
                     <div className="flex justify-between items-center">
@@ -1196,7 +1308,35 @@ export default function BackupRestoreManagement({
                         </button>
                       </div>
                     ) : (
-                      <p className="text-[10.5px] text-slate-400">ตรวจไม่พบข้อมูลสำรอง หรือไม่ได้ตั้งสิทธิ์บนเซิร์ฟเวอร์</p>
+                      <p className="text-[10.5px] text-slate-400 font-sans">ตรวจไม่พบข้อมูลสำรอง หรือไม่ได้ตั้งสิทธิ์บนเซิร์ฟเวอร์</p>
+                    )}
+                  </div>
+
+                  {/* Option: Hostinger MySQL */}
+                  <div className="p-3 border border-slate-200 bg-slate-50/55 rounded-sm space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-xs text-slate-800 flex items-center gap-1">
+                        <Server className="w-3.5 h-3.5 text-emerald-500" /> ข้อมูลบน Hostinger MySQL
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        {remoteDbData.mysql ? 'พบข้อมูลบน MySQL' : 'ไม่พบข้อมูล'}
+                      </span>
+                    </div>
+                    {remoteDbData.mysql ? (
+                      <div className="text-[10.5px] text-slate-600 space-y-1 font-sans">
+                        <p>👥 พนักงาน: {remoteDbData.mysql.employees?.length || 0} คน | 📅 บันทึกใบลา: {remoteDbData.mysql.leaves?.length || 0} รายการ</p>
+                        <p>💰 จ่ายเงินเดือน: {remoteDbData.mysql.payroll?.length || 0} รายการ | 💵 รับ-จ่าย: {remoteDbData.mysql.cashflow?.length || 0} รายการ</p>
+                        <button
+                          onClick={() => handleRestoreFromRemote('mysql')}
+                          className="w-full mt-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10.5px] rounded-xs flex items-center justify-center gap-1 cursor-pointer transition"
+                        >
+                          <ArrowRight className="w-3.5 h-3.5" /> ติดตั้งและแทนที่ระบบด้วยข้อมูลจาก MySQL
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-[10.5px] text-slate-400 font-sans">
+                        ตรวจไม่พบข้อมูล หรือไม่ได้เปิดใช้/ตั้งค่าการเชื่อมต่อ Hostinger MySQL สำเร็จ
+                      </p>
                     )}
                   </div>
                 </div>

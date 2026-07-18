@@ -398,8 +398,23 @@ export default function App() {
             }
           }
 
-          if (result.success && result.data && result.data.firebase && result.data.firebase.employees && result.data.firebase.employees.length > 0) {
-            const fb = result.data.firebase;
+          // Choose the primary database source: Prefer Hostinger MySQL if it has data, fallback to Firebase Firestore
+          let dbPayload = null;
+          let sourceName = "";
+
+          if (result.success && result.data) {
+            if (result.data.mysql && result.data.mysql.employees && result.data.mysql.employees.length > 0) {
+              dbPayload = result.data.mysql;
+              sourceName = "Hostinger MySQL";
+            } else if (result.data.firebase && result.data.firebase.employees && result.data.firebase.employees.length > 0) {
+              dbPayload = result.data.firebase;
+              sourceName = "Firebase Firestore";
+            }
+          }
+
+          if (dbPayload) {
+            console.log(`Loading application data from ${sourceName}...`);
+            const fb = dbPayload;
             
             setEmployees(fb.employees);
             if (fb.leaves) setLeaves(fb.leaves);
@@ -432,9 +447,18 @@ export default function App() {
               }
             }
 
-            if (fb.systemSettings && fb.systemSettings.length > 0) {
-              const settingsDoc = fb.systemSettings.find((s: any) => s.id === "current");
-              if (settingsDoc) setSystemSettings(settingsDoc);
+            if (fb.systemSettings) {
+              if (Array.isArray(fb.systemSettings) && fb.systemSettings.length > 0) {
+                const settingsDoc = fb.systemSettings.find((s: any) => s.id === "current");
+                if (settingsDoc) setSystemSettings(settingsDoc);
+              } else if (typeof fb.systemSettings === 'object' && fb.systemSettings !== null) {
+                // Handle direct settings object
+                if (fb.systemSettings.id === "current" || fb.systemSettings.workingHoursStart) {
+                  setSystemSettings(fb.systemSettings);
+                } else {
+                  setSystemSettings(fb.systemSettings);
+                }
+              }
             }
 
             // Save loaded payload to reference to prevent immediately writing it back
@@ -497,19 +521,46 @@ export default function App() {
 
     const unsubscribers: (() => void)[] = [];
 
-    const setupListener = (key: string, path: string, setter: (val: any) => void) => {
+    const setupListener = (
+      key: string,
+      path: string,
+      stateSetter: (val: any) => void,
+      customTransformer?: (remoteData: any) => any
+    ) => {
       try {
         const docRef = doc(clientDb, path);
         const unsub = onSnapshot(docRef, (docSnap) => {
           if (docSnap.exists()) {
             const remoteData = docSnap.data().data;
             if (remoteData !== undefined && remoteData !== null) {
-              setter((current: any) => {
+              const processedData = customTransformer ? customTransformer(remoteData) : remoteData;
+              
+              stateSetter((current: any) => {
                 const currentStr = JSON.stringify(current);
-                const incomingStr = JSON.stringify(remoteData);
+                const incomingStr = JSON.stringify(processedData);
                 if (currentStr !== incomingStr) {
                   console.log(`[Firestore Live Update] Synchronizing changed ${key} from remote real-time stream`);
-                  return remoteData;
+                  
+                  // Crucial: Update the last synced payload reference *before* React state triggers the useEffect sync,
+                  // so the auto-sync effect knows this change came from the server and doesn't write it back!
+                  if (latestPayloadRef.current) {
+                    let payloadValue = remoteData;
+                    if (key === "systemSettings") {
+                      payloadValue = [{ id: "current", ...remoteData }];
+                    } else if (key === "attendance") {
+                      payloadValue = Array.isArray(remoteData) 
+                        ? remoteData 
+                        : Object.entries(remoteData).map(([empId, records]) => ({ id: empId, records }));
+                    }
+                    
+                    const updatedPayload = {
+                      ...latestPayloadRef.current,
+                      [key]: payloadValue
+                    };
+                    lastSyncedPayloadRef.current = getNormalizedPayloadString(updatedPayload);
+                  }
+                  
+                  return processedData;
                 }
                 return current;
               });
@@ -541,44 +592,31 @@ export default function App() {
     setupListener("counterDuties", "counter_duties/current", setCounterDuties);
 
     // systemSettings is structured a bit differently sometimes
-    setupListener("systemSettings", "system_settings/current", (val) => {
-      setSystemSettings((current: any) => {
-        let settingsObj = current;
-        if (val && val.id === "current") {
-          settingsObj = val;
-        } else if (Array.isArray(val)) {
-          const found = val.find((s: any) => s.id === "current");
-          if (found) settingsObj = found;
-        } else if (typeof val === "object" && val !== null) {
-          settingsObj = val;
-        }
-        if (JSON.stringify(current) !== JSON.stringify(settingsObj)) {
-          return settingsObj;
-        }
-        return current;
-      });
+    setupListener("systemSettings", "system_settings/current", setSystemSettings, (remoteData) => {
+      let settingsObj = null;
+      if (remoteData && remoteData.id === "current") {
+        settingsObj = remoteData;
+      } else if (Array.isArray(remoteData)) {
+        settingsObj = remoteData.find((s: any) => s.id === "current") || remoteData[0];
+      } else if (typeof remoteData === "object" && remoteData !== null) {
+        settingsObj = remoteData;
+      }
+      return settingsObj;
     });
 
     // attendance is either an array or an object
-    setupListener("attendance", "attendance/current", (val) => {
-      setAttendanceRecords((current: any) => {
-        const attendanceMap: any = {};
-        if (Array.isArray(val)) {
-          val.forEach((item: any) => {
-            if (item && item.id) {
-              attendanceMap[item.id] = item.records || [];
-            }
-          });
-        } else if (typeof val === 'object' && val !== null) {
-          Object.assign(attendanceMap, val);
-        }
-        
-        if (JSON.stringify(current) !== JSON.stringify(attendanceMap)) {
-          console.log(`[Firestore Live Update] Synchronizing changed attendance from remote real-time stream`);
-          return attendanceMap;
-        }
-        return current;
-      });
+    setupListener("attendance", "attendance/current", setAttendanceRecords, (remoteData) => {
+      const attendanceMap: any = {};
+      if (Array.isArray(remoteData)) {
+        remoteData.forEach((item: any) => {
+          if (item && item.id) {
+            attendanceMap[item.id] = item.records || [];
+          }
+        });
+      } else if (typeof remoteData === 'object' && remoteData !== null) {
+        Object.assign(attendanceMap, remoteData);
+      }
+      return attendanceMap;
     });
 
     return () => {
@@ -1913,7 +1951,7 @@ export default function App() {
 
               <button
                 onClick={executeManualSync}
-                disabled={isSyncingTop || (!dbStatuses.mysql.connected && !dbStatuses.firebase.connected)}
+                disabled={isSyncingTop}
                 className={`p-0.5 hover:bg-slate-200 rounded-xs text-slate-500 hover:text-indigo-600 disabled:opacity-50 transition cursor-pointer flex items-center justify-center ${isSyncingTop ? 'animate-spin text-indigo-600' : ''}`}
                 title={lastSyncedTime ? `ซิงก์ล่าสุดเวลา ${lastSyncedTime}` : 'ซิงโครไนซ์ไปยังคลาวด์'}
               >

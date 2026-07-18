@@ -2,10 +2,12 @@ import fs from "fs";
 import path from "path";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, doc, setDoc, getDoc, writeBatch, deleteDoc } from "firebase/firestore";
+import mysql from "mysql2/promise";
 
 // Config paths
 const LOCAL_DB_PATH = path.join(process.cwd(), "server", "local_db.json");
 const CONFIG_PATH = path.join(process.cwd(), "firebase-applet-config.json");
+const MYSQL_CONFIG_PATH = path.join(process.cwd(), "server", "mysql_config.json");
 
 export interface MySQLConfig {
   host: string;
@@ -73,18 +75,37 @@ function getFirestoreInstance() {
 }
 
 export function getMySQLConfig(): MySQLConfig {
+  try {
+    if (fs.existsSync(MYSQL_CONFIG_PATH)) {
+      const data = fs.readFileSync(MYSQL_CONFIG_PATH, "utf8");
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error("Error reading mysql_config.json:", error);
+  }
+  
   return {
-    host: "",
-    port: 3306,
-    user: "",
-    password: "",
-    database: "",
-    autoCreateDb: false
+    host: process.env.MYSQL_HOST || "",
+    port: Number(process.env.MYSQL_PORT) || 3306,
+    user: process.env.MYSQL_USER || "",
+    password: process.env.MYSQL_PASSWORD || "",
+    database: process.env.MYSQL_DATABASE || "",
+    autoCreateDb: process.env.MYSQL_AUTO_CREATE === "true" || true
   };
 }
 
 export function saveMySQLConfig(config: MySQLConfig) {
-  return true;
+  try {
+    const parentDir = path.dirname(MYSQL_CONFIG_PATH);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
+    }
+    fs.writeFileSync(MYSQL_CONFIG_PATH, JSON.stringify(config, null, 2), "utf8");
+    return true;
+  } catch (error) {
+    console.error("Error saving mysql_config.json:", error);
+    return false;
+  }
 }
 
 export async function initMySQLTables(connection: any) {
@@ -200,6 +221,67 @@ export async function syncToDualDatabases(payload: SyncPayload, mysqlConfig?: My
     results.firebase.error = error.message || "Failed to save to Firestore";
   }
 
+  // 4. Sync to Hostinger MySQL (if configured)
+  const activeMysqlConfig = mysqlConfig || getMySQLConfig();
+  if (activeMysqlConfig && activeMysqlConfig.host) {
+    let connection: any = null;
+    try {
+      connection = await mysql.createConnection({
+        host: activeMysqlConfig.host,
+        port: Number(activeMysqlConfig.port) || 3306,
+        user: activeMysqlConfig.user,
+        password: activeMysqlConfig.password || "",
+        database: activeMysqlConfig.database,
+        connectTimeout: 5000
+      });
+
+      // Ensure table exists
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS app_collections (
+          collection_key VARCHAR(100) PRIMARY KEY,
+          collection_data LONGTEXT NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
+
+      // Write each collection in SyncPayload to MySQL
+      for (const item of COLLECTION_KEYS) {
+        let val = (payload as any)[item.key];
+        if (val === undefined || val === null) {
+          if (item.key === "systemSettings") {
+            val = {};
+          } else if (item.key === "attendance") {
+            val = {};
+          } else {
+            val = [];
+          }
+        }
+
+        const serialized = JSON.stringify(val);
+        await connection.query(
+          "INSERT INTO app_collections (collection_key, collection_data) VALUES (?, ?) ON DUPLICATE KEY UPDATE collection_data = ?, updated_at = CURRENT_TIMESTAMP",
+          [item.key, serialized, serialized]
+        );
+      }
+
+      results.mysql.success = true;
+      results.mysql.error = "";
+      console.log("[MySQL Sync] Successfully synced all collections to Hostinger MySQL!");
+    } catch (error: any) {
+      console.error("[MySQL Sync] Error syncing to MySQL:", error);
+      results.mysql.success = false;
+      results.mysql.error = error.message || "Failed to sync to MySQL";
+    } finally {
+      if (connection) {
+        try {
+          await connection.end();
+        } catch (e) {}
+      }
+    }
+  } else {
+    results.mysql.error = "ยังไม่มีการตั้งค่าการเชื่อมต่อ Hostinger MySQL (กรุณากรอกข้อมูลโฮสต์ในหน้าจอตั้งค่า)";
+  }
+
   return results;
 }
 
@@ -209,6 +291,72 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
     mysql: null,
     firebase: null
   };
+
+  // Attempt to load from Hostinger MySQL
+  const activeMysqlConfig = mysqlConfig || getMySQLConfig();
+  if (activeMysqlConfig && activeMysqlConfig.host) {
+    let connection: any = null;
+    try {
+      connection = await mysql.createConnection({
+        host: activeMysqlConfig.host,
+        port: Number(activeMysqlConfig.port) || 3306,
+        user: activeMysqlConfig.user,
+        password: activeMysqlConfig.password || "",
+        database: activeMysqlConfig.database,
+        connectTimeout: 4000
+      });
+
+      // Ensure table exists
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS app_collections (
+          collection_key VARCHAR(100) PRIMARY KEY,
+          collection_data LONGTEXT NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
+
+      const [rows]: any = await connection.query("SELECT collection_key, collection_data FROM app_collections");
+      if (rows && rows.length > 0) {
+        const mysqlPayload: any = {};
+        rows.forEach((row: any) => {
+          try {
+            mysqlPayload[row.collection_key] = JSON.parse(row.collection_data);
+          } catch (e) {
+            console.error(`Error parsing mysql collection ${row.collection_key}:`, e);
+          }
+        });
+
+        data.mysql = {
+          employees: mysqlPayload.employees || [],
+          payroll: mysqlPayload.payroll || [],
+          leaves: mysqlPayload.leaves || [],
+          sales: mysqlPayload.sales || [],
+          cheques: mysqlPayload.cheques || [],
+          cashflow: mysqlPayload.cashflow || [],
+          partnerBillings: mysqlPayload.partnerBillings || [],
+          auditLogs: mysqlPayload.auditLogs || [],
+          jobs: mysqlPayload.jobs || [],
+          applicants: mysqlPayload.applicants || [],
+          evaluations: mysqlPayload.evaluations || [],
+          attendance: mysqlPayload.attendance || {},
+          dayoffSwaps: mysqlPayload.dayoffSwaps || [],
+          partnerCompanies: mysqlPayload.partnerCompanies || [],
+          systemSettings: mysqlPayload.systemSettings || {},
+          counterDuties: mysqlPayload.counterDuties || []
+        };
+        console.log("Successfully loaded data from Hostinger MySQL!");
+      }
+    } catch (error: any) {
+      console.error("[MySQL Load] Error loading from MySQL:", error);
+      data.mysqlError = error.message || "Failed to load from MySQL";
+    } finally {
+      if (connection) {
+        try {
+          await connection.end();
+        } catch (e) {}
+      }
+    }
+  }
 
   let loadedFromFirebase = false;
   let firebaseLoadError: string | null = null;
