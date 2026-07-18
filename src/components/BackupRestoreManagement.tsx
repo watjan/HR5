@@ -1010,7 +1010,7 @@ export default function BackupRestoreManagement({
                   </div>
                   <div className="space-y-1 font-sans">
                     <div className="flex items-center gap-1.5">
-                      <h4 className="font-bold text-xs text-slate-800">ฐานข้อมูลหลัก Google Cloud Firestore</h4>
+                      <h4 className="font-bold text-xs text-slate-800">ฐานข้อมูลสำรอง Google Cloud Firestore (ตัวสำรอง)</h4>
                       <span className={`w-2 h-2 rounded-full ${
                         dbStatuses.firebase.connected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
                       }`} />
@@ -1021,7 +1021,7 @@ export default function BackupRestoreManagement({
                     <p className={`text-[10px] font-bold ${
                       dbStatuses.firebase.connected ? 'text-emerald-700' : 'text-rose-700'
                     }`}>
-                      {dbStatuses.firebase.connected ? '● เชื่อมต่อและซิงโครไนซ์คลาวด์สำเร็จ' : `❌ ไม่ออนไลน์: ${dbStatuses.firebase.error || 'ไม่มีค่าคอนฟิกหรือบล็อกความปลอดภัย'}`}
+                      {dbStatuses.firebase.connected ? '● ออนไลน์ (พร้อมเชื่อมต่อสำรอง)' : `🔴 ออฟไลน์: ${dbStatuses.firebase.error || 'ไม่มีค่าคอนฟิกหรือบล็อกความปลอดภัย'}`}
                     </p>
                   </div>
                   <div className="absolute top-1 right-1 opacity-10">
@@ -1040,7 +1040,7 @@ export default function BackupRestoreManagement({
                   </div>
                   <div className="space-y-1 font-sans">
                     <div className="flex items-center gap-1.5">
-                      <h4 className="font-bold text-xs text-slate-800">ฐานข้อมูลสำรอง Hostinger MySQL (Relational)</h4>
+                      <h4 className="font-bold text-xs text-slate-800">ฐานข้อมูลหลัก Hostinger MySQL (ตัวหลัก)</h4>
                       <span className={`w-2 h-2 rounded-full ${
                         dbStatuses.mysql.connected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
                       }`} />
@@ -1051,7 +1051,7 @@ export default function BackupRestoreManagement({
                     <p className={`text-[10px] font-bold ${
                       dbStatuses.mysql.connected ? 'text-emerald-700' : 'text-rose-700'
                     }`}>
-                      {dbStatuses.mysql.connected ? '● เชื่อมต่อและซิงโครไนซ์ข้อมูลสำเร็จ' : `❌ ไม่ออนไลน์: ${dbStatuses.mysql.error || 'ยังไม่มีการตั้งค่าหรือไม่ได้กรอก Host'}`}
+                      {dbStatuses.mysql.connected ? '● ออนไลน์ (ใช้งานเป็นฐานข้อมูลหลัก)' : `🔴 ออฟไลน์: ${dbStatuses.mysql.error || 'ยังไม่มีการตั้งค่าหรือไม่ได้กรอก Host'}`}
                     </p>
                   </div>
                 </div>
@@ -1151,14 +1151,14 @@ export default function BackupRestoreManagement({
               </div>
             </div>
 
-            {/* Cloud Storage Information */}
+            {/* Database Storage Information */}
             <div className="bg-white border border-slate-200 rounded-sm p-6 shadow-2xs space-y-5">
               <div className="space-y-2">
                 <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" /> ระบบจัดเก็บข้อมูลคลาวด์แบบปลอดภัย (Cloud-First Storage)
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" /> ระบบจัดเก็บข้อมูลสองชั้น (Dual-Database Sync Engine)
                 </h3>
                 <p className="text-[11.5px] text-slate-600 font-sans leading-relaxed">
-                  แอปพลิเคชัน HR Management System นี้ได้รับการออกแบบมาเพื่อทำงานกับฐานข้อมูลคลาวด์ Google Cloud Firebase Firestore โดยตรง มอบความเสถียรและความแม่นยำสูงที่สุดในทุกๆ การกดบันทึก
+                  แอปพลิเคชันได้รับการกำหนดค่าให้ทำงานโดยใช้ <strong>Hostinger MySQL เป็นระบบหลัก</strong> ในการอ่านและดึงข้อมูล และมี <strong>Google Cloud Firebase Firestore เป็นระบบสำรอง</strong> เพื่อรับประกันความสูญหายของข้อมูลในทุกกรณี
                 </p>
               </div>
 
@@ -1166,15 +1166,15 @@ export default function BackupRestoreManagement({
                 <div className="flex items-start gap-2.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
                   <div>
-                    <strong className="text-slate-800 block text-[11px]">บันทึกสดทันใจแบบ Real-time</strong>
-                    <span className="text-slate-500 text-[10.5px]">ทุกการสร้างและอัปเดตพนักงาน ใบลา จ่ายเงินเดือน สลิป ตารางเวร และงานจะเชื่อมโยงไปคลาวด์อัตโนมัติ</span>
+                    <strong className="text-slate-800 block text-[11px]">ดึงข้อมูลจาก Hostinger MySQL เป็นตัวหลัก</strong>
+                    <span className="text-slate-500 text-[10.5px]">แอปพลิเคชันจะโหลดพนักงาน, การลงเวลาทำงาน, เงินเดือน และใบลาทั้งหมดจาก MySQL เป็นอันดับแรกเพื่อความต่อเนื่องสูงสุด</span>
                   </div>
                 </div>
                 <div className="flex items-start gap-2.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
                   <div>
-                    <strong className="text-slate-800 block text-[11px]">ความเสถียร 100% ปลอดภัยสูง</strong>
-                    <span className="text-slate-500 text-[10.5px]">หมดกังวลเรื่องการตั้งค่า Port ปัญหาการปิด Remote MySQL หรือ Connection Timeouts บน Hostinger</span>
+                    <strong className="text-slate-800 block text-[11px]">สำรองข้อมูลเรียลไทม์บน Firebase Firestore</strong>
+                    <span className="text-slate-500 text-[10.5px]">เมื่อใดก็ตามที่มีการซิงก์ข้อมูล ข้อมูลจะถูกเขียนลงทั้ง Hostinger MySQL และ Firebase Firestore ควบคู่กันเพื่อให้ระบบปลอดภัยจากการสูญหาย</span>
                   </div>
                 </div>
               </div>

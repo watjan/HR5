@@ -563,19 +563,34 @@ export default function DatabaseInspector({
               <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-sm font-bold uppercase tracking-wider text-[10px]">
                 ● ACTIVE RUNTIME
               </span>
+            ) : dataSource === 'mysql' ? (
+              dbConfig?.status?.mysql?.connected ? (
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-sm font-bold uppercase tracking-wider text-[10px] flex items-center gap-1 font-mono">
+                    ⚡ ฐานข้อมูลหลัก (PRIMARY)
+                  </span>
+                  <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-sm font-bold uppercase tracking-wider text-[10px] flex items-center gap-1 font-mono">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> ออนไลน์ (ONLINE)
+                  </span>
+                </div>
+              ) : (
+                <span className="px-2.5 py-1 bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-sm font-bold uppercase tracking-wider text-[10px]" title={dbConfig?.status?.mysql?.error || 'ไม่มีคอนฟิก'}>
+                  ❌ ออฟไลน์ (OFFLINE)
+                </span>
+              )
             ) : (
               dbConfig?.status?.firebase?.connected ? (
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-1 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-sm font-bold uppercase tracking-wider text-[10px] flex items-center gap-1 font-mono">
-                    ⚡ อัปเดตเรียลไทม์ [LIVE]
+                    ⚡ ฐานข้อมูลสำรอง (BACKUP)
                   </span>
                   <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-sm font-bold uppercase tracking-wider text-[10px] flex items-center gap-1 font-mono">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> เชื่อมต่อ FIREBASE สำเร็จ
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> ออนไลน์ (ONLINE)
                   </span>
                 </div>
               ) : (
                 <span className="px-2.5 py-1 bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-sm font-bold uppercase tracking-wider text-[10px]" title={dbConfig?.status?.firebase?.error || 'ไม่มีคอนฟิก'}>
-                  ❌ ไม่เชื่อมต่อ FIREBASE
+                  ❌ ออฟไลน์ (OFFLINE)
                 </span>
               )
             )}
@@ -588,18 +603,28 @@ export default function DatabaseInspector({
         <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="space-y-1">
             <span className="font-bold text-slate-800 uppercase tracking-wide font-mono flex items-center gap-1">
-              🔥 Google Cloud Firebase Firestore Settings
+              {dataSource === 'mysql' ? '🗄️ Hostinger MySQL Connection Settings' : '🔥 Google Cloud Firebase Firestore Settings'}
             </span>
             <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-slate-500">
-              <span>Project ID: <strong className="text-slate-700">{dbConfig?.firebase?.projectId || '(ไม่ได้กำหนด)'}</strong></span>
-              <span>Database ID: <strong className="text-slate-700">{dbConfig?.firebase?.firestoreDatabaseId || '(default)'}</strong></span>
+              {dataSource === 'mysql' ? (
+                <>
+                  <span>Host: <strong className="text-slate-700">{dbConfig?.mysql?.host || '(ไม่ได้กำหนด)'}</strong></span>
+                  <span>Database: <strong className="text-slate-700">{dbConfig?.mysql?.database || '(ไม่ได้กำหนด)'}</strong></span>
+                  <span>User: <strong className="text-slate-700">{dbConfig?.mysql?.user || '(ไม่ได้กำหนด)'}</strong></span>
+                </>
+              ) : (
+                <>
+                  <span>Project ID: <strong className="text-slate-700">{dbConfig?.firebase?.projectId || '(ไม่ได้กำหนด)'}</strong></span>
+                  <span>Database ID: <strong className="text-slate-700">{dbConfig?.firebase?.firestoreDatabaseId || '(default)'}</strong></span>
+                </>
+              )}
             </div>
           </div>
           
           <div className="text-[11px] text-slate-500 max-w-md font-sans">
             {dataSource === 'firebase' 
-              ? 'ระบบจะดึงข้อมูลเอกสารแบบสดโดยตรงจากคอลเลกชัน Cloud Firestore ของคุณ เพื่อความรวดเร็วและปลอดภัยสูงสุด'
-              : 'ตารางจะเชื่อมต่อไปยังระบบตารางเชิงสัมพันธ์ Hostinger MySQL ของคุณ เพื่อประมวลผลคำสั่ง SQL และเก็บข้อมูลสำรองหลัก'}
+              ? 'ระบบจะซิงค์และสำรองข้อมูลคู่ขนานกับ Cloud Firestore เพื่อเป็นฐานข้อมูลสำรองยามฉุกเฉิน'
+              : 'ตารางจะเชื่อมต่อโดยตรงกับ Hostinger MySQL ซึ่งเป็นระบบหลักในการดึงข้อมูลมาแสดงผลและประมวลผลคำสั่งระบบ'}
           </div>
         </div>
       )}
