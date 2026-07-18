@@ -72,6 +72,19 @@ import {
   Flame
 } from 'lucide-react';
 
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, onSnapshot } from "firebase/firestore";
+import firebaseConfig from "../firebase-applet-config.json";
+
+// Initialize client-side Firebase for real-time synchronization
+let clientDb: any = null;
+try {
+  const firebaseAppInstance = initializeApp(firebaseConfig);
+  clientDb = getFirestore(firebaseAppInstance, firebaseConfig.firestoreDatabaseId);
+} catch (error) {
+  console.error("Firebase client initialization error in App.tsx:", error);
+}
+
 export default function App() {
   // Navigation active tab
   const [activeTab, setActiveTab] = useState<string>('counter_duty');
@@ -476,6 +489,101 @@ export default function App() {
   // Core state storage has been disconnected from Local Storage per user request to use Firebase only.
   useEffect(() => {
     // Local Storage persistence is disabled for the entire project's core data.
+  }, []);
+
+  // Client-Side Real-Time listeners to enable Instant live UI updates (อัพเดตแบบเรียลไทม์)
+  useEffect(() => {
+    if (!clientDb) return;
+
+    const unsubscribers: (() => void)[] = [];
+
+    const setupListener = (key: string, path: string, setter: (val: any) => void) => {
+      try {
+        const docRef = doc(clientDb, path);
+        const unsub = onSnapshot(docRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const remoteData = docSnap.data().data;
+            if (remoteData !== undefined && remoteData !== null) {
+              setter((current: any) => {
+                const currentStr = JSON.stringify(current);
+                const incomingStr = JSON.stringify(remoteData);
+                if (currentStr !== incomingStr) {
+                  console.log(`[Firestore Live Update] Synchronizing changed ${key} from remote real-time stream`);
+                  return remoteData;
+                }
+                return current;
+              });
+            }
+          }
+        }, (error) => {
+          console.error(`Error in real-time listener for ${key}:`, error);
+        });
+        unsubscribers.push(unsub);
+      } catch (err) {
+        console.error(`Failed to set up real-time listener for ${key}:`, err);
+      }
+    };
+
+    // Setup listeners for all collections
+    setupListener("employees", "employees/current", setEmployees);
+    setupListener("payroll", "payroll/current", setPayroll);
+    setupListener("leaves", "leaves/current", setLeaves);
+    setupListener("sales", "sales/current", setSales);
+    setupListener("cheques", "cheques/current", setCheques);
+    setupListener("cashflow", "cashflow/current", setCashFlow);
+    setupListener("partnerBillings", "partner_billings/current", setPartnerBillings);
+    setupListener("auditLogs", "audit_logs/current", setAuditLogs);
+    setupListener("jobs", "jobs/current", setJobs);
+    setupListener("applicants", "applicants/current", setApplicants);
+    setupListener("evaluations", "evaluations/current", setEvaluations);
+    setupListener("dayoffSwaps", "dayoff_swaps/current", setDayOffSwaps);
+    setupListener("partnerCompanies", "partner_companies/current", setPartnerCompanies);
+    setupListener("counterDuties", "counter_duties/current", setCounterDuties);
+
+    // systemSettings is structured a bit differently sometimes
+    setupListener("systemSettings", "system_settings/current", (val) => {
+      setSystemSettings((current: any) => {
+        let settingsObj = current;
+        if (val && val.id === "current") {
+          settingsObj = val;
+        } else if (Array.isArray(val)) {
+          const found = val.find((s: any) => s.id === "current");
+          if (found) settingsObj = found;
+        } else if (typeof val === "object" && val !== null) {
+          settingsObj = val;
+        }
+        if (JSON.stringify(current) !== JSON.stringify(settingsObj)) {
+          return settingsObj;
+        }
+        return current;
+      });
+    });
+
+    // attendance is either an array or an object
+    setupListener("attendance", "attendance/current", (val) => {
+      setAttendanceRecords((current: any) => {
+        const attendanceMap: any = {};
+        if (Array.isArray(val)) {
+          val.forEach((item: any) => {
+            if (item && item.id) {
+              attendanceMap[item.id] = item.records || [];
+            }
+          });
+        } else if (typeof val === 'object' && val !== null) {
+          Object.assign(attendanceMap, val);
+        }
+        
+        if (JSON.stringify(current) !== JSON.stringify(attendanceMap)) {
+          console.log(`[Firestore Live Update] Synchronizing changed attendance from remote real-time stream`);
+          return attendanceMap;
+        }
+        return current;
+      });
+    });
+
+    return () => {
+      unsubscribers.forEach((unsub) => unsub());
+    };
   }, []);
 
   // Real-time Auto-Sync to Firebase and MySQL
