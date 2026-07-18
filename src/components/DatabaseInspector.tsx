@@ -825,7 +825,7 @@ export default function DatabaseInspector({
                 <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto animate-bounce" />
                 <h3 className="text-sm font-bold text-slate-800 font-sans">ตาราง "{currentTable.id}" จัดเก็บเฉพาะภายในหน่วยความจำรันไทม์แอปพลิเคชัน</h3>
                 <p className="text-xs text-slate-500 font-sans max-w-md mx-auto leading-relaxed">
-                  ตารางข้อมูล <strong>{currentTable.id}</strong> จัดเก็บผ่านหน่วยความจำรันไทม์หลักที่ได้รับจากฐานข้อมูลคลาวด์ Firebase/Firestore เท่านั้น (ระบบปิดการใช้งาน Local Storage ในเบราว์เซอร์อย่างถาวร)
+                  ตารางข้อมูล <strong>{currentTable.id}</strong> จัดเก็บผ่านระบบฐานข้อมูลหลัก Hostinger MySQL และซิงก์สำรองคลาวด์ Firebase Firestore (ระบบปิดการใช้งาน Local Storage ในเบราว์เซอร์อย่างถาวร)
                 </p>
                 <div className="pt-2">
                   <span className="inline-block px-3 py-1.5 bg-slate-100 border border-slate-200 text-slate-400 text-[11px] font-bold rounded-sm select-none font-sans">
