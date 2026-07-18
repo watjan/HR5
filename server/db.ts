@@ -316,8 +316,8 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
       `);
 
       const [rows]: any = await connection.query("SELECT collection_key, collection_data FROM app_collections");
+      const mysqlPayload: any = {};
       if (rows && rows.length > 0) {
-        const mysqlPayload: any = {};
         rows.forEach((row: any) => {
           try {
             mysqlPayload[row.collection_key] = JSON.parse(row.collection_data);
@@ -325,27 +325,27 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
             console.error(`Error parsing mysql collection ${row.collection_key}:`, e);
           }
         });
-
-        data.mysql = {
-          employees: mysqlPayload.employees || [],
-          payroll: mysqlPayload.payroll || [],
-          leaves: mysqlPayload.leaves || [],
-          sales: mysqlPayload.sales || [],
-          cheques: mysqlPayload.cheques || [],
-          cashflow: mysqlPayload.cashflow || [],
-          partnerBillings: mysqlPayload.partnerBillings || [],
-          auditLogs: mysqlPayload.auditLogs || [],
-          jobs: mysqlPayload.jobs || [],
-          applicants: mysqlPayload.applicants || [],
-          evaluations: mysqlPayload.evaluations || [],
-          attendance: mysqlPayload.attendance || {},
-          dayoffSwaps: mysqlPayload.dayoffSwaps || [],
-          partnerCompanies: mysqlPayload.partnerCompanies || [],
-          systemSettings: mysqlPayload.systemSettings || {},
-          counterDuties: mysqlPayload.counterDuties || []
-        };
-        console.log("Successfully loaded data from Hostinger MySQL!");
       }
+
+      data.mysql = {
+        employees: mysqlPayload.employees || [],
+        payroll: mysqlPayload.payroll || [],
+        leaves: mysqlPayload.leaves || [],
+        sales: mysqlPayload.sales || [],
+        cheques: mysqlPayload.cheques || [],
+        cashflow: mysqlPayload.cashflow || [],
+        partnerBillings: mysqlPayload.partnerBillings || [],
+        auditLogs: mysqlPayload.auditLogs || [],
+        jobs: mysqlPayload.jobs || [],
+        applicants: mysqlPayload.applicants || [],
+        evaluations: mysqlPayload.evaluations || [],
+        attendance: mysqlPayload.attendance || {},
+        dayoffSwaps: mysqlPayload.dayoffSwaps || [],
+        partnerCompanies: mysqlPayload.partnerCompanies || [],
+        systemSettings: mysqlPayload.systemSettings || {},
+        counterDuties: mysqlPayload.counterDuties || []
+      };
+      console.log("Successfully loaded data from Hostinger MySQL!");
     } catch (error: any) {
       console.error("[MySQL Load] Error loading from MySQL:", error);
       data.mysqlError = error.message || "Failed to load from MySQL";

@@ -401,6 +401,7 @@ export default function App() {
           // Choose the primary database source: Hostinger MySQL is the primary database. Firebase Firestore is the backup.
           let dbPayload = null;
           let sourceName = "";
+          let isMigratedToMysql = false;
 
           if (result.success && result.data) {
             const hasMysqlData = result.data.mysql && 
@@ -413,9 +414,16 @@ export default function App() {
                result.data.firebase.leaves?.length > 0 || 
                result.data.firebase.payroll?.length > 0);
 
-            if (result.data.mysql && !result.data.mysqlError && (hasMysqlData || !hasFirebaseData)) {
-              dbPayload = result.data.mysql;
-              sourceName = "Hostinger MySQL (Primary)";
+            if (result.data.mysql && !result.data.mysqlError) {
+              if (!hasMysqlData && hasFirebaseData) {
+                console.log("Hostinger MySQL is connected but empty. Automatically migrating Firebase data to MySQL...");
+                dbPayload = result.data.firebase;
+                sourceName = "Hostinger MySQL (Migrated from Firebase)";
+                isMigratedToMysql = true;
+              } else {
+                dbPayload = result.data.mysql;
+                sourceName = "Hostinger MySQL (Primary)";
+              }
             } else if (result.data.firebase) {
               dbPayload = result.data.firebase;
               sourceName = "Firebase Firestore (Backup)";
@@ -490,7 +498,11 @@ export default function App() {
               systemSettings: fb.systemSettings || [],
               counterDuties: fb.counterDuties || []
             };
-            lastSyncedPayloadRef.current = getNormalizedPayloadString(loadedPayload);
+            if (isMigratedToMysql) {
+              lastSyncedPayloadRef.current = ""; // force instant auto-sync to Hostinger MySQL
+            } else {
+              lastSyncedPayloadRef.current = getNormalizedPayloadString(loadedPayload);
+            }
 
             setServerDataLoaded(true);
           } else {
