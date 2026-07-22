@@ -258,6 +258,7 @@ export default function App() {
         cheques: payload.cheques,
         cashflow: payload.cashflow || payload.cashFlow,
         partnerBillings: payload.partnerBillings,
+        transportWaybills: payload.transportWaybills,
         auditLogs: payload.auditLogs,
         jobs: payload.jobs,
         applicants: payload.applicants,
@@ -308,6 +309,7 @@ export default function App() {
         cheques: INITIAL_CHEQUES,
         cashflow: INITIAL_CASH_FLOW,
         partnerBillings: INITIAL_PARTNER_BILLINGS,
+        transportWaybills: INITIAL_TRANSPORT_WAYBILLS,
         auditLogs: INITIAL_AUDIT_LOGS,
         jobs: INITIAL_JOBS,
         applicants: INITIAL_APPLICANTS,
@@ -338,6 +340,7 @@ export default function App() {
               if (parsed.cheques) setCheques(parsed.cheques);
               if (parsed.cashflow) setCashFlow(parsed.cashflow);
               if (parsed.partnerBillings) setPartnerBillings(parsed.partnerBillings);
+              if (parsed.transportWaybills) setTransportWaybills(parsed.transportWaybills);
               if (parsed.auditLogs) setAuditLogs(parsed.auditLogs);
               if (parsed.jobs) setJobs(parsed.jobs);
               if (parsed.applicants) setApplicants(parsed.applicants);
@@ -450,6 +453,7 @@ export default function App() {
             if (fb.cheques) setCheques(fb.cheques);
             if (fb.cashflow) setCashFlow(fb.cashflow);
             if (fb.partnerBillings) setPartnerBillings(fb.partnerBillings);
+            if (fb.transportWaybills) setTransportWaybills(fb.transportWaybills);
             if (fb.auditLogs) setAuditLogs(fb.auditLogs);
             if (fb.jobs) setJobs(fb.jobs);
             if (fb.applicants) setApplicants(fb.applicants);
@@ -497,6 +501,7 @@ export default function App() {
               cheques: fb.cheques || [],
               cashflow: fb.cashflow || [],
               partnerBillings: fb.partnerBillings || [],
+              transportWaybills: fb.transportWaybills || [],
               auditLogs: fb.auditLogs || [],
               jobs: fb.jobs || [],
               applicants: fb.applicants || [],
@@ -635,6 +640,7 @@ export default function App() {
     setupListener("cheques", "cheques/current", setCheques);
     setupListener("cashflow", "cashflow/current", setCashFlow);
     setupListener("partnerBillings", "partner_billings/current", setPartnerBillings);
+    setupListener("transportWaybills", "transport_waybills/current", setTransportWaybills);
     setupListener("auditLogs", "audit_logs/current", setAuditLogs);
     setupListener("jobs", "jobs/current", setJobs);
     setupListener("applicants", "applicants/current", setApplicants);
@@ -742,6 +748,7 @@ export default function App() {
       cheques: cheques || [],
       cashflow: cashFlow || [],
       partnerBillings: partnerBillings || [],
+      transportWaybills: transportWaybills || [],
       auditLogs: auditLogs || [],
       jobs: jobs || [],
       applicants: applicants || [],
@@ -763,6 +770,7 @@ export default function App() {
     cheques,
     cashFlow,
     partnerBillings,
+    transportWaybills,
     auditLogs,
     jobs,
     applicants,
@@ -863,6 +871,7 @@ export default function App() {
         cheques: cheques || [],
         cashflow: cashFlow || [],
         partnerBillings: partnerBillings || [],
+        transportWaybills: transportWaybills || [],
         auditLogs: auditLogs || [],
         jobs: jobs || [],
         applicants: applicants || [],
@@ -891,6 +900,7 @@ export default function App() {
     cheques,
     cashFlow,
     partnerBillings,
+    transportWaybills,
     auditLogs,
     jobs,
     applicants,
@@ -921,6 +931,7 @@ export default function App() {
     cheques,
     cashFlow,
     partnerBillings,
+    transportWaybills,
     auditLogs,
     jobs,
     applicants,
@@ -1121,6 +1132,10 @@ export default function App() {
         setPartnerBillings(prev => prev.filter(item => item.id !== id));
         addAuditLog('DELETE', 'ตัวตรวจฐานข้อมูล', `ลบใบส่งของ/วางบิลคู่ค้า ID: ${id}`);
         break;
+      case 'transportWaybills':
+        setTransportWaybills(prev => prev.filter(item => item.id !== id));
+        addAuditLog('DELETE', 'ตัวตรวจฐานข้อมูล', `ลบรายการใบขนส่ง ID: ${id}`);
+        break;
       case 'partnerCompanies':
         setPartnerCompanies(prev => prev.filter(item => item.id !== id));
         addAuditLog('DELETE', 'ตัวตรวจฐานข้อมูล', `ลบบริษัทคู่ค้า ID: ${id}`);
@@ -1183,6 +1198,10 @@ export default function App() {
         setPartnerBillings([]);
         addAuditLog('DELETE', 'ตัวตรวจฐานข้อมูล', `ล้างตารางใบส่งของ/วางบิลทั้งหมด`);
         break;
+      case 'transportWaybills':
+        setTransportWaybills([]);
+        addAuditLog('DELETE', 'ตัวตรวจฐานข้อมูล', `ล้างตารางใบขนส่งทั้งหมด`);
+        break;
       case 'partnerCompanies':
         setPartnerCompanies([]);
         addAuditLog('DELETE', 'ตัวตรวจฐานข้อมูล', `ล้างตารางพาร์ทเนอร์บริษัทคู่ค้าทั้งหมด`);
@@ -1212,6 +1231,7 @@ export default function App() {
       hr_attendance: attendanceRecords,
       hr_dayoff_swaps: dayOffSwaps,
       hr_partner_billings: partnerBillings,
+      hr_transport_waybills: transportWaybills,
       hr_system_settings: systemSettings,
       hr_audit_logs: auditLogs,
       hr_sales: sales,
@@ -1236,6 +1256,7 @@ export default function App() {
       if (parsed.hr_attendance) setAttendanceRecords(parsed.hr_attendance);
       if (parsed.hr_dayoff_swaps) setDayOffSwaps(parsed.hr_dayoff_swaps);
       if (parsed.hr_partner_billings) setPartnerBillings(parsed.hr_partner_billings);
+      if (parsed.hr_transport_waybills) setTransportWaybills(parsed.hr_transport_waybills);
       if (parsed.hr_system_settings) setSystemSettings(parsed.hr_system_settings);
       if (parsed.hr_audit_logs) setAuditLogs(parsed.hr_audit_logs);
       if (parsed.hr_sales) setSales(parsed.hr_sales);
@@ -2519,6 +2540,7 @@ export default function App() {
               attendanceRecords={attendanceRecords}
               dayOffSwaps={dayOffSwaps}
               partnerBillings={partnerBillings}
+              transportWaybills={transportWaybills}
               partnerCompanies={partnerCompanies}
               systemSettings={systemSettings}
               auditLogs={auditLogs}

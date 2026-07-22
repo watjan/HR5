@@ -33,6 +33,7 @@ interface DatabaseInspectorProps {
   attendanceRecords: any;
   dayOffSwaps: any[];
   partnerBillings: any[];
+  transportWaybills?: any[];
   partnerCompanies: any[];
   systemSettings: any;
   auditLogs: any[];
@@ -53,6 +54,7 @@ export default function DatabaseInspector({
   attendanceRecords,
   dayOffSwaps,
   partnerBillings,
+  transportWaybills = [],
   partnerCompanies,
   systemSettings,
   auditLogs,
@@ -339,6 +341,7 @@ export default function DatabaseInspector({
         { id: 'attendance', name: 'Attendance (ประวัติเวลาทำงาน)', count: flatAttendance.length, data: flatAttendance, remoteSupported: true },
         { id: 'dayOffSwaps', name: 'DayOffSwaps (สลับวันหยุด)', count: dayOffSwaps.length, data: dayOffSwaps, remoteSupported: true },
         { id: 'partnerBillings', name: 'PartnerBillings (ใบส่งของ/วางบิล)', count: partnerBillings.length, data: partnerBillings, remoteSupported: true },
+        { id: 'transportWaybills', name: 'TransportWaybills (1. ใบขนส่ง)', count: transportWaybills.length, data: transportWaybills, remoteSupported: true },
         { id: 'partnerCompanies', name: 'PartnerCompanies (บริษัทคู่ค้า)', count: partnerCompanies.length, data: partnerCompanies, remoteSupported: true },
         { id: 'systemSettings', name: 'SystemSettings (ค่าตั้งค่าระบบ)', count: systemSettings ? 1 : 0, data: systemSettings ? [systemSettings] : [], remoteSupported: true },
         { id: 'auditLogs', name: 'AuditLogs (บันทึกประวัติระบบ)', count: auditLogs.length, data: auditLogs, remoteSupported: true },
@@ -358,13 +361,14 @@ export default function DatabaseInspector({
         { id: 'attendance', name: 'Attendance (ประวัติเวลาทำงาน)', count: flatRemoteAttendance.length, data: flatRemoteAttendance, remoteSupported: true },
         { id: 'dayOffSwaps', name: 'DayOffSwaps (สลับวันหยุด)', count: (sourceData.dayoffSwaps || []).length, data: sourceData.dayoffSwaps || [], remoteSupported: true },
         { id: 'partnerBillings', name: 'PartnerBillings (ใบส่งของ/วางบิล)', count: (sourceData.partnerBillings || []).length, data: sourceData.partnerBillings || [], remoteSupported: true },
+        { id: 'transportWaybills', name: 'TransportWaybills (1. ใบขนส่ง)', count: (sourceData.transportWaybills || []).length, data: sourceData.transportWaybills || [], remoteSupported: true },
         { id: 'partnerCompanies', name: 'PartnerCompanies (บริษัทคู่ค้า)', count: (sourceData.partnerCompanies || []).length, data: sourceData.partnerCompanies || [], remoteSupported: true },
         { id: 'systemSettings', name: 'SystemSettings (ค่าตั้งค่าระบบ)', count: (sourceData.systemSettings || []).length, data: sourceData.systemSettings || [], remoteSupported: true },
         { id: 'auditLogs', name: 'AuditLogs (บันทึกประวัติระบบ)', count: (sourceData.auditLogs || []).length, data: sourceData.auditLogs || [], remoteSupported: true },
         { id: 'sales', name: 'Sales (ยอดขายรายวัน)', count: (sourceData.sales || []).length, data: sourceData.sales || [], remoteSupported: true }
       ];
     }
-  }, [dataSource, remoteData, employees, leaves, payroll, jobs, applicants, evaluations, cashFlow, cheques, flatAttendance, flatRemoteAttendance, dayOffSwaps, partnerBillings, partnerCompanies, systemSettings, auditLogs, sales]);
+  }, [dataSource, remoteData, employees, leaves, payroll, jobs, applicants, evaluations, cashFlow, cheques, flatAttendance, flatRemoteAttendance, dayOffSwaps, partnerBillings, transportWaybills, partnerCompanies, systemSettings, auditLogs, sales]);
 
   const currentTable = useMemo(() => {
     return tablesMetadata.find(t => t.id === selectedTable) || tablesMetadata[0];
