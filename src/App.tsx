@@ -2361,6 +2361,11 @@ export default function App() {
               onAddPartner={handleAddPartner}
               onUpdatePartner={handleUpdatePartner}
               onDeletePartner={handleDeletePartner}
+              carriers={systemSettings.carriers}
+              onUpdateCarriers={(updatedCarriers) => {
+                setSystemSettings(prev => ({ ...prev, carriers: updatedCarriers }));
+                addAuditLog('UPDATE', 'ใบวางบิล', 'ปรับปรุงรายการบริษัทขนส่ง (Carriers)');
+              }}
             />
           )}
 

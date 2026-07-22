@@ -8,7 +8,7 @@ import {
   Building2, Mail, MapPin, PlusCircle, Check, ChevronRight,
   TrendingUp, Activity, Sparkles, Layers, Award, ShieldCheck,
   ArrowRight, ChevronDown, Workflow, Users, Percent, BarChart3, Coins,
-  Volume2, VolumeX
+  Volume2, VolumeX, Truck
 } from 'lucide-react';
 
 interface PartnerBillingManagementProps {
@@ -20,6 +20,8 @@ interface PartnerBillingManagementProps {
   onAddPartner: (newPartner: PartnerCompany) => void;
   onUpdatePartner: (updatedPartner: PartnerCompany) => void;
   onDeletePartner: (id: string) => void;
+  carriers?: string[];
+  onUpdateCarriers?: (updatedCarriers: string[]) => void;
 }
 
 export default function PartnerBillingManagement({
@@ -30,7 +32,9 @@ export default function PartnerBillingManagement({
   partners = [],
   onAddPartner,
   onUpdatePartner,
-  onDeletePartner
+  onDeletePartner,
+  carriers: propsCarriers,
+  onUpdateCarriers
 }: PartnerBillingManagementProps) {
   // Navigation / Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -218,16 +222,106 @@ export default function PartnerBillingManagement({
   const [billingAmount, setBillingAmount] = useState<number | ''>('');
   const [transportCarrier, setTransportCarrier] = useState('');
   
-  // Custom Carrier selection list
+  // Custom Carrier selection list & management states
   const [carriers, setCarriers] = useState<string[]>(() => {
+    if (propsCarriers && propsCarriers.length > 0) return propsCarriers;
     try {
       const saved = safeStorage.getItem('hr_carriers_list');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
     return ['Kerry Express', 'Flash Express', 'J&T Express', 'ไปรษณีย์ไทย (EMS)', 'รถขนส่งบริษัท', 'ขนส่งเอกชนทั่วไป'];
   });
+
+  useEffect(() => {
+    if (propsCarriers && propsCarriers.length > 0) {
+      setCarriers(propsCarriers);
+    }
+  }, [propsCarriers]);
+
   const [newCarrierInput, setNewCarrierInput] = useState('');
   const [isAddingNewCarrier, setIsAddingNewCarrier] = useState(false);
+  const [isCarrierManagerOpen, setIsCarrierManagerOpen] = useState(false);
+  const [carrierSearchQuery, setCarrierSearchQuery] = useState('');
+  const [editingCarrierIndex, setEditingCarrierIndex] = useState<number | null>(null);
+  const [editingCarrierValue, setEditingCarrierValue] = useState('');
+  const [carrierToDelete, setCarrierToDelete] = useState<string | null>(null);
+
+  // Helper to sync carriers to storage & database
+  const saveCarriersList = useCallback((updatedList: string[]) => {
+    setCarriers(updatedList);
+    safeStorage.setItem('hr_carriers_list', JSON.stringify(updatedList));
+    if (onUpdateCarriers) {
+      onUpdateCarriers(updatedList);
+    }
+  }, [onUpdateCarriers]);
+
+  // Handle Add New Carrier
+  const handleAddNewCarrier = (carrierNameToAdd?: string) => {
+    const targetName = (carrierNameToAdd || newCarrierInput).trim();
+    if (!targetName) {
+      showError("กรุณาระบุชื่อบริษัทขนส่ง");
+      return;
+    }
+    if (carriers.some(c => c.toLowerCase() === targetName.toLowerCase())) {
+      showError(`บริษัทขนส่ง "${targetName}" มีในระบบแล้ว`);
+      return;
+    }
+    const updated = [...carriers, targetName];
+    saveCarriersList(updated);
+    setNewCarrierInput('');
+    setIsAddingNewCarrier(false);
+    setTransportCarrier(targetName);
+    showSuccess(`เพิ่มบริษัทขนส่ง "${targetName}" ลงระบบเรียบร้อยแล้ว`);
+    playNotificationSound();
+  };
+
+  // Handle Save Edit Carrier
+  const handleSaveEditCarrier = (index: number) => {
+    const trimmed = editingCarrierValue.trim();
+    const oldName = carriers[index];
+    if (!trimmed) {
+      showError("กรุณาระบุชื่อบริษัทขนส่ง");
+      return;
+    }
+    if (trimmed !== oldName && carriers.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+      showError(`บริษัทขนส่ง "${trimmed}" มีในระบบแล้ว`);
+      return;
+    }
+    const updated = [...carriers];
+    updated[index] = trimmed;
+    saveCarriersList(updated);
+
+    // Update existing document records if needed
+    if (oldName !== trimmed) {
+      billings.forEach(item => {
+        if (item.transportCarrier === oldName) {
+          onUpdateBilling({ ...item, transportCarrier: trimmed });
+        }
+      });
+      if (transportCarrier === oldName) {
+        setTransportCarrier(trimmed);
+      }
+    }
+
+    setEditingCarrierIndex(null);
+    setEditingCarrierValue('');
+    showSuccess(`แก้ไขชื่อบริษัทขนส่งเป็น "${trimmed}" เรียบร้อยแล้ว`);
+    playNotificationSound();
+  };
+
+  // Handle Confirm Delete Carrier
+  const handleConfirmDeleteCarrier = () => {
+    if (!carrierToDelete) return;
+    const target = carrierToDelete;
+    const updated = carriers.filter(c => c !== target);
+    saveCarriersList(updated);
+    if (transportCarrier === target) {
+      setTransportCarrier('');
+    }
+    setCarrierToDelete(null);
+    showSuccess(`ลบบริษัทขนส่ง "${target}" ออกจากฐานข้อมูลเรียบร้อยแล้ว`);
+    playNotificationSound();
+  };
 
   // Dynamic list of years present in the documents
   const availableYears = useMemo(() => {
@@ -954,12 +1048,26 @@ export default function PartnerBillingManagement({
         </div>
 
         {/* Right Side: Quick Action + Config Dropdowns */}
-        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
+          {/* Carrier Manager Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsCarrierManagerOpen(true);
+              playNotificationSound();
+            }}
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 shadow-xs cursor-pointer border-0"
+            title="จัดการรายชื่อบริษัทขนส่งในระบบ (เพิ่ม/แก้ไข/ลบ)"
+          >
+            <Truck className="w-3.5 h-3.5 text-white" />
+            <span>จัดการขนส่ง ({carriers.length})</span>
+          </button>
+
           {/* Contextual Action Button */}
           {activeSubTab === 'documents' && (
             <button
               onClick={handleOpenAdd}
-              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center gap-1 shadow-xs cursor-pointer"
+              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center gap-1 shadow-xs cursor-pointer border-0"
             >
               <Plus className="w-3.5 h-3.5" /> บันทึกเอกสาร
             </button>
@@ -967,7 +1075,7 @@ export default function PartnerBillingManagement({
           {activeSubTab === 'partners' && (
             <button
               onClick={handleOpenAddPartner}
-              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center gap-1 shadow-xs cursor-pointer"
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center gap-1 shadow-xs cursor-pointer border-0"
             >
               <Plus className="w-3.5 h-3.5" /> เพิ่มคู่ค้า
             </button>
@@ -4008,6 +4116,232 @@ export default function PartnerBillingManagement({
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* 🚚 CARRIER MANAGEMENT MODAL */}
+      {isCarrierManagerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto animate-fade-in no-print">
+          <div className="bg-white rounded-md shadow-2xl border border-slate-200 w-full max-w-xl p-6 space-y-5 my-8">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-indigo-50 text-indigo-600 rounded-sm">
+                  <Truck className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 font-sans uppercase tracking-wide">
+                    จัดการบริษัทขนส่ง (Carrier Management)
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-sans">
+                    เพิ่ม แก้ไข และลบรายชื่อบริษัทขนส่งสำหรับเลือกใช้งานในใบวางบิล/จัดส่ง
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCarrierManagerOpen(false);
+                  setEditingCarrierIndex(null);
+                }}
+                className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 cursor-pointer border-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Add New Carrier Box */}
+            <div className="bg-indigo-50/50 border border-indigo-100 p-3.5 rounded-sm space-y-2">
+              <label className="text-xs font-bold text-slate-800 block">
+                + เพิ่มบริษัทขนส่งใหม่ลงระบบ
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newCarrierInput}
+                  onChange={(e) => setNewCarrierInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddNewCarrier();
+                    }
+                  }}
+                  placeholder="ระบุชื่อบริษัทขนส่ง เช่น SCG Express, Kerry, DHL..."
+                  className="flex-1 px-3 py-2 border border-slate-200 rounded-sm text-xs bg-white focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleAddNewCarrier()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-sm cursor-pointer transition shrink-0 flex items-center gap-1 border-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>เพิ่มขนส่ง</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Search Carrier Filter */}
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={carrierSearchQuery}
+                onChange={(e) => setCarrierSearchQuery(e.target.value)}
+                placeholder="ค้นหารายชื่อบริษัทขนส่ง..."
+                className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-sm text-xs bg-white focus:outline-none focus:border-indigo-500 font-sans"
+              />
+            </div>
+
+            {/* Carriers List Table */}
+            <div className="border border-slate-200 rounded-sm overflow-hidden max-h-72 overflow-y-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-mono text-[10px] uppercase font-bold">
+                  <tr>
+                    <th className="py-2 px-3">ลำดับ</th>
+                    <th className="py-2 px-3">ชื่อบริษัทขนส่ง (Carrier Name)</th>
+                    <th className="py-2 px-3 text-center">เอกสารอ้างอิง</th>
+                    <th className="py-2 px-3 text-right">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {carriers
+                    .filter(c => c.toLowerCase().includes(carrierSearchQuery.toLowerCase()))
+                    .map((carrierName, idx) => {
+                      const docCount = billings.filter(b => b.transportCarrier === carrierName).length;
+                      const originalIndex = carriers.indexOf(carrierName);
+                      const isEditing = editingCarrierIndex === originalIndex;
+
+                      return (
+                        <tr key={carrierName + idx} className="hover:bg-slate-50/60 transition">
+                          <td className="py-2.5 px-3 font-mono text-slate-400 text-[11px]">
+                            #{originalIndex + 1}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editingCarrierValue}
+                                onChange={(e) => setEditingCarrierValue(e.target.value)}
+                                className="px-2 py-1 border border-indigo-300 rounded-xs text-xs bg-white w-full focus:outline-none font-medium"
+                                autoFocus
+                              />
+                            ) : (
+                              <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                                <Truck className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                {carrierName}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                              docCount > 0 ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-400'
+                            }`}>
+                              {docCount} ฉบับ
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right space-x-1.5">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEditCarrier(originalIndex)}
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xs font-bold text-[10px] cursor-pointer border-0"
+                                >
+                                  บันทึก
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingCarrierIndex(null)}
+                                  className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xs font-bold text-[10px] cursor-pointer border-0"
+                                >
+                                  ยกเลิก
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCarrierIndex(originalIndex);
+                                    setEditingCarrierValue(carrierName);
+                                  }}
+                                  className="p-1 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded-xs transition cursor-pointer border-0"
+                                  title="แก้ไขชื่อขนส่ง"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCarrierToDelete(carrierName)}
+                                  className="p-1 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xs transition cursor-pointer border-0"
+                                  title="ลบบริษัทขนส่ง"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-between items-center pt-2 text-[11px] text-slate-400 border-t border-slate-100">
+              <span>รวมทั้งสิ้น <strong>{carriers.length}</strong> บริษัทขนส่ง</span>
+              <button
+                type="button"
+                onClick={() => setIsCarrierManagerOpen(false)}
+                className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-sm cursor-pointer transition border-0"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚠️ DELETE CARRIER CONFIRMATION WARNING MODAL */}
+      {carrierToDelete !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-4 animate-fade-in no-print">
+          <div className="bg-white rounded-md shadow-2xl border border-rose-200 w-full max-w-md p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-3 bg-rose-100 text-rose-600 rounded-full shrink-0 animate-bounce">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-black text-rose-900 font-sans">
+                  ยืนยันการลบบริษัทขนส่ง? (Confirm Delete Carrier)
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed font-sans">
+                  คุณต้องการลบบริษัทขนส่ง <strong className="text-rose-700 font-bold">"{carrierToDelete}"</strong> ออกจากฐานข้อมูลระบบใช่หรือไม่?
+                </p>
+                {billings.filter(b => b.transportCarrier === carrierToDelete).length > 0 && (
+                  <p className="text-[11px] text-amber-600 bg-amber-50 p-2 rounded-xs border border-amber-200 mt-2 font-sans leading-relaxed">
+                    ⚠️ คำเตือน: มีเอกสารในระบบจำนวน <strong>{billings.filter(b => b.transportCarrier === carrierToDelete).length} ฉบับ</strong> ที่ใช้บริษัทขนส่งนี้อยู่ การลบจะทำให้ออกจากตัวเลือก แต่ไม่ส่งผลกระทบต่อประวัติเอกสารเดิม
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end items-center gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setCarrierToDelete(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-sm cursor-pointer transition border-0"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteCarrier}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-sm cursor-pointer transition flex items-center gap-1.5 shadow-xs border-0"
+              >
+                <Trash2 className="w-4 h-4 text-white" />
+                <span>ยืนยันลบบริษัทขนส่ง</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

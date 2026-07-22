@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { safeStorage } from '../lib/safeStorage';
 import { PartnerCheque, PartnerCompany } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -67,6 +67,168 @@ const THAI_BANKS = [
   "ธนาคารยูโอบี (UOB)",
   "ธนาคารแลนด์ แอนด์ เฮ้าส์ (LH Bank)"
 ];
+
+interface SearchablePartnerSelectProps {
+  value: string;
+  onChange: (value: string) => void;
+  partners: PartnerCompany[];
+  onAddNewPartner: () => void;
+  placeholder?: string;
+  required?: boolean;
+}
+
+function SearchablePartnerSelect({
+  value,
+  onChange,
+  partners,
+  onAddNewPartner,
+  placeholder = "พิมพ์ค้นหาชื่อบริษัทคู่ค้า / เลขผู้เสียภาษี / เบอร์โทร...",
+  required = false
+}: SearchablePartnerSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredPartners = useMemo(() => {
+    if (!value.trim()) return partners;
+    const q = value.toLowerCase().trim();
+    return partners.filter(p => 
+      p.name.toLowerCase().includes(q) ||
+      (p.taxId && p.taxId.toLowerCase().includes(q)) ||
+      (p.contactPerson && p.contactPerson.toLowerCase().includes(q)) ||
+      (p.phone && p.phone.includes(q))
+    );
+  }, [partners, value]);
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <div className="relative flex items-center">
+        <Search className="w-3.5 h-3.5 absolute left-3 text-slate-400 pointer-events-none" />
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholder}
+          className="w-full pl-8 pr-16 py-2 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-sans text-xs text-slate-800 font-medium"
+          required={required}
+        />
+        <div className="absolute right-2 flex items-center gap-1">
+          {value && (
+            <button
+              type="button"
+              onClick={() => {
+                onChange('');
+                setIsOpen(true);
+              }}
+              className="p-1 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer border-0 bg-transparent"
+              title="ล้างข้อมูล"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer border-0 bg-transparent"
+          >
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-sm shadow-xl max-h-60 overflow-y-auto animate-fade-in font-sans">
+          <div className="p-2 bg-slate-50 border-b border-slate-100 flex justify-between items-center text-[11px] font-bold text-slate-500">
+            <span>ผลการค้นหาบริษัทคู่ค้า ({filteredPartners.length} ราย)</span>
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(false);
+                onAddNewPartner();
+              }}
+              className="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer bg-transparent border-0"
+            >
+              <Plus className="w-3 h-3" /> เพิ่มคู่ค้าใหม่
+            </button>
+          </div>
+
+          {filteredPartners.length > 0 ? (
+            <div className="divide-y divide-slate-100">
+              {filteredPartners.map(p => {
+                const isSelected = p.name === value;
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => {
+                      onChange(p.name);
+                      setIsOpen(false);
+                    }}
+                    className={`p-2.5 hover:bg-blue-50/70 transition cursor-pointer flex justify-between items-center ${
+                      isSelected ? 'bg-blue-50 border-l-2 border-blue-600' : ''
+                    }`}
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span className="font-bold text-xs text-slate-800">{p.name}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-[10px] text-slate-500 pl-5">
+                        {p.taxId && <span>เลขภาษี: <strong className="font-mono text-slate-700">{p.taxId}</strong></span>}
+                        {p.contactPerson && <span>ผู้ติดต่อ: {p.contactPerson}</span>}
+                        {p.phone && <span>โทร: {p.phone}</span>}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-3 text-center space-y-2">
+              <p className="text-xs text-slate-500">
+                ไม่พบข้อมูลบริษัทคู่ค้าที่ตรงกับ <strong className="text-slate-800">"{value}"</strong>
+              </p>
+              <div className="flex justify-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xs cursor-pointer border-0"
+                >
+                  ใช้ชื่อ "{value}" นี้
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onAddNewPartner();
+                  }}
+                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xs cursor-pointer border-0 flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" /> ลงทะเบียนคู่ค้าใหม่
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function PartnerChequeManagement({
   cheques,
@@ -1126,33 +1288,14 @@ export default function PartnerChequeManagement({
                   </button>
                 </div>
                 
-                <div className="flex gap-2">
-                  <select
-                    value={partners.some(p => p.name === formPartnerName) ? formPartnerName : ""}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        setFormPartnerName(e.target.value);
-                      }
-                    }}
-                    className="flex-1 px-3 py-2 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-sans text-xs font-semibold text-slate-800"
-                  >
-                    <option value="">-- เลือกจากรายชื่อระบบ --</option>
-                    {partners.map(p => (
-                      <option key={p.id} value={p.name}>
-                        {p.name} {p.taxId ? `(${p.taxId})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  
-                  <input
-                    type="text"
-                    placeholder="หรือระบุชื่อผู้รับผลประโยชน์..."
-                    value={formPartnerName}
-                    onChange={(e) => setFormPartnerName(e.target.value)}
-                    className="w-1/2 px-3 py-2 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-sans text-xs text-slate-800"
-                    required
-                  />
-                </div>
+                <SearchablePartnerSelect
+                  value={formPartnerName}
+                  onChange={(val) => setFormPartnerName(val)}
+                  partners={partners}
+                  onAddNewPartner={() => setIsAddPartnerOpen(true)}
+                  placeholder={formType === 'receivable' ? 'พิมพ์ค้นหาชื่อลูกค้า/ผู้จ่ายเช็ค...' : 'พิมพ์ค้นหาชื่อบริษัทคู่ค้าสั่งจ่าย...'}
+                  required
+                />
               </div>
 
               {/* Cheque Number & Amount Grid */}

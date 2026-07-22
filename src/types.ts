@@ -217,6 +217,7 @@ export interface SystemSettings {
   admins?: AdminUser[];
   lineNotifyToken?: string;
   lineNotifyEnabled?: boolean;
+  carriers?: string[];
 }
 
 export interface AuditLogEntry {

@@ -38,6 +38,7 @@ export const INITIAL_SYSTEM_SETTINGS: SystemSettings = {
   withholdingTaxRate: 3,
   lineNotifyToken: "",
   lineNotifyEnabled: false,
+  carriers: ['Kerry Express', 'Flash Express', 'J&T Express', 'ไปรษณีย์ไทย (EMS)', 'รถขนส่งบริษัท', 'ขนส่งเอกชนทั่วไป'],
   admins: [
     {
       id: "watjan",
