@@ -21,10 +21,7 @@ import {
   ClipboardList,
   RefreshCw,
   ExternalLink,
-  ShieldCheck,
-  Database,
-  Copy,
-  Check
+  ShieldCheck
 } from 'lucide-react';
 
 interface SearchablePartnerSelectProps {
@@ -207,45 +204,6 @@ export default function TransportWaybillManagement({
   const [editingWaybill, setEditingWaybill] = useState<TransportWaybill | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TransportWaybill | null>(null);
   const [printTarget, setPrintTarget] = useState<TransportWaybill | null>(null);
-  const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
-  const [copiedSql, setCopiedSql] = useState(false);
-
-  // SQL Script for Hostinger MySQL
-  const hostingerSqlScript = `-- ==========================================================
--- โครงสร้างตารางฐานข้อมูล Hostinger MySQL / MariaDB (phpMyAdmin)
--- สำหรับระบบจัดการใบขนส่ง & ใบหัก ณ ที่จ่าย (transport_waybills)
--- ==========================================================
-
-CREATE TABLE IF NOT EXISTS \`transport_waybills\` (
-  \`id\` VARCHAR(50) NOT NULL PRIMARY KEY,
-  \`waybill_number\` VARCHAR(50) NOT NULL COMMENT 'เลขที่ใบขนส่ง WB-xxx',
-  \`carrier_name\` VARCHAR(100) NOT NULL COMMENT 'บริษัทขนส่ง เช่น Kerry, Flash, J&T',
-  \`partner_name\` VARCHAR(255) NOT NULL COMMENT 'ชื่อบริษัทคู่ค้าขนส่ง',
-  \`delivery_date\` DATE NOT NULL COMMENT 'วันที่ส่งของ (YYYY-MM-DD)',
-  \`book_number\` VARCHAR(50) DEFAULT '' COMMENT 'เล่มที่ใบส่งของ/ใบเสร็จ',
-  \`receipt_number\` VARCHAR(50) DEFAULT '' COMMENT 'เลขที่ใบเสร็จ',
-  \`quantity\` INT DEFAULT 1 COMMENT 'จำนวนรายการ/พัสดุ',
-  \`unit_price\` DECIMAL(12,2) DEFAULT 0.00 COMMENT 'ราคาต่อหน่วย (บาท)',
-  \`total_price\` DECIMAL(12,2) NOT NULL DEFAULT 0.00 COMMENT 'ราคารวมทั้งหมด (บาท)',
-  \`wht_doc_number\` VARCHAR(50) DEFAULT '' COMMENT 'เลขที่ใบหัก ณ ที่จ่าย WHT-xxx',
-  \`wht_rate\` DECIMAL(5,2) DEFAULT 1.00 COMMENT 'อัตราภาษีหัก ณ ที่จ่าย % (ปกติ 1%)',
-  \`wht_amount\` DECIMAL(12,2) DEFAULT 0.00 COMMENT 'จำนวนเงินภาษีหัก ณ ที่จ่าย (บาท)',
-  \`status\` ENUM('pending_receipt', 'receipt_received', 'cancelled') NOT NULL DEFAULT 'pending_receipt' COMMENT 'สถานะ: pending_receipt = รอใบเสร็จที่ส่งของ, receipt_received = ได้รับใบเสร็จแล้ว',
-  \`tracking_number\` VARCHAR(100) DEFAULT '' COMMENT 'เลข Tracking / พัสดุ',
-  \`notes\` TEXT COMMENT 'หมายเหตุเพิ่มเติม',
-  \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  \`updated_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX \`idx_partner_name\` (\`partner_name\`),
-  INDEX \`idx_carrier_name\` (\`carrier_name\`),
-  INDEX \`idx_delivery_date\` (\`delivery_date\`),
-  INDEX \`idx_status\` (\`status\`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`;
-
-  const handleCopySql = () => {
-    navigator.clipboard.writeText(hostingerSqlScript);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2500);
-  };
 
   // Form Field States
   const [waybillNumber, setWaybillNumber] = useState('');
@@ -461,15 +419,6 @@ CREATE TABLE IF NOT EXISTS \`transport_waybills\` (
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-end md:self-auto">
-          <button
-            type="button"
-            onClick={() => setIsSqlModalOpen(true)}
-            className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-sm shadow-sm transition flex items-center gap-1.5 cursor-pointer border-0"
-            title="ดูคำสั่งสร้างตาราง Hostinger MySQL / phpMyAdmin"
-          >
-            <Database className="w-4 h-4 text-emerald-400" />
-            <span>สร้างตาราง Hostinger SQL</span>
-          </button>
           <button
             type="button"
             onClick={handleOpenAddModal}
@@ -1254,107 +1203,6 @@ CREATE TABLE IF NOT EXISTS \`transport_waybills\` (
               >
                 <Printer className="w-4 h-4" />
                 <span>สั่งพิมพ์เอกสาร</span>
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* 🗄️ MODAL: HOSTINGER MYSQL TABLE GENERATOR */}
-      {isSqlModalOpen && (
-        <div id="hostinger-sql-modal" className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-md shadow-2xl border border-slate-200 max-w-3xl w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-emerald-100 text-emerald-800 rounded-md">
-                  <Database className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">
-                    สร้างตารางฐานข้อมูล Hostinger MySQL (phpMyAdmin)
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    คำสั่ง SQL CREATE TABLE สำหรับนำไปรันในระบบ Hostinger Databases
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsSqlModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-sm hover:bg-slate-100 transition border-0 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Steps Guide */}
-            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-sm text-xs text-indigo-900 space-y-1">
-              <p className="font-bold">📌 ขั้นตอนการนำคำสั่ง SQL ไปใช้งานบน Hostinger:</p>
-              <ol className="list-decimal list-inside space-y-0.5 text-indigo-800">
-                <li>เข้าสู่ระบบ <strong>Hostinger hPanel</strong> แล้วเลือกเมนู <strong>Databases</strong></li>
-                <li>คลิกปุ่ม <strong>phpMyAdmin</strong> ของฐานข้อมูลที่ต้องการใช้งาน</li>
-                <li>เลือกฐานข้อมูลของคุณในแถบซ้าย แล้วคลิกที่แท็บ <strong>SQL</strong> ด้านบน</li>
-                <li>คัดลอกคำสั่ง SQL ด้านล่างนี้ไปวางในช่อง แล้วกดปุ่ม <strong>Go (ลงมือทำ)</strong></li>
-              </ol>
-            </div>
-
-            {/* SQL Code Block */}
-            <div className="relative">
-              <div className="absolute top-2.5 right-2.5 z-10">
-                <button
-                  type="button"
-                  onClick={handleCopySql}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-sm shadow-xs transition flex items-center gap-1.5 border-0 cursor-pointer ${
-                    copiedSql 
-                      ? 'bg-emerald-600 text-white' 
-                      : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
-                  }`}
-                >
-                  {copiedSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedSql ? 'คัดลอกเรียบร้อย!' : 'คัดลอก SQL'}</span>
-                </button>
-              </div>
-              <pre className="p-4 bg-slate-900 text-slate-100 text-[11px] font-mono rounded-md overflow-x-auto max-h-80 border border-slate-800 leading-relaxed selection:bg-indigo-600 selection:text-white">
-                {hostingerSqlScript}
-              </pre>
-            </div>
-
-            {/* Table Fields Summary */}
-            <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-sm border border-slate-200 space-y-1.5">
-              <span className="font-bold text-slate-800 block">📋 ฟิลด์ในตาราง transport_waybills:</span>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
-                <div>• <code className="font-mono text-indigo-700">id</code>: รหัสอ้างอิงหลัก (PK)</div>
-                <div>• <code className="font-mono text-indigo-700">waybill_number</code>: เลขที่ใบขนส่ง</div>
-                <div>• <code className="font-mono text-indigo-700">carrier_name</code>: บริษัทขนส่ง</div>
-                <div>• <code className="font-mono text-indigo-700">partner_name</code>: ชื่อบริษัทคู่ค้า</div>
-                <div>• <code className="font-mono text-indigo-700">delivery_date</code>: วันที่ส่งของ</div>
-                <div>• <code className="font-mono text-indigo-700">book_number</code>: เล่มที่</div>
-                <div>• <code className="font-mono text-indigo-700">receipt_number</code>: เลขที่ใบเสร็จ</div>
-                <div>• <code className="font-mono text-indigo-700">quantity</code>: จำนวน</div>
-                <div>• <code className="font-mono text-indigo-700">unit_price</code>: ราคาต่อหน่วย</div>
-                <div>• <code className="font-mono text-indigo-700">total_price</code>: ราคารวม</div>
-                <div>• <code className="font-mono text-indigo-700">wht_doc_number</code>: เลขใบหัก ณ ที่จ่าย</div>
-                <div>• <code className="font-mono text-indigo-700">wht_rate</code>: อัตราหัก ณ ที่จ่าย %</div>
-                <div>• <code className="font-mono text-indigo-700">wht_amount</code>: ยอดหัก ณ ที่จ่าย</div>
-                <div>• <code className="font-mono text-indigo-700">status</code>: สถานะใบเสร็จ</div>
-                <div>• <code className="font-mono text-indigo-700">tracking_number</code>: เลขพัสดุ</div>
-              </div>
-            </div>
-
-            {/* Footer Buttons */}
-            <div className="flex justify-between items-center border-t border-slate-200 pt-3">
-              <span className="text-[11px] text-slate-500 font-sans">
-                รองรับ MySQL 5.7+, MariaDB 10.2+ บน Hostinger
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsSqlModalOpen(false)}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-sm transition border-0 cursor-pointer"
-              >
-                ปิดหน้าต่าง
               </button>
             </div>
 

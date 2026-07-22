@@ -38,6 +38,7 @@ export interface SyncPayload {
   cheques: any[];
   cashflow: any[];
   partnerBillings: any[];
+  transportWaybills?: any[];
   auditLogs: any[];
   jobs?: any[];
   applicants?: any[];
@@ -133,6 +134,7 @@ const COLLECTION_KEYS = [
   { key: "cheques", path: "cheques/current" },
   { key: "cashflow", path: "cashflow/current" },
   { key: "partnerBillings", path: "partner_billings/current" },
+  { key: "transportWaybills", path: "transport_waybills/current" },
   { key: "auditLogs", path: "audit_logs/current" },
   { key: "jobs", path: "jobs/current" },
   { key: "applicants", path: "applicants/current" },
@@ -358,6 +360,7 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
         cheques: mysqlPayload.cheques || [],
         cashflow: mysqlPayload.cashflow || [],
         partnerBillings: mysqlPayload.partnerBillings || [],
+        transportWaybills: mysqlPayload.transportWaybills || [],
         auditLogs: mysqlPayload.auditLogs || [],
         jobs: mysqlPayload.jobs || [],
         applicants: mysqlPayload.applicants || [],
@@ -440,6 +443,7 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
         cheques: firebasePayload.cheques || [],
         cashflow: firebasePayload.cashflow || [],
         partnerBillings: firebasePayload.partnerBillings || [],
+        transportWaybills: firebasePayload.transportWaybills || [],
         auditLogs: firebasePayload.auditLogs || [],
         jobs: firebasePayload.jobs || [],
         applicants: firebasePayload.applicants || [],
@@ -472,6 +476,7 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
           cheques: parsed.cheques || [],
           cashflow: parsed.cashflow || [],
           partnerBillings: parsed.partnerBillings || [],
+          transportWaybills: parsed.transportWaybills || [],
           auditLogs: parsed.auditLogs || [],
           jobs: parsed.jobs || [],
           applicants: parsed.applicants || [],
@@ -719,6 +724,31 @@ export const TABLE_SCHEMAS: TableSchema[] = [
         notes TEXT,
         contact_person VARCHAR(255),
         phone VARCHAR(50),
+        raw_json LONGTEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `
+  },
+  {
+    name: "transport_waybills",
+    createSql: `
+      CREATE TABLE IF NOT EXISTS transport_waybills (
+        id VARCHAR(50) PRIMARY KEY,
+        waybill_number VARCHAR(50) NOT NULL,
+        carrier_name VARCHAR(100) NOT NULL,
+        partner_name VARCHAR(255) NOT NULL,
+        delivery_date DATE NOT NULL,
+        book_number VARCHAR(50) DEFAULT '',
+        receipt_number VARCHAR(50) DEFAULT '',
+        quantity INT DEFAULT 1,
+        unit_price DECIMAL(12,2) DEFAULT 0.00,
+        total_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        wht_doc_number VARCHAR(50) DEFAULT '',
+        wht_rate DECIMAL(5,2) DEFAULT 1.00,
+        wht_amount DECIMAL(12,2) DEFAULT 0.00,
+        status VARCHAR(30) NOT NULL DEFAULT 'pending_receipt',
+        tracking_number VARCHAR(100) DEFAULT '',
+        notes TEXT,
         raw_json LONGTEXT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1189,6 +1219,39 @@ export async function syncToRelationalTables(connection: any, payload: SyncPaylo
           item.notes || "",
           item.contactPerson || "",
           item.phone || "",
+          JSON.stringify(item)
+        ]
+      );
+    }
+  }
+
+  // 7b. transport_waybills
+  if (Array.isArray(payload.transportWaybills)) {
+    await connection.query("DELETE FROM transport_waybills");
+    for (const item of payload.transportWaybills) {
+      await connection.query(
+        `INSERT INTO transport_waybills (
+          id, waybill_number, carrier_name, partner_name, delivery_date, book_number, receipt_number,
+          quantity, unit_price, total_price, wht_doc_number, wht_rate, wht_amount, status,
+          tracking_number, notes, raw_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          item.id || "",
+          item.waybillNumber || "",
+          item.carrierName || "",
+          item.partnerName || "",
+          item.deliveryDate ? item.deliveryDate.substring(0, 10) : null,
+          item.bookNumber || "",
+          item.receiptNumber || "",
+          item.quantity || 1,
+          item.unitPrice || 0,
+          item.totalPrice || 0,
+          item.whtDocNumber || "",
+          item.whtRate || 1,
+          item.whtAmount || 0,
+          item.status || "pending_receipt",
+          item.trackingNumber || "",
+          item.notes || "",
           JSON.stringify(item)
         ]
       );
