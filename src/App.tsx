@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { safeStorage } from './lib/safeStorage';
-import { Employee, LeaveRequest, PayrollRecord, JobPosting, Applicant, PerformanceEvaluation, CashFlowTransaction, PartnerCheque, DailyAttendance, DayOffSwap, PartnerBilling, PartnerCompany, SystemSettings, AuditLogEntry, SalesRecord, CounterDuty } from './types';
+import { Employee, LeaveRequest, PayrollRecord, JobPosting, Applicant, PerformanceEvaluation, CashFlowTransaction, PartnerCheque, DailyAttendance, DayOffSwap, PartnerBilling, PartnerCompany, SystemSettings, AuditLogEntry, SalesRecord, CounterDuty, TransportWaybill } from './types';
 import { 
   INITIAL_EMPLOYEES, 
   INITIAL_LEAVES, 
@@ -16,7 +16,8 @@ import {
   INITIAL_PARTNER_COMPANIES,
   INITIAL_SYSTEM_SETTINGS,
   INITIAL_AUDIT_LOGS,
-  INITIAL_SALES_RECORDS
+  INITIAL_SALES_RECORDS,
+  INITIAL_TRANSPORT_WAYBILLS
 } from './initialData';
 
 // Sub-components
@@ -69,7 +70,8 @@ import {
   VolumeX,
   Download,
   ChefHat,
-  Flame
+  Flame,
+  Truck
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
@@ -196,6 +198,7 @@ export default function App() {
   const [dayOffSwaps, setDayOffSwaps] = useState<DayOffSwap[]>([]);
   const [partnerBillings, setPartnerBillings] = useState<PartnerBilling[]>([]);
   const [partnerCompanies, setPartnerCompanies] = useState<PartnerCompany[]>([]);
+  const [transportWaybills, setTransportWaybills] = useState<TransportWaybill[]>(INITIAL_TRANSPORT_WAYBILLS);
   const [systemSettings, setSystemSettings] = useState<SystemSettings>({
     companyName: "บริษัท ของคุณ (ข้อมูลจริง)",
     companyAddress: "",
@@ -1635,6 +1638,34 @@ export default function App() {
     setPartnerCompanies(prev => prev.filter(item => item.id !== id));
   };
 
+  // Transport Waybill actions
+  const handleAddTransportWaybill = (waybillData: Omit<TransportWaybill, 'id'>) => {
+    const newWaybill: TransportWaybill = {
+      ...waybillData,
+      id: `tw-${Date.now()}`
+    };
+    setTransportWaybills(prev => [newWaybill, ...prev]);
+    addAuditLog('CREATE', 'ใบขนส่ง', `เพิ่มใบขนส่งใหม่: ${newWaybill.partnerName} (${newWaybill.carrierName}) เลขที่ ${newWaybill.waybillNumber} ยอดรวม ฿${newWaybill.totalPrice.toLocaleString()}`);
+  };
+
+  const handleUpdateTransportWaybill = (updatedWaybill: TransportWaybill) => {
+    const oldWb = transportWaybills.find(w => w.id === updatedWaybill.id);
+    if (oldWb && oldWb.status !== updatedWaybill.status) {
+      addAuditLog('UPDATE', 'ใบขนส่ง', `เปลี่ยนสถานะใบขนส่ง ${updatedWaybill.waybillNumber} เป็น '${updatedWaybill.status === 'receipt_received' ? 'ได้รับใบเสร็จแล้ว' : 'รอใบเสร็จที่ส่งของ'}'`);
+    } else {
+      addAuditLog('UPDATE', 'ใบขนส่ง', `แก้ไขข้อมูลใบขนส่ง ${updatedWaybill.waybillNumber} (${updatedWaybill.partnerName})`);
+    }
+    setTransportWaybills(prev => prev.map(item => item.id === updatedWaybill.id ? updatedWaybill : item));
+  };
+
+  const handleDeleteTransportWaybill = (id: string) => {
+    const wb = transportWaybills.find(item => item.id === id);
+    if (wb) {
+      addAuditLog('DELETE', 'ใบขนส่ง', `ลบรายการใบขนส่ง ${wb.waybillNumber} (${wb.partnerName}) ยอด ฿${wb.totalPrice.toLocaleString()}`);
+    }
+    setTransportWaybills(prev => prev.filter(item => item.id !== id));
+  };
+
   const triggerLineNotifyForSale = async (sale: SalesRecord, action: 'create' | 'update' | 'delete') => {
     // Disabled / Removed by user request
     return;
@@ -1731,7 +1762,7 @@ export default function App() {
     if (tabId === 'sales') return !!permissions.sales;
     if (tabId === 'cashflow') return !!permissions.cashflow;
     if (tabId === 'cheques') return !!permissions.cheques;
-    if (tabId === 'partner_billing') return !!permissions.partner_billing;
+    if (tabId === 'partner_billing' || tabId === 'transport_waybills') return !!permissions.partner_billing || !!permissions.transport_waybills;
     if (tabId === 'recruitment') return !!permissions.recruitment;
     if (tabId === 'performance') return !!permissions.performance;
     if (tabId === 'settings') return !!permissions.settings;
@@ -1762,6 +1793,7 @@ export default function App() {
     { id: 'cashflow', name: 'ตรวจเช็คขารับ-ขาจ่าย', icon: Coins },
     { id: 'cheques', name: 'เช็คจ่าย & เช็ครับคู่ค้า', icon: CreditCard },
     { id: 'partner_billing', name: 'คู่ค้าใบส่งของและวางบิล', icon: ClipboardList },
+    { id: 'transport_waybills', name: '1. ใบขนส่ง', icon: Truck },
     { id: 'recruitment', name: 'สรรหาบุคลากร', icon: Briefcase },
     { id: 'performance', name: 'ประเมินผลงาน', icon: Award },
     { id: 'settings', name: 'ตั้งค่าระบบ', icon: Settings },
@@ -2351,7 +2383,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'partner_billing' && (
+          {(activeTab === 'partner_billing' || activeTab === 'transport_waybills') && (
             <PartnerBillingManagement 
               billings={partnerBillings}
               onAddBilling={handleAddBilling}
@@ -2366,6 +2398,11 @@ export default function App() {
                 setSystemSettings(prev => ({ ...prev, carriers: updatedCarriers }));
                 addAuditLog('UPDATE', 'ใบวางบิล', 'ปรับปรุงรายการบริษัทขนส่ง (Carriers)');
               }}
+              transportWaybills={transportWaybills}
+              onAddWaybill={handleAddTransportWaybill}
+              onUpdateWaybill={handleUpdateTransportWaybill}
+              onDeleteWaybill={handleDeleteTransportWaybill}
+              initialSubTab={activeTab === 'transport_waybills' ? 'transport_waybills' : 'dashboard'}
             />
           )}
 

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { safeStorage } from '../lib/safeStorage';
-import { PartnerBilling, PartnerCompany } from '../types';
+import { PartnerBilling, PartnerCompany, TransportWaybill } from '../types';
+import TransportWaybillManagement from './TransportWaybillManagement';
 import { 
   FileText, Plus, Search, Filter, Edit3, Trash2, 
   CheckCircle, AlertCircle, X, HelpCircle, Phone, 
@@ -22,6 +23,11 @@ interface PartnerBillingManagementProps {
   onDeletePartner: (id: string) => void;
   carriers?: string[];
   onUpdateCarriers?: (updatedCarriers: string[]) => void;
+  transportWaybills?: TransportWaybill[];
+  onAddWaybill?: (waybill: Omit<TransportWaybill, 'id'>) => void;
+  onUpdateWaybill?: (waybill: TransportWaybill) => void;
+  onDeleteWaybill?: (id: string) => void;
+  initialSubTab?: 'dashboard' | 'documents' | 'partners' | 'transport_waybills';
 }
 
 export default function PartnerBillingManagement({
@@ -34,13 +40,24 @@ export default function PartnerBillingManagement({
   onUpdatePartner,
   onDeletePartner,
   carriers: propsCarriers,
-  onUpdateCarriers
+  onUpdateCarriers,
+  transportWaybills = [],
+  onAddWaybill,
+  onUpdateWaybill,
+  onDeleteWaybill,
+  initialSubTab
 }: PartnerBillingManagementProps) {
   // Navigation / Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [docTypeFilter, setDocTypeFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
-  const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'documents' | 'partners'>('dashboard');
+  const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'documents' | 'partners' | 'transport_waybills'>(initialSubTab || 'dashboard');
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setActiveSubTab(initialSubTab);
+    }
+  }, [initialSubTab]);
   const [dashboardLeftTab, setDashboardLeftTab] = useState<'partners' | 'recent_10'>('recent_10');
   const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
   const [selectedPartnerDashboard, setSelectedPartnerDashboard] = useState<string>('All');
@@ -1020,6 +1037,22 @@ export default function PartnerBillingManagement({
               <span>Report (ทำเนียบคู่ค้า)</span>
               <span className="ml-1 px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded-full text-[9px] font-mono font-bold">
                 {partners.length}
+              </span>
+            </button>
+
+            {/* TRANSPORT WAYBILL TAB (1. ใบขนส่ง) */}
+            <button
+              onClick={() => setActiveSubTab('transport_waybills')}
+              className={`flex-1 sm:flex-initial px-4 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
+                activeSubTab === 'transport_waybills'
+                  ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50 ring-1 ring-indigo-500/20 font-black'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/50'
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5 text-indigo-600" />
+              <span>1. ใบขนส่ง</span>
+              <span className="ml-1 px-1.5 py-0.2 bg-indigo-100 text-indigo-800 rounded-full text-[9px] font-mono font-bold">
+                {transportWaybills.length}
               </span>
             </button>
 
@@ -2673,6 +2706,18 @@ export default function PartnerBillingManagement({
             )}
           </div>
         </>
+      )}
+
+      {activeSubTab === 'transport_waybills' && (
+        <TransportWaybillManagement
+          waybills={transportWaybills}
+          onAddWaybill={onAddWaybill || (() => {})}
+          onUpdateWaybill={onUpdateWaybill || (() => {})}
+          onDeleteWaybill={onDeleteWaybill || (() => {})}
+          partners={partners}
+          carriers={propsCarriers || ['Kerry Express', 'Flash Express', 'J&T Express', 'ไปรษณีย์ไทย (EMS)', 'รถขนส่งบริษัท', 'ขนส่งเอกชนทั่วไป']}
+          onAddNewPartner={() => setIsAddPartnerOpen(true)}
+        />
       )}
 
       {/* MODAL: ADD RECORD */}

@@ -187,6 +187,7 @@ export interface AdminPermissions {
   cashflow: boolean;
   cheques: boolean;
   partner_billing: boolean;
+  transport_waybills?: boolean;
   recruitment: boolean;
   performance: boolean;
   settings: boolean;
@@ -260,6 +261,34 @@ export interface CounterDuty {
   companyHolidays?: { [date: string]: string }; // Custom company holidays
   rotationLogs?: { id: string; date: string; message: string; type: 'skip' | 'override' | 'leave' }[];
 }
+
+export interface TransportWaybill {
+  id: string;
+  waybillNumber: string; // เลขที่ใบขนส่ง / เลขที่เอกสาร
+  carrierName: string; // บริษัทขนส่ง (Kerry, Flash, J&T, etc.)
+  partnerName: string; // บิลคู่ค้าขนส่ง / ชื่อบริษัทคู่ค้า
+  deliveryDate: string; // วันที่ส่งของ (YYYY-MM-DD)
+  
+  // รายละเอียดใบเสร็จที่ส่งของ
+  bookNumber?: string; // เล่มที่
+  receiptNumber?: string; // เลขที่ใบเสร็จ / บิล
+  quantity: number; // จำนวน (ชิ้น/เที่ยว/รายการ)
+  unitPrice?: number; // ราคาต่อหน่วย
+  totalPrice: number; // ราคารวม (บาท)
+  
+  // ใบหัก ณ ที่จ่าย (Withholding Tax / WHT)
+  whtDocNumber?: string; // เลขที่ใบหัก ณ ที่จ่าย
+  whtRate?: number; // อัตราหัก ณ ที่จ่าย (%)
+  whtAmount?: number; // จำนวนเงินที่หัก ณ ที่จ่าย (บาท)
+  
+  // สถานะ (Status)
+  status: 'pending_receipt' | 'receipt_received' | 'cancelled'; // รอใบเสร็จ | ได้รับใบเสร็จแล้ว | ยกเลิก
+  
+  trackingNumber?: string; // เลขพัสดุ / เลขติดตาม
+  notes?: string; // หมายเหตุ
+  createdAt?: string;
+}
+
 
 
 
