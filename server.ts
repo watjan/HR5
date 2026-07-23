@@ -286,37 +286,8 @@ app.get("/api/db/config", async (req, res) => {
       firebase: { connected: false, error: "" }
     };
 
-    // 1. Test Firebase Connection
-    if (firebaseConfig && firebaseConfig.projectId && firebaseConfig.apiKey) {
-      try {
-        const dbName = firebaseConfig.firestoreDatabaseId || "(default)";
-        const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${dbName}/documents/system_settings/current?key=${firebaseConfig.apiKey}`;
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1500);
-        
-        try {
-          const fbRes = await fetch(url, { signal: controller.signal });
-          clearTimeout(timeoutId);
-          if (fbRes.ok || fbRes.status === 404) {
-            statuses.firebase.connected = true;
-          } else {
-            statuses.firebase.error = `Firestore responded with status ${fbRes.status}`;
-          }
-        } catch (fetchErr: any) {
-          clearTimeout(timeoutId);
-          if (fetchErr.name === 'AbortError') {
-            statuses.firebase.error = "Firebase connection timed out";
-          } else {
-            statuses.firebase.error = fetchErr.message || "Failed to contact Firebase Firestore";
-          }
-        }
-      } catch (error: any) {
-        statuses.firebase.error = error.message || "Firebase Firestore not reachable";
-      }
-    } else {
-      statuses.firebase.error = "Firebase config is missing or invalid";
-    }
+    // 1. Firebase Disabled per user instruction
+    statuses.firebase.error = "Firebase disabled per user instruction";
 
     // 2. Test Hostinger MySQL Connection
     if (mysqlConfig && mysqlConfig.host) {

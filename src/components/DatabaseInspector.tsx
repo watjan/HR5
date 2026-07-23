@@ -602,32 +602,6 @@ export default function DatabaseInspector({
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               onClick={() => {
-                setDataSource('local');
-              }}
-              className={`px-3 py-1.5 rounded-sm text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-                dataSource === 'local' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
-                  : 'bg-slate-850 text-slate-300 hover:bg-slate-850'
-              }`}
-            >
-              <span>💻 หน่วยความจำเครื่อง (Active Runtime Memory)</span>
-              <span className="bg-emerald-950 text-emerald-400 text-[9px] px-1.5 py-0.5 rounded-sm border border-emerald-900 uppercase font-mono tracking-wider font-bold">ON</span>
-            </button>
-            <button
-              onClick={() => {
-                setDataSource('firebase');
-                fetchRemoteDataAndConfig();
-              }}
-              className={`px-3 py-1.5 rounded-sm text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-                dataSource === 'firebase' 
-                  ? 'bg-indigo-600 text-white shadow-md' 
-                  : 'bg-slate-850 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              🔥 Cloud Firebase Firestore (คลาวด์)
-            </button>
-            <button
-              onClick={() => {
                 setDataSource('mysql');
                 fetchRemoteDataAndConfig();
               }}
@@ -637,7 +611,19 @@ export default function DatabaseInspector({
                   : 'bg-slate-850 text-slate-300 hover:bg-slate-800'
               }`}
             >
-              🗄️ Hostinger MySQL (ตัวหลัก)
+              🗄️ Hostinger MySQL: u753988669_hr (ฐานข้อมูลหลัก)
+            </button>
+            <button
+              onClick={() => {
+                setDataSource('local');
+              }}
+              className={`px-3 py-1.5 rounded-sm text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+                dataSource === 'local' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'bg-slate-850 text-slate-300 hover:bg-slate-850'
+              }`}
+            >
+              <span>💻 สำรองหน่วยความจำเซิร์ฟเวอร์ (Backup JSON)</span>
             </button>
           </div>
         </div>

@@ -91,7 +91,12 @@ export function getMySQLConfig(): MySQLConfig {
   try {
     if (fs.existsSync(MYSQL_CONFIG_PATH)) {
       const data = fs.readFileSync(MYSQL_CONFIG_PATH, "utf8");
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      return {
+        ...parsed,
+        database: parsed.database || "u753988669_hr",
+        user: parsed.user || "u753988669_hr"
+      };
     }
   } catch (error) {
     console.error("Error reading mysql_config.json:", error);
@@ -100,9 +105,9 @@ export function getMySQLConfig(): MySQLConfig {
   return {
     host: process.env.MYSQL_HOST || "",
     port: Number(process.env.MYSQL_PORT) || 3306,
-    user: process.env.MYSQL_USER || "",
+    user: process.env.MYSQL_USER || "u753988669_hr",
     password: process.env.MYSQL_PASSWORD || "",
-    database: process.env.MYSQL_DATABASE || "",
+    database: process.env.MYSQL_DATABASE || "u753988669_hr",
     autoCreateDb: process.env.MYSQL_AUTO_CREATE === "true" || true
   };
 }
@@ -176,64 +181,8 @@ export async function syncToDualDatabases(payload: SyncPayload, mysqlConfig?: My
     console.error("Local backup save error:", error);
   }
 
-  // 3. Sync to Firebase Firestore (ONLY write changed collections to optimize Spark quota usage)
-  try {
-    const db = getFirestoreInstance();
-    const batch = writeBatch(db);
-    let queuedWritesCount = 0;
-
-    for (const item of COLLECTION_KEYS) {
-      let val = (payload as any)[item.key];
-      if (val === undefined || val === null) {
-        if (item.key === "systemSettings") {
-          val = {};
-        } else if (item.key === "attendance") {
-          val = {};
-        } else {
-          val = [];
-        }
-      }
-
-      // Check change detection
-      let hasChanged = true;
-      if (previousPayload) {
-        let prevVal = previousPayload[item.key];
-        if (prevVal === undefined || prevVal === null) {
-          if (item.key === "systemSettings") {
-            prevVal = {};
-          } else if (item.key === "attendance") {
-            prevVal = {};
-          } else {
-            prevVal = [];
-          }
-        }
-        
-        // Quick structural JSON comparison
-        if (JSON.stringify(val) === JSON.stringify(prevVal)) {
-          hasChanged = false;
-        }
-      }
-
-      if (hasChanged) {
-        const docRef = doc(db, item.path);
-        batch.set(docRef, { data: val });
-        queuedWritesCount++;
-        console.log(`[Firestore Sync] Queueing change for collection: ${item.key}`);
-      }
-    }
-
-    if (queuedWritesCount > 0) {
-      await batch.commit();
-      console.log(`Successfully synced ${queuedWritesCount} modified collections to Firebase Firestore!`);
-    } else {
-      console.log("[Firestore Sync] No collections changed. Skipped Firestore write batch to conserve free daily quota.");
-    }
-    results.firebase.success = true;
-  } catch (error: any) {
-    console.error("Firebase Firestore Sync Error:", error);
-    results.firebase.success = false;
-    results.firebase.error = error.message || "Failed to save to Firestore";
-  }
+  // 3. Skip Firebase Firestore (Disabled per user request)
+  results.firebase = { success: false, error: "Firebase connections canceled by user configuration" };
 
   // 4. Sync to Hostinger MySQL (if configured)
   const activeMysqlConfig = mysqlConfig || getMySQLConfig();
@@ -388,87 +337,13 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
     }
   }
 
-  let loadedFromFirebase = false;
-  let firebaseLoadError: string | null = null;
-
-  // Quota Optimization: Skip loading Firebase Firestore if Hostinger MySQL is already successfully connected and populated
-  const hasMysqlData = data.mysql && Object.entries(data.mysql).some(([key, value]) => {
-    if (key === 'systemSettings' || key === 'attendance') return false;
-    if (Array.isArray(value)) return value.length > 0;
-    return false;
-  });
-
-  if (data.mysql && !data.mysqlError && hasMysqlData) {
-    console.log("[Load Optimization] Hostinger MySQL is connected and contains data. Skipping Firebase Firestore reads to preserve free daily quotas.");
-  } else {
-    try {
-      const db = getFirestoreInstance();
-      const firebasePayload: any = {};
-
-      // Load each document in parallel
-      await Promise.all(
-        COLLECTION_KEYS.map(async (item) => {
-          try {
-            const docRef = doc(db, item.path);
-            const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            firebasePayload[item.key] = docSnap.data().data;
-          } else {
-            firebasePayload[item.key] = null;
-          }
-        } catch (err: any) {
-          console.error(`Error loading key ${item.key} from Firebase:`, err);
-          firebasePayload[item.key] = null;
-          const errMsg = err?.message || String(err);
-          if (
-            errMsg.toLowerCase().includes("quota") || 
-            errMsg.toLowerCase().includes("resource_exhausted") || 
-            errMsg.toLowerCase().includes("limit") || 
-            errMsg.toLowerCase().includes("exhausted")
-          ) {
-            firebaseLoadError = errMsg;
-          }
-        }
-      })
-    );
-
-    // Check if we loaded any valid documents
-    const hasAnyData = Object.values(firebasePayload).some(v => v !== null);
-    if (hasAnyData) {
-      data.firebase = {
-        employees: firebasePayload.employees || [],
-        payroll: firebasePayload.payroll || [],
-        leaves: firebasePayload.leaves || [],
-        sales: firebasePayload.sales || [],
-        cheques: firebasePayload.cheques || [],
-        cashflow: firebasePayload.cashflow || [],
-        partnerBillings: firebasePayload.partnerBillings || [],
-        transportWaybills: firebasePayload.transportWaybills || [],
-        auditLogs: firebasePayload.auditLogs || [],
-        jobs: firebasePayload.jobs || [],
-        applicants: firebasePayload.applicants || [],
-        evaluations: firebasePayload.evaluations || [],
-        attendance: firebasePayload.attendance || {},
-        dayoffSwaps: firebasePayload.dayoffSwaps || [],
-        partnerCompanies: firebasePayload.partnerCompanies || [],
-        systemSettings: firebasePayload.systemSettings || {},
-        counterDuties: firebasePayload.counterDuties || []
-      };
-      loadedFromFirebase = true;
-      console.log("Successfully loaded data from Firebase Firestore!");
-    }
-    } catch (error: any) {
-      console.error("Firebase Firestore Load Error:", error);
-    }
-  }
-
-  // Fallback to local file database if Firebase load failed or returned no data
-  if (!loadedFromFirebase) {
+  // Fallback to local file database if Hostinger MySQL load returned no data or failed
+  if (!data.mysql) {
     try {
       if (fs.existsSync(LOCAL_DB_PATH)) {
         const fileData = fs.readFileSync(LOCAL_DB_PATH, "utf8");
         const parsed = JSON.parse(fileData);
-        data.firebase = {
+        data.mysql = {
           employees: parsed.employees || [],
           payroll: parsed.payroll || [],
           leaves: parsed.leaves || [],
@@ -487,14 +362,15 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
           systemSettings: parsed.systemSettings || {},
           counterDuties: parsed.counterDuties || []
         };
-        console.log("Loaded data from local backup file (Firebase fallback)");
+        console.log("Loaded data from local backup file (Hostinger MySQL fallback)");
       }
     } catch (error: any) {
       console.error("Local Backup Load Error:", error);
     }
   }
 
-  data.firebaseError = firebaseLoadError;
+  data.firebase = null;
+  data.firebaseError = null;
   return data;
 }
 

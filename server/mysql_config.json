@@ -1,0 +1,8 @@
+{
+  "host": "",
+  "port": 3306,
+  "user": "u753988669_hr",
+  "password": "",
+  "database": "u753988669_hr",
+  "autoCreateDb": true
+}

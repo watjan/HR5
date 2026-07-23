@@ -74,18 +74,8 @@ import {
   Truck
 } from 'lucide-react';
 
-import { initializeApp } from "firebase/app";
-import { getFirestore, doc, onSnapshot } from "firebase/firestore";
-import firebaseConfig from "../firebase-applet-config.json";
-
-// Initialize client-side Firebase for real-time synchronization
+// Hostinger MySQL system (u753988669_hr)
 let clientDb: any = null;
-try {
-  const firebaseAppInstance = initializeApp(firebaseConfig);
-  clientDb = getFirestore(firebaseAppInstance, firebaseConfig.firestoreDatabaseId);
-} catch (error) {
-  console.error("Firebase client initialization error in App.tsx:", error);
-}
 
 export default function App() {
   // Navigation active tab
@@ -390,56 +380,13 @@ export default function App() {
         const res = await fetch('/api/db/load');
         if (res.ok) {
           const result = await res.json();
-          
-          if (result.success && result.data && result.data.firebaseError) {
-            const fbErr = result.data.firebaseError;
-            if (
-              fbErr.toLowerCase().includes("quota") || 
-              fbErr.toLowerCase().includes("resource_exhausted") || 
-              fbErr.toLowerCase().includes("limit") || 
-              fbErr.toLowerCase().includes("exhausted")
-            ) {
-              setFirestoreQuotaExceeded(true);
-              setFirestoreQuotaError(fbErr);
-            }
-          }
 
-          // Choose the primary database source: Hostinger MySQL is the primary database. Firebase Firestore is the backup.
           let dbPayload = null;
-          let sourceName = "";
-          let isMigratedToMysql = false;
+          let sourceName = "Hostinger MySQL (u753988669_hr)";
 
-          if (result.success && result.data) {
-            const checkHasData = (payload: any) => {
-              if (!payload) return false;
-              // Check if any array collection contains at least one record
-              return Object.entries(payload).some(([key, value]) => {
-                if (key === 'systemSettings' || key === 'attendance') return false; // skip systemSettings / attendance objects
-                if (Array.isArray(value)) return value.length > 0;
-                return false;
-              });
-            };
-
-            const hasMysqlData = checkHasData(result.data.mysql);
-            const hasFirebaseData = checkHasData(result.data.firebase);
-
-            if (result.data.mysql && !result.data.mysqlError) {
-              if (!hasMysqlData && hasFirebaseData) {
-                console.log("Hostinger MySQL is connected but empty. Automatically migrating Firebase data to MySQL...");
-                dbPayload = result.data.firebase;
-                sourceName = "Hostinger MySQL (Migrated from Firebase)";
-                isMigratedToMysql = true;
-              } else {
-                dbPayload = result.data.mysql;
-                sourceName = "Hostinger MySQL (Primary)";
-              }
-            } else if (result.data.firebase) {
-              dbPayload = result.data.firebase;
-              sourceName = "Firebase Firestore (Backup)";
-            }
-            if (sourceName) {
-              setActiveDbSource(sourceName);
-            }
+          if (result.success && result.data && result.data.mysql) {
+            dbPayload = result.data.mysql;
+            setActiveDbSource("Hostinger MySQL (u753988669_hr)");
           }
 
           if (dbPayload) {
@@ -512,11 +459,7 @@ export default function App() {
               systemSettings: fb.systemSettings || [],
               counterDuties: fb.counterDuties || []
             };
-            if (isMigratedToMysql) {
-              lastSyncedPayloadRef.current = ""; // force instant auto-sync to Hostinger MySQL
-            } else {
-              lastSyncedPayloadRef.current = getNormalizedPayloadString(loadedPayload);
-            }
+            lastSyncedPayloadRef.current = getNormalizedPayloadString(loadedPayload);
 
             setServerDataLoaded(true);
           } else {
@@ -560,139 +503,12 @@ export default function App() {
     // Local Storage persistence is disabled for the entire project's core data.
   }, []);
 
-  // Client-Side Real-Time listeners to enable Instant live UI updates (อัพเดตแบบเรียลไทม์)
-  useEffect(() => {
-    if (!clientDb) return;
-
-    const unsubscribers: (() => void)[] = [];
-
-    const setupListener = (
-      key: string,
-      path: string,
-      stateSetter: (val: any) => void,
-      customTransformer?: (remoteData: any) => any
-    ) => {
-      try {
-        const docRef = doc(clientDb, path);
-        const unsub = onSnapshot(docRef, (docSnap) => {
-          if (docSnap.exists()) {
-            const remoteData = docSnap.data().data;
-            if (remoteData !== undefined && remoteData !== null) {
-              const processedData = customTransformer ? customTransformer(remoteData) : remoteData;
-              
-              stateSetter((current: any) => {
-                const currentStr = JSON.stringify(current);
-                const incomingStr = JSON.stringify(processedData);
-                if (currentStr !== incomingStr) {
-                  console.log(`[Firestore Live Update] Synchronizing changed ${key} from remote real-time stream`);
-                  
-                  // Crucial: Update the last synced payload reference *before* React state triggers the useEffect sync,
-                  // so the auto-sync effect knows this change came from the server and doesn't write it back!
-                  if (latestPayloadRef.current) {
-                    let payloadValue = remoteData;
-                    if (key === "systemSettings") {
-                      payloadValue = [{ id: "current", ...remoteData }];
-                    } else if (key === "attendance") {
-                      payloadValue = Array.isArray(remoteData) 
-                        ? remoteData 
-                        : Object.entries(remoteData).map(([empId, records]) => ({ id: empId, records }));
-                    }
-                    
-                    const updatedPayload = {
-                      ...latestPayloadRef.current,
-                      [key]: payloadValue
-                    };
-                    lastSyncedPayloadRef.current = getNormalizedPayloadString(updatedPayload);
-                  }
-                  
-                  return processedData;
-                }
-                return current;
-              });
-            }
-          }
-        }, (error: any) => {
-          const errMsg = error?.message || String(error);
-          if (
-            errMsg.toLowerCase().includes("quota") ||
-            errMsg.toLowerCase().includes("resource_exhausted") ||
-            errMsg.toLowerCase().includes("limit") ||
-            errMsg.toLowerCase().includes("exhausted") ||
-            errMsg.toLowerCase().includes("permission") ||
-            errMsg.toLowerCase().includes("insufficient")
-          ) {
-            setFirestoreQuotaExceeded(true);
-            setFirestoreQuotaError(errMsg);
-            console.warn(`[Firestore Listener] Stream paused for ${key}: ${errMsg}. System relies on Hostinger MySQL database.`);
-          } else {
-            console.error(`Error in real-time listener for ${key}:`, error);
-          }
-        });
-        unsubscribers.push(unsub);
-      } catch (err) {
-        console.error(`Failed to set up real-time listener for ${key}:`, err);
-      }
-    };
-
-    // Setup listeners for all collections
-    setupListener("employees", "employees/current", setEmployees);
-    setupListener("payroll", "payroll/current", setPayroll);
-    setupListener("leaves", "leaves/current", setLeaves);
-    setupListener("sales", "sales/current", setSales);
-    setupListener("cheques", "cheques/current", setCheques);
-    setupListener("cashflow", "cashflow/current", setCashFlow);
-    setupListener("partnerBillings", "partner_billings/current", setPartnerBillings);
-    setupListener("transportWaybills", "transport_waybills/current", setTransportWaybills);
-    setupListener("auditLogs", "audit_logs/current", setAuditLogs);
-    setupListener("jobs", "jobs/current", setJobs);
-    setupListener("applicants", "applicants/current", setApplicants);
-    setupListener("evaluations", "evaluations/current", setEvaluations);
-    setupListener("dayoffSwaps", "dayoff_swaps/current", setDayOffSwaps);
-    setupListener("partnerCompanies", "partner_companies/current", setPartnerCompanies);
-    setupListener("counterDuties", "counter_duties/current", setCounterDuties);
-
-    // systemSettings is structured a bit differently sometimes
-    setupListener("systemSettings", "system_settings/current", setSystemSettings, (remoteData) => {
-      let settingsObj = null;
-      if (remoteData && remoteData.id === "current") {
-        settingsObj = remoteData;
-      } else if (Array.isArray(remoteData)) {
-        settingsObj = remoteData.find((s: any) => s.id === "current") || remoteData[0];
-      } else if (typeof remoteData === "object" && remoteData !== null) {
-        settingsObj = remoteData;
-      }
-      return settingsObj;
-    });
-
-    // attendance is either an array or an object
-    setupListener("attendance", "attendance/current", setAttendanceRecords, (remoteData) => {
-      const attendanceMap: any = {};
-      if (Array.isArray(remoteData)) {
-        remoteData.forEach((item: any) => {
-          if (item && item.id) {
-            attendanceMap[item.id] = item.records || [];
-          }
-        });
-      } else if (typeof remoteData === 'object' && remoteData !== null) {
-        Object.assign(attendanceMap, remoteData);
-      }
-      return attendanceMap;
-    });
-
-    return () => {
-      unsubscribers.forEach((unsub) => unsub());
-    };
-  }, []);
-
-  // Real-time Auto-Sync to Firebase and MySQL
+  // Real-time Auto-Sync to Hostinger MySQL (u753988669_hr)
   const [dbStatuses, setDbStatuses] = useState({
     mysql: { connected: false, error: '' },
-    firebase: { connected: false, error: '' }
+    firebase: { connected: false, error: 'Firebase disabled' }
   });
-  const [activeDbSource, setActiveDbSource] = useState<string>("กำลังตรวจสอบแหล่งข้อมูล...");
-  const [firestoreQuotaExceeded, setFirestoreQuotaExceeded] = useState(false);
-  const [firestoreQuotaError, setFirestoreQuotaError] = useState('');
-  const [hideQuotaWarning, setHideQuotaWarning] = useState(false);
+  const [activeDbSource, setActiveDbSource] = useState<string>("Hostinger MySQL (u753988669_hr)");
 
   const [autoSync, setAutoSync] = useState<boolean>(() => {
     const saved = safeStorage.getItem('hr_auto_sync');
@@ -710,18 +526,6 @@ export default function App() {
         const data = await res.json();
         if (data.status) {
           setDbStatuses(data.status);
-          
-          // Detect Firebase quota limit errors from the config check
-          const fbStatus = data.status.firebase;
-          if (fbStatus && fbStatus.error && (
-            fbStatus.error.toLowerCase().includes("quota") || 
-            fbStatus.error.toLowerCase().includes("resource_exhausted") ||
-            fbStatus.error.toLowerCase().includes("limit") ||
-            fbStatus.error.toLowerCase().includes("exhausted")
-          )) {
-            setFirestoreQuotaExceeded(true);
-            setFirestoreQuotaError(fbStatus.error);
-          }
         }
       }
     } catch (error) {
@@ -820,26 +624,6 @@ export default function App() {
           const nowStr = new Date().toLocaleTimeString('th-TH');
           setLastSyncedTime(nowStr);
           safeStorage.setItem('hr_last_synced', nowStr);
-
-          // Check for Firebase specific quota errors during sync write
-          if (data.results && data.results.firebase && !data.results.firebase.success) {
-            const fbErr = data.results.firebase.error || "";
-            if (
-              fbErr.toLowerCase().includes("quota") || 
-              fbErr.toLowerCase().includes("resource_exhausted") || 
-              fbErr.toLowerCase().includes("limit") || 
-              fbErr.toLowerCase().includes("exhausted")
-            ) {
-              setFirestoreQuotaExceeded(true);
-              setFirestoreQuotaError(fbErr);
-            } else {
-              setFirestoreQuotaExceeded(false);
-              setFirestoreQuotaError("");
-            }
-          } else {
-            setFirestoreQuotaExceeded(false);
-            setFirestoreQuotaError("");
-          }
 
           // Update reference payload upon success
           lastSyncedPayloadRef.current = payloadStr;
@@ -2096,22 +1880,11 @@ export default function App() {
                 </span>
               </div>
 
-              {/* Firebase Firestore Backup Status */}
-              <div className={`flex items-center gap-1.5 border px-2 py-1 rounded-sm text-xs font-mono ${
-                dbStatuses.firebase.connected 
-                  ? 'bg-indigo-50 border-indigo-150 text-indigo-800' 
-                  : 'bg-slate-50 border-slate-200 text-slate-500'
-              }`} title={dbStatuses.firebase.connected ? "Firebase Firestore เชื่อมต่อเป็นคลาวด์สำรอง" : "Firebase Firestore ออฟไลน์ชั่วคราว"}>
-                {dbStatuses.firebase.connected ? (
-                  <span className="flex h-1.5 w-1.5 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-500"></span>
-                  </span>
-                ) : (
-                  <span className="h-1.5 w-1.5 rounded-full bg-slate-300"></span>
-                )}
+              {/* Hostinger DB Name Indicator */}
+              <div className="flex items-center gap-1.5 border px-2 py-1 rounded-sm text-xs font-mono bg-slate-50 border-slate-200 text-slate-700" title="ฐานข้อมูล Hostinger MySQL: u753988669_hr">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
                 <span className="text-[9px] font-bold uppercase tracking-wider hidden xs:inline">
-                  🔥 Firebase: {dbStatuses.firebase.connected ? 'Live' : 'Off'}
+                  🗄️ DB: u753988669_hr
                 </span>
               </div>
 
@@ -2313,44 +2086,6 @@ export default function App() {
 
         {/* BODY TAB CONTENT PANEL */}
         <main id="tab-content-panel" className="p-8 flex-1 space-y-8 max-w-7xl mx-auto w-full">
-          {firestoreQuotaExceeded && !hideQuotaWarning && (
-            <div id="firebase-quota-warning-banner" className="bg-amber-50 border border-amber-200 rounded-lg p-5 text-slate-800 shadow-sm relative overflow-hidden transition-all flex flex-col md:flex-row gap-4 items-start md:items-center">
-              <div className="bg-amber-100 p-2.5 rounded-full text-amber-600 shrink-0">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <div className="space-y-1.5 flex-1">
-                <h4 className="font-extrabold text-sm text-amber-900 flex items-center gap-2">
-                  <span>⚠️ การแจ้งเตือนโควตาคลาวด์ Firebase Firestore เต็ม</span>
-                  <span className="bg-amber-200/60 text-amber-800 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">Quota Exceeded</span>
-                </h4>
-                <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                  เนื่องจากแอปพลิเคชันเวอร์ชันสาธารณะนี้ได้รับการใช้งานอย่างหนาแน่น ทำให้โควตาการเขียนข้อมูลฟรีรายวัน (Free daily write units) ของคลาวด์ Firebase สำหรับวันนี้ครบขีดจำกัดสูงสุดแล้ว (โควตาจะได้รับการรีเซ็ตเป็นปกติโดยอัตโนมัติในวันพรุ่งนี้)
-                </p>
-                <p className="text-xs text-slate-700 leading-relaxed font-bold">
-                  💡 ไม่ต้องกังวล! ข้อมูลทั้งหมดของคุณยังคงได้รับการบันทึก สำรอง และประมวลผลอยู่บนฐานข้อมูลออฟไลน์จำลอง (Local JSON Database & local_db.json) ของเครื่องเซิร์ฟเวอร์อย่างปลอดภัย 100% คุณสามารถทำรายการ เพิ่ม ลบ และแก้ไขข้อมูลพนักงาน บัญชี การจ่ายเงินเดือน หรือออกใบกำกับภาษีในระบบต่อไปได้ทุกฟังก์ชันอย่างราบรื่นโดยไม่สูญเสียข้อมูล และระบบจะเชื่อมต่อซิงก์กลับขึ้นคลาวด์อัตโนมัติทันทีที่โควตาเริ่มวันใหม่
-                </p>
-                <div className="pt-1 flex flex-wrap gap-2 items-center text-[11px] text-slate-500 font-mono">
-                  <span>รายละเอียดทางเทคนิค: {firestoreQuotaError || "RESOURCE_EXHAUSTED"}</span>
-                </div>
-              </div>
-              <div className="flex flex-row md:flex-col gap-2 w-full md:w-auto shrink-0 self-stretch justify-end md:justify-center">
-                <a 
-                  href="https://console.firebase.google.com/project/ai-studio-hrmanagementsyst-54d2ff63/firestore/databases/ai-studio-hrmanagementsyst-54d2ff63-2f43-4bce-bc25-c1c156959b83/data?openUpgradeDialog=true"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-sm text-xs transition cursor-pointer text-center"
-                >
-                  เปิดหน้าจัดการ Firebase Console
-                </a>
-                <button
-                  onClick={() => setHideQuotaWarning(true)}
-                  className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-sm text-xs transition cursor-pointer text-center"
-                >
-                  ซ่อนการแจ้งเตือนนี้
-                </button>
-              </div>
-            </div>
-          )}
 
           {activeTab === 'overview' && (
             <DashboardOverview 
