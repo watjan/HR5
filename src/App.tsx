@@ -1660,31 +1660,96 @@ export default function App() {
   };
 
   // Transport Waybill actions
-  const handleAddTransportWaybill = (waybillData: Omit<TransportWaybill, 'id'>) => {
+  const handleAddTransportWaybill = async (waybillData: Omit<TransportWaybill, 'id'>) => {
     const newWaybill: TransportWaybill = {
       ...waybillData,
       id: `tw-${Date.now()}`
     };
-    setTransportWaybills(prev => [newWaybill, ...prev]);
+    const updatedList = [newWaybill, ...transportWaybills];
+    setTransportWaybills(updatedList);
     addAuditLog('CREATE', 'ใบขนส่ง', `เพิ่มใบขนส่งใหม่: ${newWaybill.partnerName} (${newWaybill.carrierName}) เลขที่ ${newWaybill.waybillNumber} ยอดรวม ฿${newWaybill.totalPrice.toLocaleString()}`);
+
+    // Persist to Hostinger MySQL / Dual DB
+    const currentPayload = {
+      ...latestPayloadRef.current,
+      hr_transport_waybills: updatedList
+    };
+    try {
+      const res = await fetch('/api/db/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentPayload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ฐานข้อมูลได้');
+      }
+      if (data.results?.mysql && !data.results.mysql.success) {
+        throw new Error(`Hostinger MySQL: ${data.results.mysql.error || 'เชื่อมต่อฐานข้อมูลไม่สำเร็จ'}`);
+      }
+      return true;
+    } catch (err: any) {
+      console.error('Save to Hostinger DB failed:', err);
+      throw err;
+    }
   };
 
-  const handleUpdateTransportWaybill = (updatedWaybill: TransportWaybill) => {
+  const handleUpdateTransportWaybill = async (updatedWaybill: TransportWaybill) => {
+    const updatedList = transportWaybills.map(item => item.id === updatedWaybill.id ? updatedWaybill : item);
     const oldWb = transportWaybills.find(w => w.id === updatedWaybill.id);
     if (oldWb && oldWb.status !== updatedWaybill.status) {
       addAuditLog('UPDATE', 'ใบขนส่ง', `เปลี่ยนสถานะใบขนส่ง ${updatedWaybill.waybillNumber} เป็น '${updatedWaybill.status === 'receipt_received' ? 'ได้รับใบเสร็จแล้ว' : 'รอใบเสร็จที่ส่งของ'}'`);
     } else {
       addAuditLog('UPDATE', 'ใบขนส่ง', `แก้ไขข้อมูลใบขนส่ง ${updatedWaybill.waybillNumber} (${updatedWaybill.partnerName})`);
     }
-    setTransportWaybills(prev => prev.map(item => item.id === updatedWaybill.id ? updatedWaybill : item));
+    setTransportWaybills(updatedList);
+
+    // Persist to Hostinger MySQL / Dual DB
+    const currentPayload = {
+      ...latestPayloadRef.current,
+      hr_transport_waybills: updatedList
+    };
+    try {
+      const res = await fetch('/api/db/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentPayload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ฐานข้อมูลได้');
+      }
+      if (data.results?.mysql && !data.results.mysql.success) {
+        throw new Error(`Hostinger MySQL: ${data.results.mysql.error || 'เชื่อมต่อฐานข้อมูลไม่สำเร็จ'}`);
+      }
+      return true;
+    } catch (err: any) {
+      console.error('Update to Hostinger DB failed:', err);
+      throw err;
+    }
   };
 
-  const handleDeleteTransportWaybill = (id: string) => {
+  const handleDeleteTransportWaybill = async (id: string) => {
     const wb = transportWaybills.find(item => item.id === id);
     if (wb) {
       addAuditLog('DELETE', 'ใบขนส่ง', `ลบรายการใบขนส่ง ${wb.waybillNumber} (${wb.partnerName}) ยอด ฿${wb.totalPrice.toLocaleString()}`);
     }
-    setTransportWaybills(prev => prev.filter(item => item.id !== id));
+    const updatedList = transportWaybills.filter(item => item.id !== id);
+    setTransportWaybills(updatedList);
+
+    const currentPayload = {
+      ...latestPayloadRef.current,
+      hr_transport_waybills: updatedList
+    };
+    try {
+      await fetch('/api/db/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentPayload)
+      });
+    } catch (err) {
+      console.error('Delete sync failed:', err);
+    }
   };
 
   const triggerLineNotifyForSale = async (sale: SalesRecord, action: 'create' | 'update' | 'delete') => {

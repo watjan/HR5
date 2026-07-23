@@ -177,9 +177,9 @@ function SearchablePartnerSelect({
 
 interface TransportWaybillManagementProps {
   waybills: TransportWaybill[];
-  onAddWaybill: (waybill: Omit<TransportWaybill, 'id'>) => void;
-  onUpdateWaybill: (waybill: TransportWaybill) => void;
-  onDeleteWaybill: (id: string) => void;
+  onAddWaybill: (waybill: Omit<TransportWaybill, 'id'>) => Promise<any> | void;
+  onUpdateWaybill: (waybill: TransportWaybill) => Promise<any> | void;
+  onDeleteWaybill: (id: string) => Promise<any> | void;
   partners?: PartnerCompany[];
   carriers?: string[];
   onAddNewPartner?: () => void;
@@ -194,6 +194,10 @@ export default function TransportWaybillManagement({
   carriers = ['Kerry Express', 'Flash Express', 'J&T Express', 'ไปรษณีย์ไทย (EMS)', 'รถขนส่งบริษัท', 'ขนส่งเอกชนทั่วไป'],
   onAddNewPartner
 }: TransportWaybillManagementProps) {
+  // Notification & Submit states
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
   const [carrierFilter, setCarrierFilter] = useState('All');
@@ -377,12 +381,15 @@ export default function TransportWaybillManagement({
   }, [grossTotal, whtRate, isWhtAutoCalc]);
 
   // Handle Submit Form
-  const handleSubmitForm = (e: React.FormEvent) => {
+  const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!partnerName.trim()) {
       alert("กรุณาระบุชื่อบริษัทคู่ค้าขนส่ง");
       return;
     }
+
+    setIsSubmitting(true);
+    setNotification(null);
 
     const primaryBookNumber = receiptItems[0]?.bookNumber?.trim() || bookNumber.trim();
     const primaryReceiptNumber = receiptItems.map(i => i.receiptNumber?.trim()).filter(Boolean).join(', ') || receiptNumber.trim();
@@ -415,19 +422,42 @@ export default function TransportWaybillManagement({
       createdAt: editingWaybill?.createdAt || new Date().toISOString()
     };
 
-    if (editingWaybill) {
-      onUpdateWaybill({ ...waybillData, id: editingWaybill.id });
-    } else {
-      onAddWaybill(waybillData);
+    try {
+      if (editingWaybill) {
+        await onUpdateWaybill({ ...waybillData, id: editingWaybill.id });
+      } else {
+        await onAddWaybill(waybillData);
+      }
+      
+      const successMsg = `บันทึกข้อมูลใบขนส่ง (${waybillData.waybillNumber}) ลงฐานข้อมูล Hostinger สำเร็จเรียบร้อยแล้ว`;
+      setNotification({ type: 'success', message: successMsg });
+      alert(`✅ บันทึกสำเร็จ!\n${successMsg}`);
+      setIsFormOpen(false);
+    } catch (err: any) {
+      console.error("Save transport waybill failed:", err);
+      const failMsg = `บันทึกไม่สำเร็จ: ${err?.message || 'เกิดข้อผิดพลาดในการบันทึกลงฐานข้อมูล Hostinger'}`;
+      setNotification({ type: 'error', message: failMsg });
+      alert(`❌ ${failMsg}`);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setIsFormOpen(false);
   };
 
   // Quick Status Toggle
-  const handleQuickToggleStatus = (wb: TransportWaybill) => {
+  const handleQuickToggleStatus = async (wb: TransportWaybill) => {
     const nextStatus = wb.status === 'pending_receipt' ? 'receipt_received' : 'pending_receipt';
-    onUpdateWaybill({ ...wb, status: nextStatus });
+    try {
+      await onUpdateWaybill({ ...wb, status: nextStatus });
+      const statusText = nextStatus === 'receipt_received' ? 'ได้รับใบเสร็จแล้ว' : 'รอใบเสร็จที่ส่งของ';
+      const successMsg = `อัปเดตสถานะใบขนส่ง ${wb.waybillNumber} เป็น '${statusText}' และบันทึกลงฐานข้อมูล Hostinger สำเร็จ`;
+      setNotification({ type: 'success', message: successMsg });
+      alert(`✅ บันทึกสำเร็จ!\n${successMsg}`);
+    } catch (err: any) {
+      console.error("Toggle status failed:", err);
+      const failMsg = `บันทึกสถานะไม่สำเร็จ: ${err?.message || 'เกิดข้อผิดพลาดในการบันทึกลงฐานข้อมูล Hostinger'}`;
+      setNotification({ type: 'error', message: failMsg });
+      alert(`❌ ${failMsg}`);
+    }
   };
 
   // Filtered list
@@ -479,6 +509,34 @@ export default function TransportWaybillManagement({
   return (
     <div id="transport-waybills-container" className="space-y-6 font-sans">
       
+      {/* 🔔 SAVE STATUS NOTIFICATION ALERT BANNER */}
+      {notification && (
+        <div className={`p-4 rounded-md border flex items-center justify-between gap-3 shadow-xs animate-fade-in ${
+          notification.type === 'success'
+            ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+            : 'bg-rose-50 border-rose-300 text-rose-950'
+        }`}>
+          <div className="flex items-center gap-2.5">
+            {notification.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            )}
+            <span className="text-xs font-bold font-sans">
+              {notification.message}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNotification(null)}
+            className="p-1 hover:bg-black/5 rounded-full text-slate-500 transition cursor-pointer border-0"
+            title="ปิดการแจ้งเตือน"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* 🚚 TOP TITLE BAR */}
       <div className="bg-white p-5 rounded-md shadow-xs border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -1202,17 +1260,28 @@ export default function TransportWaybillManagement({
               <div className="flex justify-end items-center gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => setIsFormOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-sm cursor-pointer border-0"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-sm cursor-pointer border-0 disabled:opacity-50"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-sm cursor-pointer shadow-xs border-0 flex items-center gap-1.5"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-sm cursor-pointer shadow-xs border-0 flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  <Truck className="w-4 h-4" />
-                  <span>{editingWaybill ? 'บันทึกการแก้ไข' : 'บันทึกใบขนส่ง'}</span>
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>กำลังบันทึกลงฐานข้อมูล Hostinger...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Truck className="w-4 h-4" />
+                      <span>{editingWaybill ? 'บันทึกการแก้ไข' : 'บันทึกใบขนส่ง'}</span>
+                    </>
+                  )}
                 </button>
               </div>
 
@@ -1249,9 +1318,20 @@ export default function TransportWaybillManagement({
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  onDeleteWaybill(deleteTarget.id);
-                  setDeleteTarget(null);
+                onClick={async () => {
+                  try {
+                    await onDeleteWaybill(deleteTarget.id);
+                    const msg = `ลบรายการใบขนส่ง ${deleteTarget.waybillNumber} สำเร็จ และปรับปรุงฐานข้อมูล Hostinger เรียบร้อยแล้ว`;
+                    setNotification({ type: 'success', message: msg });
+                    alert(`✅ ลบสำเร็จ!\n${msg}`);
+                  } catch (err: any) {
+                    console.error("Delete failed:", err);
+                    const failMsg = `ลบไม่สำเร็จ: ${err?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล Hostinger'}`;
+                    setNotification({ type: 'error', message: failMsg });
+                    alert(`❌ ${failMsg}`);
+                  } finally {
+                    setDeleteTarget(null);
+                  }
                 }}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-sm cursor-pointer shadow-xs border-0 flex items-center gap-1.5"
               >
