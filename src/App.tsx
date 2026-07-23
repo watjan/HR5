@@ -1672,6 +1672,7 @@ export default function App() {
     // Persist to Hostinger MySQL / Dual DB
     const currentPayload = {
       ...latestPayloadRef.current,
+      transportWaybills: updatedList,
       hr_transport_waybills: updatedList
     };
     try {
@@ -1707,6 +1708,7 @@ export default function App() {
     // Persist to Hostinger MySQL / Dual DB
     const currentPayload = {
       ...latestPayloadRef.current,
+      transportWaybills: updatedList,
       hr_transport_waybills: updatedList
     };
     try {
@@ -1739,6 +1741,7 @@ export default function App() {
 
     const currentPayload = {
       ...latestPayloadRef.current,
+      transportWaybills: updatedList,
       hr_transport_waybills: updatedList
     };
     try {
