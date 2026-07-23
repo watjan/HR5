@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { TransportWaybill, PartnerCompany } from '../types';
+import { TransportWaybill, PartnerCompany, DeliveryReceiptItem } from '../types';
 import { 
   Truck, 
   Plus, 
@@ -211,7 +211,10 @@ export default function TransportWaybillManagement({
   const [partnerName, setPartnerName] = useState('');
   const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().split('T')[0]);
   
-  // Delivery receipt details (เล่มที่, เลขที่, จำนวน, ราคา)
+  // Delivery receipt details (รายการบรรทัดใบเสร็จรับเงินที่ส่งของ)
+  const [receiptItems, setReceiptItems] = useState<DeliveryReceiptItem[]>([
+    { id: '1', bookNumber: '', receiptNumber: '', quantity: 1, unitPrice: 0, totalPrice: 0, description: '' }
+  ]);
   const [bookNumber, setBookNumber] = useState('');
   const [receiptNumber, setReceiptNumber] = useState('');
   const [quantity, setQuantity] = useState<number | ''>(1);
@@ -228,6 +231,58 @@ export default function TransportWaybillManagement({
   const [status, setStatus] = useState<'pending_receipt' | 'receipt_received' | 'cancelled'>('pending_receipt');
   const [trackingNumber, setTrackingNumber] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Handlers for Receipt Line Items
+  const handleAddReceiptItem = () => {
+    const lastItem = receiptItems[receiptItems.length - 1];
+    setReceiptItems(prev => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        bookNumber: lastItem ? lastItem.bookNumber : '',
+        receiptNumber: '',
+        quantity: 1,
+        unitPrice: 0,
+        totalPrice: 0,
+        description: ''
+      }
+    ]);
+  };
+
+  const handleRemoveReceiptItem = (index: number) => {
+    if (receiptItems.length <= 1) return;
+    setReceiptItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateReceiptItem = (index: number, field: keyof DeliveryReceiptItem, value: any) => {
+    setReceiptItems(prev => {
+      const updated = [...prev];
+      const item = { ...updated[index], [field]: value };
+      if (field === 'quantity' || field === 'unitPrice') {
+        const q = typeof item.quantity === 'number' ? item.quantity : parseFloat(item.quantity as any) || 0;
+        const u = typeof item.unitPrice === 'number' ? item.unitPrice : parseFloat(item.unitPrice as any) || 0;
+        item.totalPrice = Math.round(q * u * 100) / 100;
+      }
+      updated[index] = item;
+      return updated;
+    });
+  };
+
+  // Calculations across receipt lines
+  const calculatedOverallTotal = useMemo(() => {
+    return receiptItems.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
+  }, [receiptItems]);
+
+  const calculatedOverallQuantity = useMemo(() => {
+    return receiptItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  }, [receiptItems]);
+
+  const grossTotal = calculatedOverallTotal || (typeof totalPrice === 'number' ? totalPrice : parseFloat(totalPrice as string) || 0);
+  const calculatedWhtAmount = isWhtAutoCalc 
+    ? Math.round((grossTotal * (whtRate / 100)) * 100) / 100 
+    : (typeof whtAmount === 'number' ? whtAmount : parseFloat(whtAmount as string) || 0);
+  const netPayableToCarrier = Math.max(0, grossTotal - calculatedWhtAmount);
+  const whtToRevenueDepartment = calculatedWhtAmount;
 
   // Auto-generate waybill number if empty
   const generateNewWaybillNo = () => {
@@ -249,6 +304,9 @@ export default function TransportWaybillManagement({
     setCarrierName(carriers[0] || 'Kerry Express');
     setPartnerName('');
     setDeliveryDate(new Date().toISOString().split('T')[0]);
+    setReceiptItems([
+      { id: '1', bookNumber: '', receiptNumber: '', quantity: 1, unitPrice: 0, totalPrice: 0, description: '' }
+    ]);
     setBookNumber('');
     setReceiptNumber('');
     setQuantity(1);
@@ -276,6 +334,31 @@ export default function TransportWaybillManagement({
     setQuantity(wb.quantity || 1);
     setUnitPrice(wb.unitPrice ?? '');
     setTotalPrice(wb.totalPrice || 0);
+    
+    if (wb.items && wb.items.length > 0) {
+      setReceiptItems(wb.items.map((item, idx) => ({
+        id: item.id || String(idx + 1),
+        bookNumber: item.bookNumber || '',
+        receiptNumber: item.receiptNumber || '',
+        quantity: item.quantity ?? 1,
+        unitPrice: item.unitPrice ?? 0,
+        totalPrice: item.totalPrice ?? 0,
+        description: item.description || ''
+      })));
+    } else {
+      setReceiptItems([
+        {
+          id: '1',
+          bookNumber: wb.bookNumber || '',
+          receiptNumber: wb.receiptNumber || '',
+          quantity: wb.quantity || 1,
+          unitPrice: wb.unitPrice || 0,
+          totalPrice: wb.totalPrice || 0,
+          description: ''
+        }
+      ]);
+    }
+
     setWhtDocNumber(wb.whtDocNumber || '');
     setWhtRate(wb.whtRate ?? 1);
     setWhtAmount(wb.whtAmount ?? '');
@@ -286,22 +369,12 @@ export default function TransportWaybillManagement({
     setIsFormOpen(true);
   };
 
-  // Auto recalculate total price & WHT amount when Qty or Unit Price or WHT Rate changes
+  // Sync WHT amount when grossTotal or whtRate changes
   useEffect(() => {
-    if (quantity && unitPrice && typeof quantity === 'number' && typeof unitPrice === 'number') {
-      const calcTotal = quantity * unitPrice;
-      setTotalPrice(calcTotal);
-      if (isWhtAutoCalc) {
-        setWhtAmount(Math.round((calcTotal * (whtRate / 100)) * 100) / 100);
-      }
+    if (isWhtAutoCalc && grossTotal > 0) {
+      setWhtAmount(Math.round((grossTotal * (whtRate / 100)) * 100) / 100);
     }
-  }, [quantity, unitPrice, whtRate, isWhtAutoCalc]);
-
-  useEffect(() => {
-    if (isWhtAutoCalc && totalPrice && typeof totalPrice === 'number') {
-      setWhtAmount(Math.round((totalPrice * (whtRate / 100)) * 100) / 100);
-    }
-  }, [totalPrice, whtRate, isWhtAutoCalc]);
+  }, [grossTotal, whtRate, isWhtAutoCalc]);
 
   // Handle Submit Form
   const handleSubmitForm = (e: React.FormEvent) => {
@@ -311,22 +384,31 @@ export default function TransportWaybillManagement({
       return;
     }
 
-    const numericTotal = typeof totalPrice === 'number' ? totalPrice : parseFloat(totalPrice as string) || 0;
-    const numericWht = typeof whtAmount === 'number' ? whtAmount : parseFloat(whtAmount as string) || (numericTotal * (whtRate / 100));
+    const primaryBookNumber = receiptItems[0]?.bookNumber?.trim() || bookNumber.trim();
+    const primaryReceiptNumber = receiptItems.map(i => i.receiptNumber?.trim()).filter(Boolean).join(', ') || receiptNumber.trim();
 
     const waybillData = {
       waybillNumber: waybillNumber.trim() || generateNewWaybillNo(),
       carrierName: carrierName.trim(),
       partnerName: partnerName.trim(),
       deliveryDate,
-      bookNumber: bookNumber.trim(),
-      receiptNumber: receiptNumber.trim(),
-      quantity: typeof quantity === 'number' ? quantity : parseInt(quantity as string) || 1,
-      unitPrice: typeof unitPrice === 'number' ? unitPrice : parseFloat(unitPrice as string) || undefined,
-      totalPrice: numericTotal,
+      bookNumber: primaryBookNumber,
+      receiptNumber: primaryReceiptNumber,
+      quantity: calculatedOverallQuantity || 1,
+      unitPrice: receiptItems[0]?.unitPrice,
+      totalPrice: grossTotal,
+      items: receiptItems.map(item => ({
+        id: item.id || Date.now().toString(),
+        bookNumber: item.bookNumber?.trim() || '',
+        receiptNumber: item.receiptNumber?.trim() || '',
+        quantity: typeof item.quantity === 'number' ? item.quantity : parseFloat(item.quantity as any) || 1,
+        unitPrice: typeof item.unitPrice === 'number' ? item.unitPrice : parseFloat(item.unitPrice as any) || 0,
+        totalPrice: typeof item.totalPrice === 'number' ? item.totalPrice : parseFloat(item.totalPrice as any) || 0,
+        description: item.description?.trim() || ''
+      })),
       whtDocNumber: whtDocNumber.trim(),
       whtRate,
-      whtAmount: numericWht,
+      whtAmount: calculatedWhtAmount,
       status,
       trackingNumber: trackingNumber.trim(),
       notes: notes.trim(),
@@ -846,65 +928,114 @@ export default function TransportWaybillManagement({
 
               {/* 📦 Section: Delivery Receipt Details (เล่มที่, เลขที่, จำนวน, ราคา) */}
               <div className="bg-slate-50 p-3.5 rounded-sm border border-slate-200 space-y-3">
-                <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                  <FileText className="w-4 h-4 text-indigo-600" />
-                  <span>รายละเอียดใบเสร็จรับเงินที่ส่งของ (Delivery Receipt Details)</span>
+                <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-indigo-600" />
+                    <span>รายละเอียดใบเสร็จรับเงินที่ส่งของ (Delivery Receipt Details)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddReceiptItem}
+                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-sm transition flex items-center gap-1 cursor-pointer border border-indigo-200"
+                    title="เพิ่มบรรทัดรายการส่งของใหม่"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>เพิ่มบรรทัดรายการ (+)</span>
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 block mb-1">เล่มที่ (Book No.)</label>
-                    <input
-                      type="text"
-                      value={bookNumber}
-                      onChange={(e) => setBookNumber(e.target.value)}
-                      placeholder="เช่น 001"
-                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-sm text-xs font-mono bg-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 block mb-1">เลขที่ (Receipt No.)</label>
-                    <input
-                      type="text"
-                      value={receiptNumber}
-                      onChange={(e) => setReceiptNumber(e.target.value)}
-                      placeholder="เช่น 045"
-                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-sm text-xs font-mono font-bold text-indigo-900 bg-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 block mb-1">จำนวน (Quantity)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={quantity}
-                      onChange={(e) => setQuantity(e.target.value ? Number(e.target.value) : '')}
-                      placeholder="1"
-                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-sm text-xs font-mono bg-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 block mb-1">ราคา/ยอดรวม (บาท)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={totalPrice}
-                      onChange={(e) => {
-                        setIsWhtAutoCalc(true);
-                        setTotalPrice(e.target.value ? Number(e.target.value) : '');
-                      }}
-                      placeholder="0.00"
-                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-sm text-xs font-mono font-black text-emerald-800 bg-white focus:outline-none focus:border-indigo-500"
-                      required
-                    />
-                  </div>
+                <div className="space-y-2">
+                  {receiptItems.map((item, index) => (
+                    <div key={item.id || index} className="p-2.5 bg-white border border-slate-200 rounded-sm shadow-2xs space-y-2 relative">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 border-b border-slate-100 pb-1">
+                        <span>รายการที่ #{index + 1}</span>
+                        {receiptItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveReceiptItem(index)}
+                            className="text-rose-500 hover:text-rose-700 p-0.5 rounded cursor-pointer border-0 bg-transparent flex items-center gap-0.5"
+                            title="ลบบรรทัดนี้"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span className="text-[10px]">ลบรายการ</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 block mb-0.5">เล่มที่ (Book)</label>
+                          <input
+                            type="text"
+                            value={item.bookNumber || ''}
+                            onChange={(e) => handleUpdateReceiptItem(index, 'bookNumber', e.target.value)}
+                            placeholder="เช่น 001"
+                            className="w-full px-2 py-1 border border-slate-200 rounded-xs text-xs font-mono bg-white focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 block mb-0.5">เลขที่ (Receipt)</label>
+                          <input
+                            type="text"
+                            value={item.receiptNumber || ''}
+                            onChange={(e) => handleUpdateReceiptItem(index, 'receiptNumber', e.target.value)}
+                            placeholder="เช่น 045"
+                            className="w-full px-2 py-1 border border-slate-200 rounded-xs text-xs font-mono font-bold text-indigo-900 bg-white focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                        <div className="col-span-2 sm:col-span-2">
+                          <label className="text-[10px] font-bold text-slate-500 block mb-0.5">รายละเอียด/คำอธิบาย (ถ้ามี)</label>
+                          <input
+                            type="text"
+                            value={item.description || ''}
+                            onChange={(e) => handleUpdateReceiptItem(index, 'description', e.target.value)}
+                            placeholder="เช่น ค่าขนส่งสินค้าล็อต A"
+                            className="w-full px-2 py-1 border border-slate-200 rounded-xs text-xs bg-white focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 block mb-0.5">จำนวน (Qty)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity ?? 1}
+                            onChange={(e) => handleUpdateReceiptItem(index, 'quantity', e.target.value ? Number(e.target.value) : 1)}
+                            placeholder="1"
+                            className="w-full px-2 py-1 border border-slate-200 rounded-xs text-xs font-mono bg-white focus:outline-none focus:border-indigo-500 text-center"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 block mb-0.5">ราคารวม (บาท)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.totalPrice ?? ''}
+                            onChange={(e) => handleUpdateReceiptItem(index, 'totalPrice', e.target.value ? Number(e.target.value) : 0)}
+                            placeholder="0.00"
+                            className="w-full px-2 py-1 border border-slate-200 rounded-xs text-xs font-mono font-bold text-emerald-800 bg-white focus:outline-none focus:border-indigo-500 text-right"
+                            required
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Overall Total Summary Banner */}
+                <div className="flex justify-between items-center p-2.5 bg-slate-100 rounded-sm text-xs border border-slate-200">
+                  <span className="font-bold text-slate-700">
+                    สรุปรวมทั้งหมด ({receiptItems.length} บรรทัดรายการ / {calculatedOverallQuantity} ชิ้น):
+                  </span>
+                  <span className="font-mono font-black text-sm text-emerald-800">
+                    ฿{calculatedOverallTotal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </div>
               </div>
 
               {/* 🛡️ Section: Withholding Tax (ใบหัก ณ ที่จ่าย) */}
-              <div className="bg-blue-50/50 p-3.5 rounded-sm border border-blue-100 space-y-3">
-                <div className="flex justify-between items-center border-b border-blue-100 pb-2">
+              <div className="bg-blue-50/50 p-3.5 rounded-sm border border-blue-200 space-y-3">
+                <div className="flex justify-between items-center border-b border-blue-200 pb-2">
                   <div className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
                     <Percent className="w-4 h-4 text-blue-600" />
                     <span>ข้อมูลใบหัก ณ ที่จ่าย (Withholding Tax - WHT)</span>
@@ -923,14 +1054,14 @@ export default function TransportWaybillManagement({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                      เลขที่ใบหัก ณ ที่จ่าย
+                      เลขที่หักณที่จ่าย
                     </label>
                     <input
                       type="text"
                       value={whtDocNumber}
                       onChange={(e) => setWhtDocNumber(e.target.value)}
                       placeholder="WHT-2026-XXX"
-                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-sm text-xs font-mono bg-white focus:outline-none focus:border-indigo-500 font-bold"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-sm text-xs font-mono bg-white focus:outline-none focus:border-indigo-500 font-bold text-indigo-900"
                     />
                   </div>
                   <div>
@@ -939,13 +1070,7 @@ export default function TransportWaybillManagement({
                     </label>
                     <select
                       value={whtRate}
-                      onChange={(e) => {
-                        const rate = Number(e.target.value);
-                        setWhtRate(rate);
-                        if (isWhtAutoCalc && totalPrice && typeof totalPrice === 'number') {
-                          setWhtAmount(Math.round((totalPrice * (rate / 100)) * 100) / 100);
-                        }
-                      }}
+                      onChange={(e) => setWhtRate(Number(e.target.value))}
                       className="w-full px-2.5 py-1.5 border border-slate-200 rounded-sm text-xs bg-white focus:outline-none focus:border-indigo-500 font-mono font-bold"
                     >
                       <option value={1}>1% (บริการค่าขนส่งทั่วไป)</option>
@@ -969,6 +1094,37 @@ export default function TransportWaybillManagement({
                       placeholder="0.00"
                       className="w-full px-2.5 py-1.5 border border-slate-200 rounded-sm text-xs font-mono font-bold text-blue-900 bg-white focus:outline-none focus:border-indigo-500"
                     />
+                  </div>
+                </div>
+
+                {/* 📊 WHT Calculation Breakdown Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-blue-100 font-sans">
+                  <div className="p-2 bg-white rounded-sm border border-slate-200 space-y-0.5">
+                    <span className="text-[10px] text-slate-500 font-bold block">ราคา/ยอดรวม (บาท)</span>
+                    <span className="text-xs font-mono font-black text-slate-900 block">
+                      ฿{grossTotal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="p-2 bg-amber-50/80 rounded-sm border border-amber-200 space-y-0.5">
+                    <span className="text-[10px] text-amber-800 font-bold block">จำนวนเงินที่หัก ({whtRate}%)</span>
+                    <span className="text-xs font-mono font-black text-amber-900 block">
+                      -฿{calculatedWhtAmount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="p-2 bg-emerald-50/80 rounded-sm border border-emerald-200 space-y-0.5">
+                    <span className="text-[10px] text-emerald-800 font-bold block">จำนวนเงินที่ต้องจ่าย ให้ขนส่ง</span>
+                    <span className="text-xs font-mono font-black text-emerald-900 block">
+                      ฿{netPayableToCarrier.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="p-2 bg-blue-50 rounded-sm border border-blue-200 space-y-0.5">
+                    <span className="text-[10px] text-blue-800 font-bold block">จำนวนที่หักส่งสรรพากร</span>
+                    <span className="text-xs font-mono font-black text-blue-900 block">
+                      ฿{whtToRevenueDepartment.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1141,39 +1297,86 @@ export default function TransportWaybillManagement({
 
               {/* Receipt & Items Box */}
               <div className="border border-slate-200 rounded-xs p-3 space-y-2 bg-slate-50/50">
-                <div className="text-xs font-bold text-slate-800 border-b border-slate-200 pb-1">
-                  รายละเอียดใบเสร็จรับเงินที่ส่งของ
+                <div className="text-xs font-bold text-slate-800 border-b border-slate-200 pb-1 flex justify-between">
+                  <span>รายละเอียดใบเสร็จรับเงินที่ส่งของ (Delivery Receipt Details)</span>
+                  <span className="text-[10px] text-slate-500">
+                    {printTarget.items && printTarget.items.length > 0 ? `${printTarget.items.length} รายการ` : '1 รายการ'}
+                  </span>
                 </div>
-                <div className="grid grid-cols-4 gap-2 text-xs font-mono">
-                  <div>
-                    <span className="text-[10px] text-slate-500 block">เล่มที่</span>
-                    <strong>{printTarget.bookNumber || '-'}</strong>
+
+                {printTarget.items && printTarget.items.length > 0 ? (
+                  <table className="w-full text-left text-xs font-mono border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-300 text-[10px] text-slate-500 uppercase">
+                        <th className="py-1 px-1">#</th>
+                        <th className="py-1 px-1">เล่มที่</th>
+                        <th className="py-1 px-1">เลขที่ใบเสร็จ</th>
+                        <th className="py-1 px-1">รายละเอียด</th>
+                        <th className="py-1 px-1 text-center">จำนวน</th>
+                        <th className="py-1 px-1 text-right">ราคารวม (บาท)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {printTarget.items.map((item, idx) => (
+                        <tr key={idx}>
+                          <td className="py-1 px-1 text-slate-400">{idx + 1}</td>
+                          <td className="py-1 px-1 font-bold">{item.bookNumber || '-'}</td>
+                          <td className="py-1 px-1 text-indigo-900 font-bold">{item.receiptNumber || '-'}</td>
+                          <td className="py-1 px-1 text-slate-700 font-sans">{item.description || '-'}</td>
+                          <td className="py-1 px-1 text-center">{item.quantity || 1}</td>
+                          <td className="py-1 px-1 text-right font-bold">฿{(item.totalPrice || 0).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2 text-xs font-mono">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">เล่มที่</span>
+                      <strong>{printTarget.bookNumber || '-'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">เลขที่</span>
+                      <strong>{printTarget.receiptNumber || '-'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">จำนวน</span>
+                      <strong>{printTarget.quantity} รายการ</strong>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-500 block">ราคารวม</span>
+                      <strong className="text-slate-900">฿{printTarget.totalPrice.toLocaleString()}</strong>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 block">เลขที่</span>
-                    <strong>{printTarget.receiptNumber || '-'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 block">จำนวน</span>
-                    <strong>{printTarget.quantity} รายการ</strong>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-500 block">ราคารวม</span>
-                    <strong className="text-slate-900">฿{printTarget.totalPrice.toLocaleString()}</strong>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* Withholding Tax Info */}
+              {/* Withholding Tax Info Breakdown */}
               {printTarget.whtDocNumber && (
-                <div className="border border-blue-200 bg-blue-50/30 rounded-xs p-3 space-y-1 text-xs">
-                  <div className="font-bold text-blue-900 flex justify-between">
-                    <span>ใบหัก ณ ที่จ่าย เลขที่: {printTarget.whtDocNumber}</span>
+                <div className="border border-blue-200 bg-blue-50/40 rounded-xs p-3 space-y-2 text-xs">
+                  <div className="font-bold text-blue-900 flex justify-between border-b border-blue-200 pb-1">
+                    <span>ข้อมูลใบหัก ณ ที่จ่าย เลขที่: {printTarget.whtDocNumber}</span>
                     <span>อัตราภาษี: {printTarget.whtRate || 1}%</span>
                   </div>
-                  <div className="flex justify-between text-blue-800 font-mono font-bold">
-                    <span>จำนวนเงินที่หัก ณ ที่จ่าย:</span>
-                    <span>฿{(printTarget.whtAmount || 0).toLocaleString()}</span>
+                  <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-1">
+                    <div className="p-1.5 bg-white rounded border border-blue-100">
+                      <span className="text-[10px] text-slate-500 block">1. ราคา/ยอดรวม (บาท)</span>
+                      <strong className="text-slate-900 font-black">฿{printTarget.totalPrice.toLocaleString()}</strong>
+                    </div>
+                    <div className="p-1.5 bg-amber-50 rounded border border-amber-200">
+                      <span className="text-[10px] text-amber-800 block">2. จำนวนเงินที่หัก (บาท)</span>
+                      <strong className="text-amber-900 font-black">฿{(printTarget.whtAmount || 0).toLocaleString()}</strong>
+                    </div>
+                    <div className="p-1.5 bg-emerald-50 rounded border border-emerald-200">
+                      <span className="text-[10px] text-emerald-800 block">3. จำนวนเงินที่ต้องจ่าย ให้ขนส่ง</span>
+                      <strong className="text-emerald-900 font-black">
+                        ฿{(printTarget.totalPrice - (printTarget.whtAmount || 0)).toLocaleString()}
+                      </strong>
+                    </div>
+                    <div className="p-1.5 bg-blue-100/70 rounded border border-blue-200">
+                      <span className="text-[10px] text-blue-900 block">4. จำนวนที่หักส่งสรรพากร</span>
+                      <strong className="text-blue-950 font-black">฿{(printTarget.whtAmount || 0).toLocaleString()}</strong>
+                    </div>
                   </div>
                 </div>
               )}

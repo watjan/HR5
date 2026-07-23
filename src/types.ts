@@ -262,9 +262,19 @@ export interface CounterDuty {
   rotationLogs?: { id: string; date: string; message: string; type: 'skip' | 'override' | 'leave' }[];
 }
 
+export interface DeliveryReceiptItem {
+  id?: string;
+  bookNumber?: string;
+  receiptNumber?: string;
+  quantity?: number;
+  unitPrice?: number;
+  totalPrice?: number;
+  description?: string;
+}
+
 export interface TransportWaybill {
   id: string;
-  waybillNumber: string; // เลขที่ใบขนส่ง / เลขที่เอกสาร
+  waybillNumber: string; // เลขที่ใบขนส่ง / อ้างอิงเอกสาร
   carrierName: string; // บริษัทขนส่ง (Kerry, Flash, J&T, etc.)
   partnerName: string; // บิลคู่ค้าขนส่ง / ชื่อบริษัทคู่ค้า
   deliveryDate: string; // วันที่ส่งของ (YYYY-MM-DD)
@@ -275,6 +285,7 @@ export interface TransportWaybill {
   quantity: number; // จำนวน (ชิ้น/เที่ยว/รายการ)
   unitPrice?: number; // ราคาต่อหน่วย
   totalPrice: number; // ราคารวม (บาท)
+  items?: DeliveryReceiptItem[]; // บรรทัดรายการใบเสร็จย่อยที่ส่งของ (ถ้ามีหลายบรรทัด)
   
   // ใบหัก ณ ที่จ่าย (Withholding Tax / WHT)
   whtDocNumber?: string; // เลขที่ใบหัก ณ ที่จ่าย
