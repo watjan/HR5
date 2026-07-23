@@ -617,11 +617,13 @@ export default function App() {
             errMsg.toLowerCase().includes("quota") ||
             errMsg.toLowerCase().includes("resource_exhausted") ||
             errMsg.toLowerCase().includes("limit") ||
-            errMsg.toLowerCase().includes("exhausted")
+            errMsg.toLowerCase().includes("exhausted") ||
+            errMsg.toLowerCase().includes("permission") ||
+            errMsg.toLowerCase().includes("insufficient")
           ) {
             setFirestoreQuotaExceeded(true);
             setFirestoreQuotaError(errMsg);
-            console.warn(`[Firestore Quota] Real-time listener for ${key} paused due to Firebase daily free quota exhaustion.`);
+            console.warn(`[Firestore Listener] Stream paused for ${key}: ${errMsg}. System relies on Hostinger MySQL database.`);
           } else {
             console.error(`Error in real-time listener for ${key}:`, error);
           }

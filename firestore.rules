@@ -41,6 +41,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Collection: Transport Waybills
+    match /transport_waybills/{id} {
+      allow read, write: if true;
+    }
+
     // Collection: Audit Logs
     match /audit_logs/{id} {
       allow read, write: if true;
