@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { safeStorage } from '../lib/safeStorage';
 import { PartnerBilling, PartnerCompany, TransportWaybill } from '../types';
 import TransportWaybillManagement from './TransportWaybillManagement';
+import { SearchablePartnerSelect } from './SearchablePartnerSelect';
 import { 
   FileText, Plus, Search, Filter, Edit3, Trash2, 
   CheckCircle, AlertCircle, X, HelpCircle, Phone, 
@@ -2750,47 +2751,25 @@ export default function PartnerBillingManagement({
                   </button>
                 </div>
                 
-                <div className="flex gap-2">
-                  <select
-                    value={partners.some(p => p.name === partnerName) ? partnerName : ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val) {
-                        setPartnerName(val);
-                        const matched = partners.find(p => p.name === val);
-                        if (matched) {
-                          setContactPerson(matched.contactPerson || '');
-                          setPhone(matched.phone || '');
-                        }
-                      }
-                    }}
-                    className="flex-1 px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-sans text-xs font-semibold text-slate-800"
-                  >
-                    <option value="">-- เลือกจากคู่ค้าในระบบ --</option>
-                    {partners.map(p => (
-                      <option key={p.id} value={p.name}>
-                        {p.name} {p.taxId ? `(${p.taxId})` : ''}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    type="text"
-                    placeholder="หรือพิมพ์ระบุชื่อด้วยตนเอง..."
-                    value={partnerName}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setPartnerName(val);
-                      const matched = partners.find(p => p.name.trim().toLowerCase() === val.trim().toLowerCase());
-                      if (matched) {
-                        setContactPerson(matched.contactPerson || '');
-                        setPhone(matched.phone || '');
-                      }
-                    }}
-                    className="w-1/2 px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-sans text-xs"
-                    required
-                  />
-                </div>
+                <SearchablePartnerSelect
+                  value={partnerName}
+                  onChange={(val) => {
+                    setPartnerName(val);
+                    const matched = partners.find(p => p.name.trim().toLowerCase() === val.trim().toLowerCase());
+                    if (matched) {
+                      setContactPerson(matched.contactPerson || '');
+                      setPhone(matched.phone || '');
+                    }
+                  }}
+                  onSelectPartner={(p) => {
+                    setContactPerson(p.contactPerson || '');
+                    setPhone(p.phone || '');
+                  }}
+                  partners={partners}
+                  onAddNewPartner={handleOpenAddPartner}
+                  placeholder="พิมพ์ค้นหาชื่อบริษัทคู่ค้า / พิมพ์ระบุชื่อด้วยตนเอง..."
+                  required
+                />
               </div>
 
               <div className="grid grid-cols-1 gap-3">
@@ -3135,47 +3114,25 @@ export default function PartnerBillingManagement({
                   </button>
                 </div>
                 
-                <div className="flex gap-2">
-                  <select
-                    value={partners.some(p => p.name === partnerName) ? partnerName : ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val) {
-                        setPartnerName(val);
-                        const matched = partners.find(p => p.name === val);
-                        if (matched) {
-                          setContactPerson(matched.contactPerson || '');
-                          setPhone(matched.phone || '');
-                        }
-                      }
-                    }}
-                    className="flex-1 px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 bg-white font-sans text-xs font-semibold text-slate-800"
-                  >
-                    <option value="">-- เลือกจากคู่ค้าในระบบ --</option>
-                    {partners.map(p => (
-                      <option key={p.id} value={p.name}>
-                        {p.name} {p.taxId ? `(${p.taxId})` : ''}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    type="text"
-                    placeholder="หรือพิมพ์ระบุชื่อด้วยตนเอง..."
-                    value={partnerName}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setPartnerName(val);
-                      const matched = partners.find(p => p.name.trim().toLowerCase() === val.trim().toLowerCase());
-                      if (matched) {
-                        setContactPerson(matched.contactPerson || '');
-                        setPhone(matched.phone || '');
-                      }
-                    }}
-                    className="w-1/2 px-3 py-1.5 border border-slate-200 rounded-sm focus:outline-none focus:border-blue-500 text-slate-700 bg-white font-sans text-xs"
-                    required
-                  />
-                </div>
+                <SearchablePartnerSelect
+                  value={partnerName}
+                  onChange={(val) => {
+                    setPartnerName(val);
+                    const matched = partners.find(p => p.name.trim().toLowerCase() === val.trim().toLowerCase());
+                    if (matched) {
+                      setContactPerson(matched.contactPerson || '');
+                      setPhone(matched.phone || '');
+                    }
+                  }}
+                  onSelectPartner={(p) => {
+                    setContactPerson(p.contactPerson || '');
+                    setPhone(p.phone || '');
+                  }}
+                  partners={partners}
+                  onAddNewPartner={handleOpenAddPartner}
+                  placeholder="พิมพ์ค้นหาชื่อบริษัทคู่ค้า / พิมพ์ระบุชื่อด้วยตนเอง..."
+                  required
+                />
               </div>
 
               <div className="grid grid-cols-1 gap-3">
