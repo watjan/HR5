@@ -188,6 +188,7 @@ export interface AdminPermissions {
   cheques: boolean;
   partner_billing: boolean;
   transport_waybills?: boolean;
+  permits?: boolean;
   recruitment: boolean;
   performance: boolean;
   settings: boolean;
@@ -297,6 +298,25 @@ export interface TransportWaybill {
   
   trackingNumber?: string; // เลขพัสดุ / เลขติดตาม
   notes?: string; // หมายเหตุ
+  createdAt?: string;
+}
+
+export interface PermitLicense {
+  id: string;
+  permitNumber: string; // เลขที่ใบอนุญาต / เลขที่คำขอ
+  title: string; // ชื่อใบอนุญาต / คำขอ
+  category: string; // ประเภท/หมวดหมู่ใบอนุญาต (เช่น ใบอนุญาตป้าย, ใบอนุญาตพันธุ์พืช/พันธุ์ผัก, ฯลฯ)
+  requestDate: string; // วันที่ขอ/ยื่นเรื่อง (YYYY-MM-DD)
+  issueDate?: string; // วันที่ออกใบอนุญาต / วันที่อนุมัติ (YYYY-MM-DD)
+  startDate: string; // วันที่เริ่มมีผลบังคับใช้ (YYYY-MM-DD)
+  expiryDate: string; // วันที่สิ้นสุด / วันที่หมดอายุ (YYYY-MM-DD)
+  issuingAgency?: string; // หน่วยงานผู้ออกใบอนุญาต (เช่น สำนักงานเขต, กรมวิชาการเกษตร, ฯลฯ)
+  feeAmount?: number; // ค่าธรรมเนียม / ค่าต่ออายุ (บาท)
+  status: 'pending' | 'active' | 'near_expiry' | 'expired' | 'renewing' | 'rejected'; // สถานะคำขอ/ใบอนุญาต
+  responsiblePerson?: string; // ผู้รับผิดชอบ / ผู้ยื่นคำขอ
+  contactPhone?: string; // เบอร์ติดต่อหน่วยงาน / เจ้าหน้าที่
+  documentUrl?: string; // อ้างอิงเอกสารแนบ / เลขไฟล์
+  notes?: string; // หมายเหตุ / รายละเอียดเพิ่มเติม
   createdAt?: string;
 }
 

@@ -48,6 +48,7 @@ export interface SyncPayload {
   partnerCompanies?: any[];
   systemSettings?: any;
   counterDuties?: any[];
+  permits?: any[];
 }
 
 // Load Firebase configuration
@@ -148,7 +149,8 @@ const COLLECTION_KEYS = [
   { key: "dayoffSwaps", path: "dayoff_swaps/current" },
   { key: "partnerCompanies", path: "partner_companies/current" },
   { key: "systemSettings", path: "system_settings/current" },
-  { key: "counterDuties", path: "counter_duties/current" }
+  { key: "counterDuties", path: "counter_duties/current" },
+  { key: "permits", path: "permits/current" }
 ];
 
 // Sync to BOTH Local Database and Firebase Firestore
@@ -318,7 +320,8 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
         dayoffSwaps: mysqlPayload.dayoffSwaps || [],
         partnerCompanies: mysqlPayload.partnerCompanies || [],
         systemSettings: mysqlPayload.systemSettings || {},
-        counterDuties: mysqlPayload.counterDuties || []
+        counterDuties: mysqlPayload.counterDuties || [],
+        permits: mysqlPayload.permits || []
       };
       console.log("Successfully loaded data from Hostinger MySQL!");
     } catch (error: any) {
@@ -360,7 +363,8 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
           dayoffSwaps: parsed.dayoffSwaps || [],
           partnerCompanies: parsed.partnerCompanies || [],
           systemSettings: parsed.systemSettings || {},
-          counterDuties: parsed.counterDuties || []
+          counterDuties: parsed.counterDuties || [],
+          permits: parsed.permits || []
         };
         console.log("Loaded data from local backup file (Hostinger MySQL fallback)");
       }
@@ -780,6 +784,30 @@ export const TABLE_SCHEMAS: TableSchema[] = [
         id VARCHAR(50) PRIMARY KEY,
         month VARCHAR(10),
         year INT,
+        raw_json LONGTEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `
+  },
+  {
+    name: "permits",
+    createSql: `
+      CREATE TABLE IF NOT EXISTS permits (
+        id VARCHAR(50) PRIMARY KEY,
+        permit_number VARCHAR(100) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        category VARCHAR(100) NOT NULL,
+        request_date DATE,
+        issue_date DATE,
+        start_date DATE,
+        expiry_date DATE,
+        issuing_agency VARCHAR(255),
+        fee_amount DECIMAL(12,2) DEFAULT 0.00,
+        status VARCHAR(30) DEFAULT 'pending',
+        responsible_person VARCHAR(255),
+        contact_phone VARCHAR(50),
+        document_url TEXT,
+        notes TEXT,
         raw_json LONGTEXT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1345,6 +1373,37 @@ export async function syncToRelationalTables(connection: any, payload: SyncPaylo
           item.id || "",
           item.month || "",
           item.year || 0,
+          JSON.stringify(item)
+        ]
+      );
+    }
+  }
+
+  // 17. permits
+  if (Array.isArray(payload.permits)) {
+    await connection.query("DELETE FROM permits");
+    for (const item of payload.permits) {
+      await connection.query(
+        `INSERT INTO permits (
+          id, permit_number, title, category, request_date, issue_date, start_date, expiry_date,
+          issuing_agency, fee_amount, status, responsible_person, contact_phone, document_url, notes, raw_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          item.id || "",
+          item.permitNumber || "",
+          item.title || "",
+          item.category || "",
+          item.requestDate ? item.requestDate.substring(0, 10) : null,
+          item.issueDate ? item.issueDate.substring(0, 10) : null,
+          item.startDate ? item.startDate.substring(0, 10) : null,
+          item.expiryDate ? item.expiryDate.substring(0, 10) : null,
+          item.issuingAgency || "",
+          item.feeAmount || 0,
+          item.status || "pending",
+          item.responsiblePerson || "",
+          item.contactPhone || "",
+          item.documentUrl || "",
+          item.notes || "",
           JSON.stringify(item)
         ]
       );

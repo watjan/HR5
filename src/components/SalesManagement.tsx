@@ -755,8 +755,12 @@ export default function SalesManagement({
             )}
           </div>
           <h2 className="text-xl font-light text-slate-900 mt-1">บริหารจัดการและรายงานวิเคราะห์ยอดขาย (Sales Ledger)</h2>
-          <p className="text-xs text-slate-500 mt-0.5 font-sans">
-            สรุปข้อมูลยอดขายรวมรายวัน รายเดือน และรายปี ตรวจสอบธุรกรรม พร้อมช่องทางรับเงินและช่องทางรับโอนเงินอย่างละเอียด
+          <p className="text-xs text-slate-500 mt-0.5 font-sans flex items-center gap-1.5 flex-wrap">
+            <span>สรุปข้อมูลยอดขายรวมรายวัน (หน้าละ 31 วัน) รายเดือน และรายปี ตรวจสอบธุรกรรม พร้อมช่องทางรับเงินอย่างละเอียด</span>
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded border border-indigo-100 font-mono">
+              <Database className="w-3 h-3 text-indigo-500 shrink-0" />
+              ดึงข้อมูลจากฐานข้อมูล Hostinger MySQL (u753988669_hr)
+            </span>
           </p>
         </div>
         

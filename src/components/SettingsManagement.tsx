@@ -1415,6 +1415,7 @@ export default function SettingsManagement({
                             else if (key === 'settings') { label = 'ตั้งค่าระบบ'; desc = 'จัดการข้อมูลองค์กร อัตราสวัสดิการ สิทธิ์ RBAC'; }
                             else if (key === 'backup_restore') { label = 'สำรองและกู้คืนข้อมูล'; desc = 'ดาวน์โหลดสำรองและอัปโหลดข้อมูล JSON'; }
                             else if (key === 'database_inspector') { label = 'ตรวจสอบตารางฐานข้อมูล'; desc = 'ตรวจสอบตารางฐานข้อมูลระดับระบบ'; }
+                            else if (key === 'permits') { label = 'ขอใบอนุญาต & ต่ออายุ'; desc = 'จัดการทะเบียนคำขอ ใบอนุญาต และการต่ออายุ'; }
 
                             return (
                               <label key={key} className="flex items-start gap-2.5 p-2 bg-slate-50/60 border border-slate-150 hover:border-slate-300 rounded-sm cursor-pointer transition select-none">
@@ -1531,6 +1532,7 @@ export default function SettingsManagement({
                             else if (key === 'settings') { label = 'ตั้งค่าระบบ'; desc = 'จัดการข้อมูลองค์กร อัตราสวัสดิการ สิทธิ์ RBAC'; }
                             else if (key === 'backup_restore') { label = 'สำรองและกู้คืนข้อมูล'; desc = 'ดาวน์โหลดสำรองและอัปโหลดข้อมูล JSON'; }
                             else if (key === 'database_inspector') { label = 'ตรวจสอบตารางฐานข้อมูล'; desc = 'ตรวจสอบตารางฐานข้อมูลระดับระบบ'; }
+                            else if (key === 'permits') { label = 'ขอใบอนุญาต & ต่ออายุ'; desc = 'จัดการทะเบียนคำขอ ใบอนุญาต และการต่ออายุ'; }
 
                             // Prevent current active admin from disabling settings permission on themselves
                             const isSelf = editingAdminId.toLowerCase() === currentAdminId.toLowerCase();

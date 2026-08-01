@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { safeStorage } from './lib/safeStorage';
-import { Employee, LeaveRequest, PayrollRecord, JobPosting, Applicant, PerformanceEvaluation, CashFlowTransaction, PartnerCheque, DailyAttendance, DayOffSwap, PartnerBilling, PartnerCompany, SystemSettings, AuditLogEntry, SalesRecord, CounterDuty, TransportWaybill } from './types';
+import { Employee, LeaveRequest, PayrollRecord, JobPosting, Applicant, PerformanceEvaluation, CashFlowTransaction, PartnerCheque, DailyAttendance, DayOffSwap, PartnerBilling, PartnerCompany, SystemSettings, AuditLogEntry, SalesRecord, CounterDuty, TransportWaybill, PermitLicense } from './types';
 import { 
   INITIAL_EMPLOYEES, 
   INITIAL_LEAVES, 
@@ -17,7 +17,8 @@ import {
   INITIAL_SYSTEM_SETTINGS,
   INITIAL_AUDIT_LOGS,
   INITIAL_SALES_RECORDS,
-  INITIAL_TRANSPORT_WAYBILLS
+  INITIAL_TRANSPORT_WAYBILLS,
+  INITIAL_PERMITS
 } from './initialData';
 
 // Sub-components
@@ -40,6 +41,7 @@ import LeaveStatistics from './components/LeaveStatistics';
 import LoginScreen from './components/LoginScreen';
 import ApiwatLogo3D from './components/ApiwatLogo3D';
 import CounterDutyManagement from './components/CounterDutyManagement';
+import PermitsManagement from './components/PermitsManagement';
 
 
 // Icons
@@ -71,7 +73,9 @@ import {
   Download,
   ChefHat,
   Flame,
-  Truck
+  Truck,
+  FileCheck,
+  ShieldCheck
 } from 'lucide-react';
 
 // Hostinger MySQL system (u753988669_hr)
@@ -205,6 +209,7 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [sales, setSales] = useState<SalesRecord[]>([]);
   const [counterDuties, setCounterDuties] = useState<CounterDuty[]>([]);
+  const [permits, setPermits] = useState<PermitLicense[]>(INITIAL_PERMITS);
 
   // Reference payload string to prevent redundant Firebase writes
   const lastSyncedPayloadRef = useRef<string>("");
@@ -256,7 +261,8 @@ export default function App() {
         attendance: payload.attendance,
         dayoffSwaps: payload.dayoffSwaps,
         partnerCompanies: payload.partnerCompanies,
-        systemSettings: payload.systemSettings
+        systemSettings: payload.systemSettings,
+        permits: payload.permits
       });
 
       return JSON.stringify(normalized);
@@ -287,6 +293,7 @@ export default function App() {
       setSystemSettings(INITIAL_SYSTEM_SETTINGS);
       setAuditLogs(INITIAL_AUDIT_LOGS);
       setSales(INITIAL_SALES_RECORDS);
+      setPermits(INITIAL_PERMITS);
       setServerDataLoaded(false);
 
       // Warm up the lastSyncedPayloadRef with the initial mock data payload
@@ -310,7 +317,8 @@ export default function App() {
         })),
         dayoffSwaps: INITIAL_DAY_OFF_SWAPS,
         partnerCompanies: INITIAL_PARTNER_COMPANIES,
-        systemSettings: [{ id: "current", ...INITIAL_SYSTEM_SETTINGS }]
+        systemSettings: [{ id: "current", ...INITIAL_SYSTEM_SETTINGS }],
+        permits: INITIAL_PERMITS
       };
       lastSyncedPayloadRef.current = getNormalizedPayloadString(mockPayload);
     };
@@ -337,6 +345,7 @@ export default function App() {
               if (parsed.evaluations) setEvaluations(parsed.evaluations);
               if (parsed.dayoffSwaps) setDayOffSwaps(parsed.dayoffSwaps);
               if (parsed.partnerCompanies) setPartnerCompanies(parsed.partnerCompanies);
+              if (parsed.permits) setPermits(parsed.permits);
 
               if (parsed.attendance) {
                 const attendanceMap: any = {};
@@ -408,6 +417,7 @@ export default function App() {
             if (fb.dayoffSwaps) setDayOffSwaps(fb.dayoffSwaps);
             if (fb.partnerCompanies) setPartnerCompanies(fb.partnerCompanies);
             if (fb.counterDuties) setCounterDuties(fb.counterDuties);
+            if (fb.permits) setPermits(fb.permits);
 
             if (fb.attendance) {
               const attendanceMap: any = {};
@@ -457,7 +467,8 @@ export default function App() {
               dayoffSwaps: fb.dayoffSwaps || [],
               partnerCompanies: fb.partnerCompanies || [],
               systemSettings: fb.systemSettings || [],
-              counterDuties: fb.counterDuties || []
+              counterDuties: fb.counterDuties || [],
+              permits: fb.permits || []
             };
             lastSyncedPayloadRef.current = getNormalizedPayloadString(loadedPayload);
 
@@ -566,7 +577,8 @@ export default function App() {
       dayoffSwaps: dayOffSwaps || [],
       partnerCompanies: partnerCompanies || [],
       systemSettings: [{ id: "current", ...systemSettings }],
-      counterDuties: counterDuties || []
+      counterDuties: counterDuties || [],
+      permits: permits || []
     };
   }, [
     employees,
@@ -585,7 +597,8 @@ export default function App() {
     dayOffSwaps,
     partnerCompanies,
     systemSettings,
-    counterDuties
+    counterDuties,
+    permits
   ]);
 
   const executeManualSync = async () => {
@@ -1643,6 +1656,7 @@ export default function App() {
     if (tabId === 'settings') return !!permissions.settings;
     if (tabId === 'backup_restore') return !!permissions.backup_restore;
     if (tabId === 'database_inspector') return !!permissions.database_inspector;
+    if (tabId === 'permits') return permissions.permits !== false;
     
     return true;
   };
@@ -1669,6 +1683,7 @@ export default function App() {
     { id: 'cheques', name: 'เช็คจ่าย & เช็ครับคู่ค้า', icon: CreditCard },
     { id: 'partner_billing', name: 'คู่ค้าใบส่งของและวางบิล', icon: ClipboardList },
     { id: 'transport_waybills', name: '1. ใบขนส่ง', icon: Truck },
+    { id: 'permits', name: '1. ขอใบอนุญาต & ต่ออายุ', icon: FileCheck },
     { id: 'recruitment', name: 'สรรหาบุคลากร', icon: Briefcase },
     { id: 'performance', name: 'ประเมินผลงาน', icon: Award },
     { id: 'settings', name: 'ตั้งค่าระบบ', icon: Settings },
@@ -1713,9 +1728,9 @@ export default function App() {
           {/* Navigation Items */}
           <nav className="px-3 py-4 space-y-4 flex-1">
             <div>
-              <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">Main Operations</div>
+              <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono">Main Operations</div>
               <div className="space-y-1">
-                {sidebarItems.slice(0, 12).filter(item => isTabAllowed(item.id)).map(item => {
+                {sidebarItems.slice(0, 14).filter(item => isTabAllowed(item.id)).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -1753,7 +1768,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">Talent & Performance</div>
               <div className="space-y-1">
-                {sidebarItems.slice(12, 14).filter(item => isTabAllowed(item.id)).map(item => {
+                {sidebarItems.slice(14, 16).filter(item => isTabAllowed(item.id)).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -1785,7 +1800,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">System Configuration</div>
               <div className="space-y-1">
-                {sidebarItems.slice(14).filter(item => isTabAllowed(item.id)).map(item => {
+                {sidebarItems.slice(16).filter(item => isTabAllowed(item.id)).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -2229,6 +2244,16 @@ export default function App() {
               onUpdateWaybill={handleUpdateTransportWaybill}
               onDeleteWaybill={handleDeleteTransportWaybill}
               initialSubTab={activeTab === 'transport_waybills' ? 'transport_waybills' : 'dashboard'}
+            />
+          )}
+
+          {activeTab === 'permits' && (
+            <PermitsManagement
+              permits={permits}
+              setPermits={setPermits}
+              systemSettings={systemSettings}
+              addAuditLog={addAuditLog}
+              currentUser={loggedInUserId}
             />
           )}
 
