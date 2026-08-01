@@ -14,6 +14,8 @@ import {
   Trash2,
   Edit2,
   ChevronRight,
+  ChevronLeft,
+  CheckCircle2,
   BarChart3,
   CalendarDays,
   CalendarRange,
@@ -284,6 +286,34 @@ export default function SalesManagement({
   const [endDate, setEndDate] = useState('');
   const [channelFilter, setChannelFilter] = useState<string>('all');
 
+  // Daily Sales Pagination & 31-day per month view states
+  const [dailySelectedYear, setDailySelectedYear] = useState<number>(() => {
+    return new Date().getFullYear();
+  });
+  const [dailySelectedMonth, setDailySelectedMonth] = useState<number>(() => {
+    return new Date().getMonth() + 1; // 1 to 12
+  });
+  const [dailyViewMode, setDailyViewMode] = useState<'monthly_31days' | 'all_active'>('monthly_31days');
+
+  // Next / Prev Month Handlers
+  const handleDailyPrevMonth = () => {
+    if (dailySelectedMonth === 1) {
+      setDailySelectedMonth(12);
+      setDailySelectedYear(prev => prev - 1);
+    } else {
+      setDailySelectedMonth(prev => prev - 1);
+    }
+  };
+
+  const handleDailyNextMonth = () => {
+    if (dailySelectedMonth === 12) {
+      setDailySelectedMonth(1);
+      setDailySelectedYear(prev => prev + 1);
+    } else {
+      setDailySelectedMonth(prev => prev + 1);
+    }
+  };
+
   // CRUD Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSale, setEditingSale] = useState<SalesRecord | null>(null);
@@ -349,6 +379,58 @@ export default function SalesManagement({
   }, {} as Record<string, { date: string; amount: number; count: number; records: SalesRecord[] }>);
 
   const dailyList = Object.values(dailyAggregation).sort((a, b) => b.date.localeCompare(a.date));
+
+  // 31-day list for the selected month page
+  const monthly31DaysList = useMemo(() => {
+    const year = dailySelectedYear;
+    const month = dailySelectedMonth;
+    const monthStr = `${year}-${month.toString().padStart(2, '0')}`;
+    const maxDaysInMonth = new Date(year, month, 0).getDate();
+
+    const days = [];
+    for (let dayNum = 1; dayNum <= 31; dayNum++) {
+      const dayStr = dayNum.toString().padStart(2, '0');
+      const dateStr = `${monthStr}-${dayStr}`;
+      const isValidCalendarDay = dayNum <= maxDaysInMonth;
+
+      const agg = dailyAggregation[dateStr] || { date: dateStr, amount: 0, count: 0, records: [] };
+
+      let thaiDayName = '';
+      if (isValidCalendarDay) {
+        try {
+          const d = new Date(year, month - 1, dayNum);
+          thaiDayName = d.toLocaleDateString('th-TH', { weekday: 'long' });
+        } catch (e) {}
+      }
+
+      days.push({
+        dayNum,
+        dateStr,
+        isValidCalendarDay,
+        thaiDayName,
+        count: agg.count,
+        amount: agg.amount,
+        records: agg.records
+      });
+    }
+    return days;
+  }, [dailySelectedYear, dailySelectedMonth, dailyAggregation]);
+
+  const pageMonthTotalAmount = useMemo(() => {
+    return monthly31DaysList.reduce((sum, d) => sum + d.amount, 0);
+  }, [monthly31DaysList]);
+
+  const pageMonthTotalCount = useMemo(() => {
+    return monthly31DaysList.reduce((sum, d) => sum + d.count, 0);
+  }, [monthly31DaysList]);
+
+  const pageActiveDaysCount = useMemo(() => {
+    return monthly31DaysList.filter(d => d.count > 0).length;
+  }, [monthly31DaysList]);
+
+  const pageMaxDailyAmount = useMemo(() => {
+    return Math.max(...monthly31DaysList.map(d => d.amount), 1);
+  }, [monthly31DaysList]);
 
   // B. Monthly Aggregation (YYYY-MM)
   const monthlyAggregation = filteredSales.reduce((acc, item) => {
@@ -1167,69 +1249,465 @@ export default function SalesManagement({
             {/* Tab Contents */}
             <div className="bg-white border border-slate-200 rounded-sm overflow-hidden">
               
-              {/* TAB: DAILY AGGREGATION */}
+              {/* TAB: DAILY AGGREGATION - PAGE PER MONTH (31 DAYS PER PAGE) */}
               {activeTab === 'daily' && (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-wider font-mono">
-                        <th className="py-3.5 px-6">วันที่ทำรายการ (Date)</th>
-                        <th className="py-3.5 px-6 text-center">จำนวนรายการ (Entries)</th>
-                        <th className="py-3.5 px-6 text-right">ยอดขายรวมสุทธิ (Total Sales)</th>
-                        <th className="py-3.5 px-6 text-right">ยอดเฉลี่ยต่อรายการ</th>
-                        <th className="py-3.5 px-6"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white font-sans">
-                      {dailyList.length > 0 ? (
-                        dailyList.map((day) => {
-                          const avg = day.amount / day.count;
+                <div className="p-4 space-y-4 bg-white font-sans">
+                  {/* Page Header & Navigation Bar */}
+                  <div className="bg-slate-900 text-white p-4 rounded-sm shadow-md space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-md">
+                          <CalendarDays className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-base font-extrabold text-white">
+                              รายงานยอดขายรวมรายวัน (แบ่งตามเดือน - หน้าละ 31 วัน)
+                            </h3>
+                            <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded text-[10px] font-bold">
+                              หน้าละ 31 วัน
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300 font-medium">
+                            แสดงยอดขายรายวัน 31 วันของเดือน <strong className="text-white font-bold">{MONTHS_THAI_LIST[dailySelectedMonth - 1]} พ.ศ. {dailySelectedYear + 543}</strong> ({dailySelectedYear})
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* View Mode Switcher */}
+                      <div className="flex items-center bg-slate-800 p-1 rounded-sm border border-slate-700 self-start md:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setDailyViewMode('monthly_31days')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-xs transition flex items-center gap-1.5 cursor-pointer ${
+                            dailyViewMode === 'monthly_31days'
+                              ? 'bg-indigo-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span>หน้าละ 31 วัน (แบ่งเดือน)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDailyViewMode('all_active')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-xs transition flex items-center gap-1.5 cursor-pointer ${
+                            dailyViewMode === 'all_active'
+                              ? 'bg-indigo-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Layers className="w-3.5 h-3.5" />
+                          <span>รวมทุกวันที่มีรายการ</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Month Pagination Stepper & Selectors */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleDailyPrevMonth}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white rounded-sm text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                          title="เดือนก่อนหน้า"
+                        >
+                          <ChevronLeft className="w-4 h-4 text-indigo-400" />
+                          <span>เดือนก่อนหน้า</span>
+                        </button>
+
+                        {/* Month Dropdown */}
+                        <select
+                          value={dailySelectedMonth}
+                          onChange={(e) => setDailySelectedMonth(parseInt(e.target.value))}
+                          className="px-3 py-1.5 bg-slate-800 border border-slate-700 text-white rounded-sm text-xs font-bold focus:outline-none focus:border-indigo-500 cursor-pointer"
+                        >
+                          {MONTHS_THAI_LIST.map((mName, idx) => (
+                            <option key={idx + 1} value={idx + 1}>
+                              เดือนที่ {idx + 1}: {mName}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Year Dropdown */}
+                        <select
+                          value={dailySelectedYear}
+                          onChange={(e) => setDailySelectedYear(parseInt(e.target.value))}
+                          className="px-3 py-1.5 bg-slate-800 border border-slate-700 text-white rounded-sm text-xs font-bold focus:outline-none focus:border-indigo-500 cursor-pointer"
+                        >
+                          {uniqueYearsInSales.map(yr => (
+                            <option key={yr} value={yr}>
+                              ปี พ.ศ. {yr + 543} ({yr})
+                            </option>
+                          ))}
+                        </select>
+
+                        <button
+                          type="button"
+                          onClick={handleDailyNextMonth}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white rounded-sm text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                          title="เดือนถัดไป"
+                        >
+                          <span>เดือนถัดไป</span>
+                          <ChevronRight className="w-4 h-4 text-indigo-400" />
+                        </button>
+                      </div>
+
+                      {/* Page Badge */}
+                      <div className="text-right flex items-center justify-between sm:justify-end gap-2 text-xs font-mono">
+                        <span className="text-slate-400">หน้าการแสดงผล:</span>
+                        <span className="px-2.5 py-1 bg-indigo-900/60 text-indigo-200 border border-indigo-700/50 rounded font-bold">
+                          หน้า {dailySelectedMonth} / 12 (ประจำเดือน {MONTHS_THAI_LIST[dailySelectedMonth - 1]} {dailySelectedYear + 543})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 12-Month Quick Navigation Pills */}
+                    <div className="pt-2 border-t border-slate-800/80">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                        <span>เลือกเปลี่ยนหน้าตามเดือนประจำปี พ.ศ. {dailySelectedYear + 543}:</span>
+                        <span>(หน้าละ 31 วัน)</span>
+                      </div>
+                      <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-12 gap-1.5">
+                        {MONTHS_THAI_LIST.map((mName, idx) => {
+                          const mNum = idx + 1;
+                          const isSelected = mNum === dailySelectedMonth;
+                          const mStr = `${dailySelectedYear}-${mNum.toString().padStart(2, '0')}`;
+                          const hasData = sales.some(s => s.date.startsWith(mStr));
+
                           return (
-                            <tr key={day.date} className="hover:bg-slate-50 transition-colors">
-                              <td className="py-4 px-6">
-                                <div className="flex items-center gap-2.5">
-                                  <Calendar className="w-4 h-4 text-slate-400" />
-                                  <div>
-                                    <span className="font-bold text-slate-900 block">{formatThaiDate(day.date)}</span>
-                                    <span className="text-[10px] font-mono text-slate-400 block">{day.date}</span>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-4 px-6 text-center font-mono font-bold text-slate-600">
-                                {day.count} รายการ
-                              </td>
-                              <td className="py-4 px-6 text-right font-mono font-black text-slate-900">
-                                ฿{day.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-4 px-6 text-right font-mono text-slate-500">
-                                ฿{avg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-4 px-6 text-right">
-                                <button
-                                  onClick={() => {
-                                    setSearchTerm('');
-                                    setStartDate(day.date);
-                                    setEndDate(day.date);
-                                    setActiveTab('all_records');
-                                  }}
-                                  className="px-2.5 py-1 text-[11px] font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-sm transition cursor-pointer"
-                                >
-                                  ดูรายละเอียดรายการ
-                                </button>
+                            <button
+                              key={mNum}
+                              type="button"
+                              onClick={() => setDailySelectedMonth(mNum)}
+                              className={`py-1.5 px-1 rounded text-center text-xs font-bold transition cursor-pointer flex flex-col items-center justify-center relative ${
+                                isSelected
+                                  ? 'bg-indigo-600 text-white ring-2 ring-indigo-400 ring-offset-1 ring-offset-slate-900 shadow-md'
+                                  : hasData
+                                  ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-indigo-500/30'
+                                  : 'bg-slate-800/50 hover:bg-slate-800 text-slate-400 border border-slate-800'
+                              }`}
+                            >
+                              <span className="text-[11px]">{mName.slice(0, 3)}</span>
+                              <span className="text-[9px] opacity-75 font-mono">{mNum}/31วัน</span>
+                              {hasData && (
+                                <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {dailyViewMode === 'monthly_31days' ? (
+                    <>
+                      {/* Month 31-day Summary KPIs */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="p-3.5 bg-gradient-to-br from-indigo-50 to-slate-50 border border-indigo-100 rounded-sm shadow-2xs">
+                          <div className="flex items-center justify-between text-xs text-indigo-700 font-bold mb-1">
+                            <span>ยอดขายรวมประจำเดือน 31 วัน</span>
+                            <Coins className="w-4 h-4 text-indigo-600" />
+                          </div>
+                          <div className="text-xl font-black font-mono text-slate-900">
+                            ฿{pageMonthTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            รวมทุกวันในเดือน{MONTHS_THAI_LIST[dailySelectedMonth - 1]} {dailySelectedYear + 543}
+                          </p>
+                        </div>
+
+                        <div className="p-3.5 bg-gradient-to-br from-blue-50 to-slate-50 border border-blue-100 rounded-sm shadow-2xs">
+                          <div className="flex items-center justify-between text-xs text-blue-700 font-bold mb-1">
+                            <span>จำนวนรายการทั้งเดือน</span>
+                            <FileText className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div className="text-xl font-black font-mono text-slate-900">
+                            {pageMonthTotalCount.toLocaleString()} <span className="text-xs font-normal text-slate-600">รายการ</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            เฉลี่ย {(pageMonthTotalCount / 31).toFixed(1)} รายการ/วัน
+                          </p>
+                        </div>
+
+                        <div className="p-3.5 bg-gradient-to-br from-emerald-50 to-slate-50 border border-emerald-100 rounded-sm shadow-2xs">
+                          <div className="flex items-center justify-between text-xs text-emerald-700 font-bold mb-1">
+                            <span>วันที่มีการบันทึกยอดขาย</span>
+                            <CalendarDays className="w-4 h-4 text-emerald-600" />
+                          </div>
+                          <div className="text-xl font-black font-mono text-slate-900">
+                            {pageActiveDaysCount} <span className="text-xs font-normal text-slate-600">/ 31 วัน</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            คิดเป็น {((pageActiveDaysCount / 31) * 100).toFixed(0)}% ของจำนวนวันในเดือน
+                          </p>
+                        </div>
+
+                        <div className="p-3.5 bg-gradient-to-br from-amber-50 to-slate-50 border border-amber-100 rounded-sm shadow-2xs">
+                          <div className="flex items-center justify-between text-xs text-amber-700 font-bold mb-1">
+                            <span>ยอดขายเฉลี่ยต่อวันที่มีรายการ</span>
+                            <TrendingUp className="w-4 h-4 text-amber-600" />
+                          </div>
+                          <div className="text-xl font-black font-mono text-slate-900">
+                            ฿{(pageActiveDaysCount > 0 ? pageMonthTotalAmount / pageActiveDaysCount : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            (คำนวณเฉพาะวันที่มียอดขาย)
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* 31-Day Table */}
+                      <div className="border border-slate-200 rounded-sm overflow-hidden bg-white shadow-2xs">
+                        <div className="bg-slate-100 px-4 py-2.5 border-b border-slate-200 flex justify-between items-center text-xs font-bold text-slate-700">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-indigo-600" />
+                            <span>ตารางยอดขายรายวัน 31 วัน (1 ถึง 31 {MONTHS_THAI_LIST[dailySelectedMonth - 1]} {dailySelectedYear + 543})</span>
+                          </div>
+                          <span className="text-[11px] text-slate-500 font-normal">
+                            หน้าปัจจุบัน: <strong className="text-slate-800">{MONTHS_THAI_LIST[dailySelectedMonth - 1]} {dailySelectedYear + 543}</strong>
+                          </span>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-wider font-mono">
+                                <th className="py-3 px-4 text-center w-20">ลำดับวัน</th>
+                                <th className="py-3 px-4">วันที่ทำรายการ (Date)</th>
+                                <th className="py-3 px-4 text-center">สถานะ</th>
+                                <th className="py-3 px-4 text-center">จำนวนรายการ</th>
+                                <th className="py-3 px-4 text-right">ยอดขายรวมสุทธิ (฿)</th>
+                                <th className="py-3 px-4 text-right">เฉลี่ย/รายการ</th>
+                                <th className="py-3 px-4 w-48 text-center">สัดส่วนในเดือน</th>
+                                <th className="py-3 px-4 text-right">จัดการ</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 bg-white font-sans text-xs">
+                              {monthly31DaysList.map((day) => {
+                                const avg = day.count > 0 ? day.amount / day.count : 0;
+                                const ratio = pageMaxDailyAmount > 0 ? (day.amount / pageMaxDailyAmount) * 100 : 0;
+
+                                return (
+                                  <tr 
+                                    key={day.dayNum} 
+                                    className={`transition-colors ${
+                                      !day.isValidCalendarDay 
+                                        ? 'bg-slate-50/60 opacity-50' 
+                                        : day.count > 0 
+                                        ? 'hover:bg-indigo-50/40 bg-white' 
+                                        : 'hover:bg-slate-50/80 bg-slate-50/20'
+                                    }`}
+                                  >
+                                    {/* Day Number Badge */}
+                                    <td className="py-3 px-4 text-center">
+                                      <span className={`inline-block font-mono font-bold px-2 py-0.5 rounded text-[11px] ${
+                                        day.count > 0 
+                                          ? 'bg-slate-900 text-white shadow-2xs' 
+                                          : day.isValidCalendarDay 
+                                          ? 'bg-slate-200 text-slate-700' 
+                                          : 'bg-slate-100 text-slate-400'
+                                      }`}>
+                                        วันที่ {day.dayNum}
+                                      </span>
+                                    </td>
+
+                                    {/* Thai Date */}
+                                    <td className="py-3 px-4">
+                                      {day.isValidCalendarDay ? (
+                                        <div className="space-y-0.5">
+                                          <span className="font-bold text-slate-900 block">
+                                            {day.thaiDayName}ที่ {day.dayNum} {MONTHS_THAI_LIST[dailySelectedMonth - 1]} {dailySelectedYear + 543}
+                                          </span>
+                                          <span className="text-[10px] font-mono text-slate-400 block">{day.dateStr}</span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-slate-400 italic text-[11px]">
+                                          -(ไม่มีวันที่ {day.dayNum} ในเดือน{MONTHS_THAI_LIST[dailySelectedMonth - 1]})-
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    {/* Status */}
+                                    <td className="py-3 px-4 text-center">
+                                      {!day.isValidCalendarDay ? (
+                                        <span className="px-2 py-0.5 bg-slate-100 text-slate-400 text-[10px] rounded font-medium">N/A</span>
+                                      ) : day.count > 0 ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[10px] font-bold">
+                                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> มียอดขาย
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 bg-slate-100 text-slate-400 text-[10px] rounded font-medium">
+                                          ไม่มีรายการ
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    {/* Entries Count */}
+                                    <td className="py-3 px-4 text-center font-mono font-bold text-slate-700">
+                                      {day.isValidCalendarDay ? `${day.count} รายการ` : '-'}
+                                    </td>
+
+                                    {/* Total Amount */}
+                                    <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
+                                      {day.isValidCalendarDay ? (
+                                        <span className={day.amount > 0 ? 'text-indigo-950 font-black' : 'text-slate-400 font-normal'}>
+                                          ฿{day.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </span>
+                                      ) : '-'}
+                                    </td>
+
+                                    {/* Avg per entry */}
+                                    <td className="py-3 px-4 text-right font-mono text-slate-500">
+                                      {day.count > 0 ? `฿${avg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                    </td>
+
+                                    {/* Visual Bar Ratio */}
+                                    <td className="py-3 px-4">
+                                      {day.amount > 0 ? (
+                                        <div className="space-y-1">
+                                          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+                                            <div 
+                                              className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                                              style={{ width: `${Math.min(ratio, 100)}%` }}
+                                            />
+                                          </div>
+                                          <div className="text-[9px] text-slate-400 text-right font-mono">
+                                            {((day.amount / (pageMonthTotalAmount || 1)) * 100).toFixed(1)}% ของยอดรวมเดือน
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="w-full bg-slate-100 rounded-full h-1.5 opacity-30" />
+                                      )}
+                                    </td>
+
+                                    {/* Action */}
+                                    <td className="py-3 px-4 text-right space-x-1">
+                                      {day.isValidCalendarDay && day.count > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setSearchTerm('');
+                                            setStartDate(day.dateStr);
+                                            setEndDate(day.dateStr);
+                                            setActiveTab('all_records');
+                                          }}
+                                          className="px-2.5 py-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-xs transition cursor-pointer"
+                                        >
+                                          ดูรายละเอียด
+                                        </button>
+                                      )}
+                                      {day.isValidCalendarDay && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setFormDate(day.dateStr);
+                                            setFormAmount('');
+                                            setFormNotes('');
+                                            setEditingSale(null);
+                                            setIsModalOpen(true);
+                                          }}
+                                          className="px-2 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xs transition cursor-pointer"
+                                          title="ลงบันทึกยอดขายวันที่นี้"
+                                        >
+                                          + เพิ่ม
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            {/* Footer Summary Row for the 31 Days Page */}
+                            <tfoot>
+                              <tr className="bg-slate-900 text-white font-mono text-xs font-bold border-t-2 border-indigo-500">
+                                <td colSpan={3} className="py-3.5 px-4 text-right font-sans">
+                                  <strong>สรุปรวมทั้งเดือน (31 วัน ประจำเดือน{MONTHS_THAI_LIST[dailySelectedMonth - 1]} {dailySelectedYear + 543}):</strong>
+                                </td>
+                                <td className="py-3.5 px-4 text-center text-indigo-300 font-bold">
+                                  {pageMonthTotalCount} รายการ
+                                </td>
+                                <td className="py-3.5 px-4 text-right text-emerald-400 font-black text-sm">
+                                  ฿{pageMonthTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                                <td className="py-3.5 px-4 text-right text-slate-300">
+                                  ฿{(pageMonthTotalCount > 0 ? pageMonthTotalAmount / pageMonthTotalCount : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                                <td colSpan={2} className="py-3.5 px-4 text-slate-400 text-center font-sans text-[11px]">
+                                  เปิดขาย {pageActiveDaysCount} / 31 วัน
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    /* ALL ACTIVE DAYS LIST VIEW */
+                    <div className="overflow-x-auto border border-slate-200 rounded-sm">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-wider font-mono">
+                            <th className="py-3.5 px-6">วันที่ทำรายการ (Date)</th>
+                            <th className="py-3.5 px-6 text-center">จำนวนรายการ (Entries)</th>
+                            <th className="py-3.5 px-6 text-right">ยอดขายรวมสุทธิ (Total Sales)</th>
+                            <th className="py-3.5 px-6 text-right">ยอดเฉลี่ยต่อรายการ</th>
+                            <th className="py-3.5 px-6 text-right">จัดการ</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 bg-white font-sans text-xs">
+                          {dailyList.length > 0 ? (
+                            dailyList.map((day) => {
+                              const avg = day.amount / day.count;
+                              return (
+                                <tr key={day.date} className="hover:bg-slate-50 transition-colors">
+                                  <td className="py-3.5 px-6">
+                                    <div className="flex items-center gap-2.5">
+                                      <Calendar className="w-4 h-4 text-indigo-600" />
+                                      <div>
+                                        <span className="font-bold text-slate-900 block">{formatThaiDate(day.date)}</span>
+                                        <span className="text-[10px] font-mono text-slate-400 block">{day.date}</span>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="py-3.5 px-6 text-center font-mono font-bold text-slate-600">
+                                    {day.count} รายการ
+                                  </td>
+                                  <td className="py-3.5 px-6 text-right font-mono font-black text-slate-900">
+                                    ฿{day.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="py-3.5 px-6 text-right font-mono text-slate-500">
+                                    ฿{avg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="py-3.5 px-6 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSearchTerm('');
+                                        setStartDate(day.date);
+                                        setEndDate(day.date);
+                                        setActiveTab('all_records');
+                                      }}
+                                      className="px-2.5 py-1 text-[11px] font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-sm transition cursor-pointer"
+                                    >
+                                      ดูรายละเอียด
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={5} className="py-12 text-center text-slate-400">
+                                <Calendar className="w-8 h-8 mx-auto mb-2 opacity-30 text-slate-500" />
+                                <p className="text-xs font-bold text-slate-400">ไม่พบข้อมูลยอดขายรายวันตามเงื่อนไขตัวกรอง</p>
                               </td>
                             </tr>
-                          );
-                        })
-                      ) : (
-                        <tr>
-                          <td colSpan={5} className="py-12 text-center text-slate-400">
-                            <Calendar className="w-8 h-8 mx-auto mb-2 opacity-30 text-slate-500" />
-                            <p className="text-xs font-bold text-slate-400">ไม่พบข้อมูลยอดขายรายวันตามเงื่อนไขตัวกรอง</p>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 
