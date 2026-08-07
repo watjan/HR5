@@ -1,4 +1,4 @@
-import { Employee, LeaveRequest, PayrollRecord, JobPosting, Applicant, PerformanceEvaluation, CashFlowTransaction, PartnerCheque, DailyAttendance, DayOffSwap, PartnerBilling, PartnerCompany, SystemSettings, AuditLogEntry, SalesRecord, TransportWaybill, PermitLicense } from './types';
+import { Employee, LeaveRequest, PayrollRecord, JobPosting, Applicant, PerformanceEvaluation, CashFlowTransaction, PartnerCheque, DailyAttendance, DayOffSwap, PartnerBilling, PartnerCompany, SystemSettings, AuditLogEntry, SalesRecord, TransportWaybill, PermitLicense, OfficialExpense } from './types';
 
 export const INITIAL_EMPLOYEES: Employee[] = [];
 
@@ -56,6 +56,7 @@ export const INITIAL_SYSTEM_SETTINGS: SystemSettings = {
         partner_billing: true,
         transport_waybills: true,
         permits: true,
+        official_expenses: true,
         recruitment: true,
         performance: true,
         settings: true,
@@ -122,4 +123,103 @@ export const INITIAL_PERMITS: PermitLicense[] = [
     notes: "เตรียมยื่นเอกสารขอต่ออายุล่วงหน้า 30 วันก่อนหมดอายุ"
   }
 ];
+
+export const INITIAL_OFFICIAL_EXPENSES: OfficialExpense[] = [
+  {
+    id: "EXP-SSO-2026-01",
+    docNumber: "SSO-2026-01",
+    title: "เงินสมทบประกันสังคม ประจำเดือนมกราคม 2026 (สปส. 1-10)",
+    category: "social_security",
+    subCategory: "เงินสมทบผู้ประกันตน ม.33 (5% + 5%)",
+    taxPeriod: "2026-01",
+    dueDate: "2026-02-15",
+    paymentDate: "2026-02-10",
+    amount: 24500,
+    fineOrSurcharge: 0,
+    totalPaid: 24500,
+    paymentMethod: "e-Payment (ธนาคารกสิกรไทย)",
+    status: "paid",
+    recipientAgency: "สำนักงานประกันสังคม",
+    responsiblePerson: "แผนกบัญชีและการเงิน",
+    receiptNumber: "REC-SSO-98214",
+    notes: "นำส่งเงินสมทบนายจ้างและพนักงานรวม 28 คนผ่านระบบ e-Services"
+  },
+  {
+    id: "EXP-TAX-2026-01",
+    docNumber: "TAX-WHT1-2026-01",
+    title: "ภาษีเงินได้หัก ณ ที่จ่าย พนักงานประจำ (ภ.ง.ด. 1) ประจำเดือนมกราคม 2026",
+    category: "revenue_tax",
+    subCategory: "ภ.ง.ด. 1 (ภาษีเงินได้บุคคลธรรมดา)",
+    taxPeriod: "2026-01",
+    dueDate: "2026-02-07",
+    paymentDate: "2026-02-05",
+    amount: 12800,
+    fineOrSurcharge: 0,
+    totalPaid: 12800,
+    paymentMethod: "RD e-Payment",
+    status: "paid",
+    recipientAgency: "กรมสรรพากร",
+    responsiblePerson: "แผนกบัญชีและการเงิน",
+    receiptNumber: "RD-202602-00421",
+    notes: "ยื่นผ่านระบบ e-Filing กรมสรรพากร"
+  },
+  {
+    id: "EXP-TAX-2026-02",
+    docNumber: "TAX-VAT30-2026-01",
+    title: "ภาษีมูลค่าเพิ่ม (ภ.พ. 30) ประจำเดือนมกราคม 2026",
+    category: "revenue_tax",
+    subCategory: "ภ.พ. 30 (VAT 7%)",
+    taxPeriod: "2026-01",
+    dueDate: "2026-02-23",
+    paymentDate: "2026-02-18",
+    amount: 45200,
+    fineOrSurcharge: 0,
+    totalPaid: 45200,
+    paymentMethod: "RD e-Payment",
+    status: "paid",
+    recipientAgency: "กรมสรรพากร",
+    responsiblePerson: "สำนักงานบัญชีรับช่วง",
+    receiptNumber: "RD-VAT-202602-110",
+    notes: "ภาษีขายหักภาษีซื้อสุทธิยื่นชำระผ่านระบบอินเทอร์เน็ต"
+  },
+  {
+    id: "EXP-ACC-2026-01",
+    docNumber: "INV-ACC-2026-01",
+    title: "ค่าบริการทำบัญชีและยื่นภาษีประจำเดือนมกราคม 2026",
+    category: "accounting",
+    subCategory: "ค่าบริการทำบัญชีรายเดือน",
+    taxPeriod: "2026-01",
+    dueDate: "2026-02-05",
+    paymentDate: "2026-02-03",
+    amount: 8500,
+    fineOrSurcharge: 0,
+    totalPaid: 8500,
+    paymentMethod: "โอนเงินผ่านธนาคาร",
+    status: "paid",
+    recipientAgency: "บริษัท สำนักงานบัญชีและกฎหมาย จำกัด",
+    responsiblePerson: "ฝ่ายการเงิน",
+    receiptNumber: "REC-ACC-2026-012",
+    notes: "รวมค่าทำบัญชี ปิดงบรายเดือน และจัดทำภ.ง.ด.3, 53"
+  },
+  {
+    id: "EXP-OTH-2026-01",
+    docNumber: "FEES-BANK-2026-01",
+    title: "ค่าธรรมเนียมโอนเงินเงินเดือนและค่าบริการซอฟต์แวร์ระบบ HR",
+    category: "other",
+    subCategory: "ค่าธรรมเนียมธนาคาร & ซอฟต์แวร์",
+    taxPeriod: "2026-01",
+    dueDate: "2026-02-01",
+    paymentDate: "2026-02-01",
+    amount: 3200,
+    fineOrSurcharge: 0,
+    totalPaid: 3200,
+    paymentMethod: "หักผ่านบัญชีอัตโนมัติ",
+    status: "paid",
+    recipientAgency: "ธนาคาร / ผู้ให้บริการซอฟต์แวร์",
+    responsiblePerson: "ฝ่ายไอทีและระบบ",
+    receiptNumber: "INV-SOFT-2026-001",
+    notes: "ค่าบริการ Payroll Batch Transfer และ Cloud Server รายเดือน"
+  }
+];
+
 

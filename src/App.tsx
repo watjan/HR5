@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { safeStorage } from './lib/safeStorage';
-import { Employee, LeaveRequest, PayrollRecord, JobPosting, Applicant, PerformanceEvaluation, CashFlowTransaction, PartnerCheque, DailyAttendance, DayOffSwap, PartnerBilling, PartnerCompany, SystemSettings, AuditLogEntry, SalesRecord, CounterDuty, TransportWaybill, PermitLicense } from './types';
+import { Employee, LeaveRequest, PayrollRecord, JobPosting, Applicant, PerformanceEvaluation, CashFlowTransaction, PartnerCheque, DailyAttendance, DayOffSwap, PartnerBilling, PartnerCompany, SystemSettings, AuditLogEntry, SalesRecord, CounterDuty, TransportWaybill, PermitLicense, OfficialExpense } from './types';
 import { 
   INITIAL_EMPLOYEES, 
   INITIAL_LEAVES, 
@@ -18,7 +18,8 @@ import {
   INITIAL_AUDIT_LOGS,
   INITIAL_SALES_RECORDS,
   INITIAL_TRANSPORT_WAYBILLS,
-  INITIAL_PERMITS
+  INITIAL_PERMITS,
+  INITIAL_OFFICIAL_EXPENSES
 } from './initialData';
 
 // Sub-components
@@ -42,6 +43,7 @@ import LoginScreen from './components/LoginScreen';
 import ApiwatLogo3D from './components/ApiwatLogo3D';
 import CounterDutyManagement from './components/CounterDutyManagement';
 import PermitsManagement from './components/PermitsManagement';
+import { OfficialExpensesManagement } from './components/OfficialExpensesManagement';
 
 
 // Icons
@@ -75,7 +77,8 @@ import {
   Flame,
   Truck,
   FileCheck,
-  ShieldCheck
+  ShieldCheck,
+  FileText
 } from 'lucide-react';
 
 // Hostinger MySQL system (u753988669_hr)
@@ -210,6 +213,7 @@ export default function App() {
   const [sales, setSales] = useState<SalesRecord[]>([]);
   const [counterDuties, setCounterDuties] = useState<CounterDuty[]>([]);
   const [permits, setPermits] = useState<PermitLicense[]>(INITIAL_PERMITS);
+  const [officialExpenses, setOfficialExpenses] = useState<OfficialExpense[]>(INITIAL_OFFICIAL_EXPENSES);
 
   // Reference payload string to prevent redundant Firebase writes
   const lastSyncedPayloadRef = useRef<string>("");
@@ -262,7 +266,8 @@ export default function App() {
         dayoffSwaps: payload.dayoffSwaps,
         partnerCompanies: payload.partnerCompanies,
         systemSettings: payload.systemSettings,
-        permits: payload.permits
+        permits: payload.permits,
+        officialExpenses: payload.officialExpenses
       });
 
       return JSON.stringify(normalized);
@@ -294,6 +299,7 @@ export default function App() {
       setAuditLogs(INITIAL_AUDIT_LOGS);
       setSales(INITIAL_SALES_RECORDS);
       setPermits(INITIAL_PERMITS);
+      setOfficialExpenses(INITIAL_OFFICIAL_EXPENSES);
       setServerDataLoaded(false);
 
       // Warm up the lastSyncedPayloadRef with the initial mock data payload
@@ -318,7 +324,8 @@ export default function App() {
         dayoffSwaps: INITIAL_DAY_OFF_SWAPS,
         partnerCompanies: INITIAL_PARTNER_COMPANIES,
         systemSettings: [{ id: "current", ...INITIAL_SYSTEM_SETTINGS }],
-        permits: INITIAL_PERMITS
+        permits: INITIAL_PERMITS,
+        officialExpenses: INITIAL_OFFICIAL_EXPENSES
       };
       lastSyncedPayloadRef.current = getNormalizedPayloadString(mockPayload);
     };
@@ -346,6 +353,7 @@ export default function App() {
               if (parsed.dayoffSwaps) setDayOffSwaps(parsed.dayoffSwaps);
               if (parsed.partnerCompanies) setPartnerCompanies(parsed.partnerCompanies);
               if (parsed.permits) setPermits(parsed.permits);
+              if (parsed.officialExpenses) setOfficialExpenses(parsed.officialExpenses);
 
               if (parsed.attendance) {
                 const attendanceMap: any = {};
@@ -418,6 +426,7 @@ export default function App() {
             if (fb.partnerCompanies) setPartnerCompanies(fb.partnerCompanies);
             if (fb.counterDuties) setCounterDuties(fb.counterDuties);
             if (fb.permits) setPermits(fb.permits);
+            if (fb.officialExpenses) setOfficialExpenses(fb.officialExpenses);
 
             if (fb.attendance) {
               const attendanceMap: any = {};
@@ -468,7 +477,8 @@ export default function App() {
               partnerCompanies: fb.partnerCompanies || [],
               systemSettings: fb.systemSettings || [],
               counterDuties: fb.counterDuties || [],
-              permits: fb.permits || []
+              permits: fb.permits || [],
+              officialExpenses: fb.officialExpenses || []
             };
             lastSyncedPayloadRef.current = getNormalizedPayloadString(loadedPayload);
 
@@ -578,7 +588,8 @@ export default function App() {
       partnerCompanies: partnerCompanies || [],
       systemSettings: [{ id: "current", ...systemSettings }],
       counterDuties: counterDuties || [],
-      permits: permits || []
+      permits: permits || [],
+      officialExpenses: officialExpenses || []
     };
   }, [
     employees,
@@ -598,7 +609,8 @@ export default function App() {
     partnerCompanies,
     systemSettings,
     counterDuties,
-    permits
+    permits,
+    officialExpenses
   ]);
 
   const executeManualSync = async () => {
@@ -1657,6 +1669,7 @@ export default function App() {
     if (tabId === 'backup_restore') return !!permissions.backup_restore;
     if (tabId === 'database_inspector') return !!permissions.database_inspector;
     if (tabId === 'permits') return permissions.permits !== false;
+    if (tabId === 'official_expenses') return permissions.official_expenses !== false;
     
     return true;
   };
@@ -1684,6 +1697,7 @@ export default function App() {
     { id: 'partner_billing', name: 'คู่ค้าใบส่งของและวางบิล', icon: ClipboardList },
     { id: 'transport_waybills', name: '1. ใบขนส่ง', icon: Truck },
     { id: 'permits', name: '1. ขอใบอนุญาต & ต่ออายุ', icon: FileCheck },
+    { id: 'official_expenses', name: '1. รายจ่ายประกันสังคม/สรรพากร/บัญชี', icon: FileText },
     { id: 'recruitment', name: 'สรรหาบุคลากร', icon: Briefcase },
     { id: 'performance', name: 'ประเมินผลงาน', icon: Award },
     { id: 'settings', name: 'ตั้งค่าระบบ', icon: Settings },
@@ -1730,7 +1744,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono">Main Operations</div>
               <div className="space-y-1">
-                {sidebarItems.slice(0, 14).filter(item => isTabAllowed(item.id)).map(item => {
+                {sidebarItems.slice(0, 15).filter(item => isTabAllowed(item.id)).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -1768,7 +1782,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">Talent & Performance</div>
               <div className="space-y-1">
-                {sidebarItems.slice(14, 16).filter(item => isTabAllowed(item.id)).map(item => {
+                {sidebarItems.slice(15, 17).filter(item => isTabAllowed(item.id)).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -1800,7 +1814,7 @@ export default function App() {
             <div>
               <div className="px-3 text-[10px] uppercase font-bold text-slate-600 mb-2 tracking-widest font-mono font-bold">System Configuration</div>
               <div className="space-y-1">
-                {sidebarItems.slice(16).filter(item => isTabAllowed(item.id)).map(item => {
+                {sidebarItems.slice(17).filter(item => isTabAllowed(item.id)).map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   return (
@@ -2251,6 +2265,16 @@ export default function App() {
             <PermitsManagement
               permits={permits}
               setPermits={setPermits}
+              systemSettings={systemSettings}
+              addAuditLog={addAuditLog}
+              currentUser={loggedInUserId}
+            />
+          )}
+
+          {activeTab === 'official_expenses' && (
+            <OfficialExpensesManagement
+              expenses={officialExpenses}
+              setExpenses={setOfficialExpenses}
               systemSettings={systemSettings}
               addAuditLog={addAuditLog}
               currentUser={loggedInUserId}

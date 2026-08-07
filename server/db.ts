@@ -49,6 +49,7 @@ export interface SyncPayload {
   systemSettings?: any;
   counterDuties?: any[];
   permits?: any[];
+  officialExpenses?: any[];
 }
 
 // Load Firebase configuration
@@ -150,7 +151,8 @@ const COLLECTION_KEYS = [
   { key: "partnerCompanies", path: "partner_companies/current" },
   { key: "systemSettings", path: "system_settings/current" },
   { key: "counterDuties", path: "counter_duties/current" },
-  { key: "permits", path: "permits/current" }
+  { key: "permits", path: "permits/current" },
+  { key: "officialExpenses", path: "official_expenses/current" }
 ];
 
 // Sync to BOTH Local Database and Firebase Firestore
@@ -321,7 +323,8 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
         partnerCompanies: mysqlPayload.partnerCompanies || [],
         systemSettings: mysqlPayload.systemSettings || {},
         counterDuties: mysqlPayload.counterDuties || [],
-        permits: mysqlPayload.permits || []
+        permits: mysqlPayload.permits || [],
+        officialExpenses: mysqlPayload.officialExpenses || []
       };
       console.log("Successfully loaded data from Hostinger MySQL!");
     } catch (error: any) {
@@ -364,7 +367,8 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
           partnerCompanies: parsed.partnerCompanies || [],
           systemSettings: parsed.systemSettings || {},
           counterDuties: parsed.counterDuties || [],
-          permits: parsed.permits || []
+          permits: parsed.permits || [],
+          officialExpenses: parsed.officialExpenses || []
         };
         console.log("Loaded data from local backup file (Hostinger MySQL fallback)");
       }
@@ -806,6 +810,33 @@ export const TABLE_SCHEMAS: TableSchema[] = [
         status VARCHAR(30) DEFAULT 'pending',
         responsible_person VARCHAR(255),
         contact_phone VARCHAR(50),
+        document_url TEXT,
+        notes TEXT,
+        raw_json LONGTEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `
+  },
+  {
+    name: "official_expenses",
+    createSql: `
+      CREATE TABLE IF NOT EXISTS official_expenses (
+        id VARCHAR(50) PRIMARY KEY,
+        doc_number VARCHAR(100) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        category VARCHAR(100) NOT NULL,
+        sub_category VARCHAR(100),
+        tax_period VARCHAR(50),
+        due_date DATE,
+        payment_date DATE,
+        amount DECIMAL(12,2) DEFAULT 0.00,
+        fine_or_surcharge DECIMAL(12,2) DEFAULT 0.00,
+        total_paid DECIMAL(12,2) DEFAULT 0.00,
+        payment_method VARCHAR(100),
+        status VARCHAR(30) DEFAULT 'pending',
+        recipient_agency VARCHAR(255),
+        responsible_person VARCHAR(255),
+        receipt_number VARCHAR(100),
         document_url TEXT,
         notes TEXT,
         raw_json LONGTEXT,
@@ -1402,6 +1433,41 @@ export async function syncToRelationalTables(connection: any, payload: SyncPaylo
           item.status || "pending",
           item.responsiblePerson || "",
           item.contactPhone || "",
+          item.documentUrl || "",
+          item.notes || "",
+          JSON.stringify(item)
+        ]
+      );
+    }
+  }
+
+  // 18. official_expenses
+  if (Array.isArray(payload.officialExpenses)) {
+    await connection.query("DELETE FROM official_expenses");
+    for (const item of payload.officialExpenses) {
+      await connection.query(
+        `INSERT INTO official_expenses (
+          id, doc_number, title, category, sub_category, tax_period, due_date, payment_date,
+          amount, fine_or_surcharge, total_paid, payment_method, status, recipient_agency,
+          responsible_person, receipt_number, document_url, notes, raw_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          item.id || "",
+          item.docNumber || "",
+          item.title || "",
+          item.category || "other",
+          item.subCategory || "",
+          item.taxPeriod || "",
+          item.dueDate ? item.dueDate.substring(0, 10) : null,
+          item.paymentDate ? item.paymentDate.substring(0, 10) : null,
+          item.amount || 0,
+          item.fineOrSurcharge || 0,
+          item.totalPaid || (item.amount || 0) + (item.fineOrSurcharge || 0),
+          item.paymentMethod || "",
+          item.status || "pending",
+          item.recipientAgency || "",
+          item.responsiblePerson || "",
+          item.receiptNumber || "",
           item.documentUrl || "",
           item.notes || "",
           JSON.stringify(item)

@@ -189,6 +189,7 @@ export interface AdminPermissions {
   partner_billing: boolean;
   transport_waybills?: boolean;
   permits?: boolean;
+  official_expenses?: boolean;
   recruitment: boolean;
   performance: boolean;
   settings: boolean;
@@ -319,6 +320,29 @@ export interface PermitLicense {
   notes?: string; // หมายเหตุ / รายละเอียดเพิ่มเติม
   createdAt?: string;
 }
+
+export interface OfficialExpense {
+  id: string;
+  docNumber: string; // เลขที่เอกสาร / เลขที่ใบเสร็จ / เลขที่อ้างอิง
+  title: string; // ชื่อรายการ / หัวข้อรายจ่าย
+  category: 'social_security' | 'revenue_tax' | 'accounting' | 'other'; // ประกันสังคม | สรรพากร | ทำบัญชี/สอบบัญชี | ค่าอื่นๆ
+  subCategory?: string; // ประเภทปลีกย่อย (เช่น สปส.1-10, ภ.ง.ด.1, ภ.พ.30, ค่าทำบัญชีประจำเดือน, ฯลฯ)
+  taxPeriod?: string; // งวดเดือน/ปี (เช่น 2026-01, มกราคม 2026)
+  dueDate: string; // กำหนดนำส่ง / กำหนดชำระ (YYYY-MM-DD)
+  paymentDate?: string; // วันที่ชำระเงิน/นำส่งจริง (YYYY-MM-DD)
+  amount: number; // ยอดเงินหลัก (บาท)
+  fineOrSurcharge?: number; // ค่าปรับ/เงินเพิ่ม (บาท)
+  totalPaid?: number; // ยอดจ่ายรวมสุทธิ (บาท)
+  paymentMethod?: string; // ช่องทางชำระ (โอนเงิน, e-Payment, เช็ค, เงินสด)
+  status: 'pending' | 'paid' | 'overdue' | 'cancelled'; // รอนำส่ง/รอชำระ | ชำระแล้ว | เกินกำหนด | ยกเลิก
+  recipientAgency?: string; // หน่วยงาน/ผู้รับเงิน (สำนักงานประกันสังคม, กรมสรรพากร, สำนักงานบัญชี, ฯลฯ)
+  responsiblePerson?: string; // ผู้รับผิดชอบ/ผู้ทำรายการ
+  receiptNumber?: string; // เลขที่ใบเสร็จรับเงิน/ใบเสร็จราชการ
+  documentUrl?: string; // เอกสารแนบ
+  notes?: string; // หมายเหตุ
+  createdAt?: string;
+}
+
 
 
 

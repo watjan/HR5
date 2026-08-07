@@ -1416,6 +1416,7 @@ export default function SettingsManagement({
                             else if (key === 'backup_restore') { label = 'สำรองและกู้คืนข้อมูล'; desc = 'ดาวน์โหลดสำรองและอัปโหลดข้อมูล JSON'; }
                             else if (key === 'database_inspector') { label = 'ตรวจสอบตารางฐานข้อมูล'; desc = 'ตรวจสอบตารางฐานข้อมูลระดับระบบ'; }
                             else if (key === 'permits') { label = 'ขอใบอนุญาต & ต่ออายุ'; desc = 'จัดการทะเบียนคำขอ ใบอนุญาต และการต่ออายุ'; }
+                            else if (key === 'official_expenses') { label = 'รายจ่ายประกันสังคม/สรรพากร/บัญชี'; desc = 'จัดการรายจ่ายนำส่งประกันสังคม ภาษี และค่าบริการทำบัญชี'; }
 
                             return (
                               <label key={key} className="flex items-start gap-2.5 p-2 bg-slate-50/60 border border-slate-150 hover:border-slate-300 rounded-sm cursor-pointer transition select-none">
