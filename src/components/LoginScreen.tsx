@@ -19,16 +19,19 @@ import {
   User,
   Lock,
   Compass,
-  AlertCircle
+  AlertCircle,
+  Clock
 } from 'lucide-react';
 
 interface LoginScreenProps {
   employees: Employee[];
   systemSettings?: SystemSettings;
   onLoginSuccess: (employeeName: string, role: string, userId: string) => void;
+  sessionTimeoutNotice?: string | null;
+  onClearNotice?: () => void;
 }
 
-export default function LoginScreen({ employees, systemSettings, onLoginSuccess }: LoginScreenProps) {
+export default function LoginScreen({ employees, systemSettings, onLoginSuccess, sessionTimeoutNotice, onClearNotice }: LoginScreenProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [selectedDept, setSelectedDept] = useState('All');
@@ -202,6 +205,27 @@ export default function LoginScreen({ employees, systemSettings, onLoginSuccess 
 
         <div className="w-full max-w-md space-y-6 z-10">
           
+          {/* Session Timeout Notice Banner */}
+          {sessionTimeoutNotice && (
+            <div className="bg-amber-500/20 border border-amber-500/50 text-amber-200 p-4 rounded-xl text-xs font-medium flex items-start gap-3 shadow-lg font-sans">
+              <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5 animate-pulse" />
+              <div className="flex-1">
+                <strong className="block text-amber-100 font-bold mb-1">⏱️ ออกจากระบบอัตโนมัติ (Inactivity Timeout)</strong>
+                <p className="text-[11.5px] text-amber-200/90 leading-relaxed">{sessionTimeoutNotice}</p>
+              </div>
+              {onClearNotice && (
+                <button 
+                  type="button" 
+                  onClick={onClearNotice}
+                  className="text-amber-400 hover:text-white p-1 rounded-sm transition text-xs cursor-pointer"
+                  title="ปิดการแจ้งเตือน"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Card Header */}
           <div className="space-y-1.5 text-center sm:text-left">
             <h2 className="text-xl font-bold tracking-tight text-white font-sans flex items-center justify-center sm:justify-start gap-2">

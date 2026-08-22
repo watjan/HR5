@@ -90,14 +90,38 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // Login & Authentication States (Simulated / Bypasable as requested: "ไม่ต้องมีระบบล๊อค")
+  // Login & Authentication States
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     try {
-      return safeStorage.getItem('hr_is_logged_in') === 'true';
+      const isLogged = safeStorage.getItem('hr_is_logged_in') === 'true';
+      if (!isLogged) return false;
+      const lastActivity = safeStorage.getItem('hr_last_activity_time');
+      if (lastActivity) {
+        const parsedTime = parseInt(lastActivity, 10);
+        if (!isNaN(parsedTime) && Date.now() - parsedTime >= 15 * 60 * 1000) {
+          safeStorage.setItem('hr_is_logged_in', 'false');
+          safeStorage.setItem('hr_logged_in_user_id', '');
+          return false;
+        }
+      }
+      return true;
     } catch {
       return false;
     }
   });
+  const [sessionTimeoutNotice, setSessionTimeoutNotice] = useState<string | null>(() => {
+    try {
+      const lastActivity = safeStorage.getItem('hr_last_activity_time');
+      if (lastActivity) {
+        const parsedTime = parseInt(lastActivity, 10);
+        if (!isNaN(parsedTime) && Date.now() - parsedTime >= 15 * 60 * 1000) {
+          return 'ออกจากระบบอัตโนมัติเนื่องจากไม่มีการใช้งานเกิน 15 นาที เพื่อความปลอดภัยของข้อมูล';
+        }
+      }
+    } catch {}
+    return null;
+  });
+  const lastActivityRef = useRef<number>(Date.now());
   const [loggedInUser, setLoggedInUser] = useState<string>(() => {
     try {
       return safeStorage.getItem('hr_logged_in_user') || 'ผู้ดูแลระบบ HR';
@@ -774,11 +798,15 @@ export default function App() {
     setLoggedInUser(userName);
     setLoggedInRole(userRole);
     setLoggedInUserId(userId);
+    setSessionTimeoutNotice(null);
+    const now = Date.now();
+    lastActivityRef.current = now;
     try {
       safeStorage.setItem('hr_is_logged_in', 'true');
       safeStorage.setItem('hr_logged_in_user', userName);
       safeStorage.setItem('hr_logged_in_role', userRole);
       safeStorage.setItem('hr_logged_in_user_id', userId);
+      safeStorage.setItem('hr_last_activity_time', String(now));
     } catch (e) {}
     
     // Add audit log for successful entry
@@ -795,9 +823,11 @@ export default function App() {
 
   const handleLogout = () => {
     setIsLoggedIn(false);
+    setSessionTimeoutNotice(null);
     try {
       safeStorage.setItem('hr_is_logged_in', 'false');
       safeStorage.setItem('hr_logged_in_user_id', '');
+      safeStorage.removeItem('hr_last_activity_time');
     } catch (e) {}
     
     // Add audit log for logging out
@@ -811,6 +841,103 @@ export default function App() {
     };
     setAuditLogs(prev => [newLog, ...prev]);
   };
+
+  // Auto-logout triggered after 15 minutes of inactivity
+  const handleAutoLogout = () => {
+    setIsLoggedIn(false);
+    setSessionTimeoutNotice('ออกจากระบบอัตโนมัติเนื่องจากไม่มีการใช้งานภายใน 15 นาที เพื่อความปลอดภัยของข้อมูล');
+    try {
+      safeStorage.setItem('hr_is_logged_in', 'false');
+      safeStorage.setItem('hr_logged_in_user_id', '');
+      safeStorage.removeItem('hr_last_activity_time');
+    } catch (e) {}
+    
+    // Add audit log for automatic timeout
+    const newLog: AuditLogEntry = {
+      id: `LOG-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      timestamp: new Date().toISOString(),
+      action: 'SYSTEM',
+      module: 'ออกจากระบบอัตโนมัติ',
+      description: `ระบบตัดการเชื่อมต่ออัตโนมัติสำหรับผู้ใช้ ${loggedInUser} เนื่องจากไม่มีการใช้งานเกิน 15 นาที (Inactivity Auto-Logout)`,
+      user: loggedInUser || 'System Auto-Logout'
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  };
+
+  // 15-Minute Inactivity Auto-Logout Tracking Effect
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const INACTIVITY_LIMIT_MS = 15 * 60 * 1000; // 15 minutes = 900,000ms
+
+    // Update last activity timestamp
+    const recordActivity = () => {
+      const now = Date.now();
+      lastActivityRef.current = now;
+      try {
+        safeStorage.setItem('hr_last_activity_time', String(now));
+      } catch {}
+    };
+
+    // Initialize/sync timestamp
+    try {
+      const saved = safeStorage.getItem('hr_last_activity_time');
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && Date.now() - parsed < INACTIVITY_LIMIT_MS) {
+          lastActivityRef.current = parsed;
+        } else {
+          recordActivity();
+        }
+      } else {
+        recordActivity();
+      }
+    } catch {
+      recordActivity();
+    }
+
+    // Throttle user activity events (max once every 2 seconds)
+    let lastThrottledTime = 0;
+    const handleUserActivity = () => {
+      const now = Date.now();
+      if (now - lastThrottledTime > 2000) {
+        lastThrottledTime = now;
+        recordActivity();
+      }
+    };
+
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click', 'focus'];
+    activityEvents.forEach(evt => {
+      window.addEventListener(evt, handleUserActivity, { passive: true });
+    });
+
+    // Inactivity checker interval (runs every 3 seconds)
+    const checkInterval = setInterval(() => {
+      let lastTime = lastActivityRef.current;
+      try {
+        const saved = safeStorage.getItem('hr_last_activity_time');
+        if (saved) {
+          const parsed = parseInt(saved, 10);
+          if (!isNaN(parsed) && parsed > lastTime) {
+            lastTime = parsed;
+            lastActivityRef.current = parsed;
+          }
+        }
+      } catch {}
+
+      const idleDuration = Date.now() - lastTime;
+      if (idleDuration >= INACTIVITY_LIMIT_MS) {
+        handleAutoLogout();
+      }
+    }, 3000);
+
+    return () => {
+      activityEvents.forEach(evt => {
+        window.removeEventListener(evt, handleUserActivity);
+      });
+      clearInterval(checkInterval);
+    };
+  }, [isLoggedIn, loggedInUser]);
 
   // Unified system database actions
   const handleResetAllData = () => {
@@ -1711,6 +1838,8 @@ export default function App() {
         employees={employees}
         systemSettings={systemSettings}
         onLoginSuccess={handleLoginSuccess}
+        sessionTimeoutNotice={sessionTimeoutNotice}
+        onClearNotice={() => setSessionTimeoutNotice(null)}
       />
     );
   }
@@ -1855,6 +1984,15 @@ export default function App() {
                 <p className="text-[10px] text-amber-500 font-mono truncate" title={loggedInRole}>{loggedInRole}</p>
               </div>
             </div>
+
+            <div className="flex items-center justify-between px-2 py-1.5 bg-slate-900/90 border border-slate-800/80 rounded-sm text-[10px] text-slate-400 font-mono" title="ระบบจะออกจากระบบอัตโนมัติหากไม่มีการใช้งานต่อเนื่องเกิน 15 นาที">
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3 h-3 text-amber-500 shrink-0" />
+                <span>Auto-Logout</span>
+              </div>
+              <span className="text-[9px] text-amber-400 font-bold">15 นาที</span>
+            </div>
+
             <button 
               id="signout-button"
               onClick={handleLogout}

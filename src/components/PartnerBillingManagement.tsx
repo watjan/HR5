@@ -6,7 +6,7 @@ import { SearchablePartnerSelect } from './SearchablePartnerSelect';
 import { 
   FileText, Plus, Search, Filter, Edit3, Trash2, 
   CheckCircle, AlertCircle, X, HelpCircle, Phone, 
-  User, DollarSign, Calendar, RefreshCw, Eye, ClipboardList,
+  User, DollarSign, Calendar, RefreshCw, Eye, EyeOff, ClipboardList,
   Building2, Mail, MapPin, PlusCircle, Check, ChevronRight,
   TrendingUp, Activity, Sparkles, Layers, Award, ShieldCheck,
   ArrowRight, ChevronDown, Workflow, Users, Percent, BarChart3, Coins,
@@ -119,6 +119,72 @@ export default function PartnerBillingManagement({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [currentPartnerPage, setCurrentPartnerPage] = useState<number>(1);
   const itemsPerPage = 10;
+
+  // Eye / Privacy Toggle States for Amounts (1. ใบส่งของ DO, 2. ใบวางบิล BI, 3. ยอดค้างจ่าย, 4. ชำระแล้ว)
+  const [hideDeliveryAmount, setHideDeliveryAmount] = useState<boolean>(() => {
+    try {
+      return safeStorage.getItem('hr_hide_partner_do_amount') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [hideBilledAmount, setHideBilledAmount] = useState<boolean>(() => {
+    try {
+      return safeStorage.getItem('hr_hide_partner_bi_amount') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [hidePendingAmount, setHidePendingAmount] = useState<boolean>(() => {
+    try {
+      return safeStorage.getItem('hr_hide_partner_pending_amount') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [hidePaidAmount, setHidePaidAmount] = useState<boolean>(() => {
+    try {
+      return safeStorage.getItem('hr_hide_partner_paid_amount') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const isAllAmountsHidden = useMemo(() => {
+    return hideDeliveryAmount && hideBilledAmount && hidePendingAmount && hidePaidAmount;
+  }, [hideDeliveryAmount, hideBilledAmount, hidePendingAmount, hidePaidAmount]);
+
+  const toggleAllAmountsVisibility = () => {
+    const targetHide = !isAllAmountsHidden;
+    setHideDeliveryAmount(targetHide);
+    setHideBilledAmount(targetHide);
+    setHidePendingAmount(targetHide);
+    setHidePaidAmount(targetHide);
+    try {
+      safeStorage.setItem('hr_hide_partner_do_amount', String(targetHide));
+      safeStorage.setItem('hr_hide_partner_bi_amount', String(targetHide));
+      safeStorage.setItem('hr_hide_partner_pending_amount', String(targetHide));
+      safeStorage.setItem('hr_hide_partner_paid_amount', String(targetHide));
+    } catch {}
+    playNotificationSound();
+    showSuccess(targetHide ? 'ปิดซ่อนยอดเงินทั้งหมดเรียบร้อย (Privacy Mode On)' : 'เปิดแสดงยอดเงินทั้งหมดเรียบร้อย (Privacy Mode Off)');
+  };
+
+  const toggleSingleAmount = (
+    keyName: string,
+    currentValue: boolean,
+    setter: React.Dispatch<React.SetStateAction<boolean>>,
+    storageKey: string,
+    label: string
+  ) => {
+    const nextVal = !currentValue;
+    setter(nextVal);
+    try {
+      safeStorage.setItem(storageKey, String(nextVal));
+    } catch {}
+    playNotificationSound();
+    showSuccess(nextVal ? `ปิดซ่อนยอดเงิน ${label} เรียบร้อย` : `เปิดแสดงยอดเงิน ${label} เรียบร้อย`);
+  };
 
   // Reset partner page to 1 when search query changes
   useEffect(() => {
@@ -1393,22 +1459,72 @@ export default function PartnerBillingManagement({
           </div>
 
           {/* 1.2 THE 5 LARGE STATS CARDS (ENDLESSLOOP aesthetic) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-800 font-sans">ภาพรวมสถิติทางการเงิน (Financial Analytics)</span>
+              <span className="text-[11px] text-slate-400 font-sans hidden md:inline">| กดรูปตา 👁️ เพื่อเปิดดู/ปิดซ่อนตัวเลข</span>
+            </div>
+            <button
+              type="button"
+              onClick={toggleAllAmountsVisibility}
+              className={`px-3 py-1.5 rounded-sm text-xs font-semibold flex items-center gap-2 transition cursor-pointer border ${
+                isAllAmountsHidden
+                  ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 shadow-xs'
+                  : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+              }`}
+              title={isAllAmountsHidden ? "กดเพื่อเปิดดูยอดเงินทั้งหมด" : "กดเพื่อปิดซ่อนยอดเงินทั้งหมดไม่ให้คนอื่นเห็น"}
+              aria-label={isAllAmountsHidden ? "เปิดดูยอดเงินทั้งหมด" : "ปิดซ่อนยอดเงินทั้งหมด"}
+            >
+              {isAllAmountsHidden ? (
+                <>
+                  <Eye className="w-3.5 h-3.5 text-blue-600" />
+                  <span>เปิดดูยอดเงินทั้งหมด (Show All)</span>
+                </>
+              ) : (
+                <>
+                  <EyeOff className="w-3.5 h-3.5 text-amber-600" />
+                  <span>ปิดซ่อนยอดเงินทั้งหมด (Hide All)</span>
+                </>
+              )}
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             
             {/* Card 1: Deliveries Amount */}
             <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition duration-300">
               <div className="flex justify-between items-start">
                 <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Delivery Amount</span>
-                <span className="px-1.5 py-0.5 bg-violet-50 text-violet-600 font-mono text-[9px] font-black rounded-sm uppercase">Active DO</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleSingleAmount('do', hideDeliveryAmount, setHideDeliveryAmount, 'hr_hide_partner_do_amount', 'ใบส่งของ DO')}
+                    className="p-1 rounded-sm text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition cursor-pointer"
+                    title={hideDeliveryAmount ? "กดรูปตาเพื่อเปิดดูยอดเงินใบส่งของ" : "กดรูปตาเพื่อปิดซ่อนยอดเงินใบส่งของ"}
+                  >
+                    {hideDeliveryAmount ? (
+                      <EyeOff className="w-3.5 h-3.5 text-amber-500" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5 text-slate-400 hover:text-violet-600" />
+                    )}
+                  </button>
+                  <span className="px-1.5 py-0.5 bg-violet-50 text-violet-600 font-mono text-[9px] font-black rounded-sm uppercase">Active DO</span>
+                </div>
               </div>
               <div className="space-y-1">
-                <p className="text-2xl font-black text-violet-600 font-mono tracking-tight">
-                  ฿{dashboardStats.totalDeliveryAmount.toLocaleString()}
-                </p>
+                {hideDeliveryAmount ? (
+                  <p className="text-2xl font-black text-slate-400 font-mono tracking-widest select-none">
+                    ฿ ••••••••
+                  </p>
+                ) : (
+                  <p className="text-2xl font-black text-violet-600 font-mono tracking-tight">
+                    ฿{dashboardStats.totalDeliveryAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>เฉลี่ย/ใบ:</span>
                   <span className="font-mono font-bold text-slate-700">
-                    ฿{dashboardStats.deliveryCount ? Math.round(dashboardStats.totalDeliveryAmount / dashboardStats.deliveryCount).toLocaleString() : '0'}
+                    {hideDeliveryAmount ? '฿ ••••' : `฿${dashboardStats.deliveryCount ? Math.round(dashboardStats.totalDeliveryAmount / dashboardStats.deliveryCount).toLocaleString() : '0'}`}
                   </span>
                 </div>
               </div>
@@ -1433,16 +1549,36 @@ export default function PartnerBillingManagement({
             <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition duration-300">
               <div className="flex justify-between items-start">
                 <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Billed Amount</span>
-                <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 font-mono text-[9px] font-black rounded-sm uppercase">Active BI</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleSingleAmount('bi', hideBilledAmount, setHideBilledAmount, 'hr_hide_partner_bi_amount', 'ใบวางบิล BI')}
+                    className="p-1 rounded-sm text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
+                    title={hideBilledAmount ? "กดรูปตาเพื่อเปิดดูยอดเงินใบวางบิล" : "กดรูปตาเพื่อปิดซ่อนยอดเงินใบวางบิล"}
+                  >
+                    {hideBilledAmount ? (
+                      <EyeOff className="w-3.5 h-3.5 text-amber-500" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5 text-slate-400 hover:text-indigo-600" />
+                    )}
+                  </button>
+                  <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 font-mono text-[9px] font-black rounded-sm uppercase">Active BI</span>
+                </div>
               </div>
               <div className="space-y-1">
-                <p className="text-2xl font-black text-indigo-600 font-mono tracking-tight">
-                  ฿{dashboardStats.totalBilledAmount.toLocaleString()}
-                </p>
+                {hideBilledAmount ? (
+                  <p className="text-2xl font-black text-slate-400 font-mono tracking-widest select-none">
+                    ฿ ••••••••
+                  </p>
+                ) : (
+                  <p className="text-2xl font-black text-indigo-600 font-mono tracking-tight">
+                    ฿{dashboardStats.totalBilledAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>เฉลี่ย/ใบ:</span>
                   <span className="font-mono font-bold text-slate-700">
-                    ฿{dashboardStats.billedCount ? Math.round(dashboardStats.totalBilledAmount / dashboardStats.billedCount).toLocaleString() : '0'}
+                    {hideBilledAmount ? '฿ ••••' : `฿${dashboardStats.billedCount ? Math.round(dashboardStats.totalBilledAmount / dashboardStats.billedCount).toLocaleString() : '0'}`}
                   </span>
                 </div>
               </div>
@@ -1467,12 +1603,32 @@ export default function PartnerBillingManagement({
             <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition duration-300">
               <div className="flex justify-between items-start">
                 <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Outstanding Debt</span>
-                <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 font-mono text-[9px] font-black rounded-sm uppercase">Pending</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleSingleAmount('pending', hidePendingAmount, setHidePendingAmount, 'hr_hide_partner_pending_amount', 'ยอดค้างจ่ายคู่ค้า')}
+                    className="p-1 rounded-sm text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer"
+                    title={hidePendingAmount ? "กดรูปตาเพื่อเปิดดูยอดค้างจ่ายคู่ค้า" : "กดรูปตาเพื่อปิดซ่อนยอดเงินไม่ให้คนอื่นเห็น"}
+                  >
+                    {hidePendingAmount ? (
+                      <EyeOff className="w-3.5 h-3.5 text-amber-500" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5 text-slate-400 hover:text-amber-600" />
+                    )}
+                  </button>
+                  <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 font-mono text-[9px] font-black rounded-sm uppercase">Pending</span>
+                </div>
               </div>
               <div className="space-y-1">
-                <p className="text-2xl font-black text-amber-500 font-mono tracking-tight">
-                  ฿{dashboardStats.totalPendingAmount.toLocaleString()}
-                </p>
+                {hidePendingAmount ? (
+                  <p className="text-2xl font-black text-slate-400 font-mono tracking-widest select-none">
+                    ฿ ••••••••
+                  </p>
+                ) : (
+                  <p className="text-2xl font-black text-amber-500 font-mono tracking-tight">
+                    ฿{dashboardStats.totalPendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>อัตราส่วนค้าง:</span>
                   <span className="font-mono font-bold text-amber-600">
@@ -1504,12 +1660,32 @@ export default function PartnerBillingManagement({
             <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition duration-300">
               <div className="flex justify-between items-start">
                 <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Paid Finished</span>
-                <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 font-mono text-[9px] font-black rounded-sm uppercase">Success</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleSingleAmount('paid', hidePaidAmount, setHidePaidAmount, 'hr_hide_partner_paid_amount', 'ยอดชำระแล้ว')}
+                    className="p-1 rounded-sm text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
+                    title={hidePaidAmount ? "กดรูปตาเพื่อเปิดดูยอดชำระแล้ว" : "กดรูปตาเพื่อปิดซ่อนยอดเงินไม่ให้คนอื่นเห็น"}
+                  >
+                    {hidePaidAmount ? (
+                      <EyeOff className="w-3.5 h-3.5 text-amber-500" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5 text-slate-400 hover:text-emerald-600" />
+                    )}
+                  </button>
+                  <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 font-mono text-[9px] font-black rounded-sm uppercase">Success</span>
+                </div>
               </div>
               <div className="space-y-1">
-                <p className="text-2xl font-black text-emerald-600 font-mono tracking-tight">
-                  ฿{dashboardStats.totalPaidAmount.toLocaleString()}
-                </p>
+                {hidePaidAmount ? (
+                  <p className="text-2xl font-black text-slate-400 font-mono tracking-widest select-none">
+                    ฿ ••••••••
+                  </p>
+                ) : (
+                  <p className="text-2xl font-black text-emerald-600 font-mono tracking-tight">
+                    ฿{dashboardStats.totalPaidAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>อัตราส่วนชำระ:</span>
                   <span className="font-mono font-bold text-emerald-600">
@@ -1544,9 +1720,15 @@ export default function PartnerBillingManagement({
                 <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 font-mono text-[9px] font-black rounded-sm uppercase">Summary</span>
               </div>
               <div className="space-y-1">
-                <p className="text-2xl font-black text-slate-900 font-mono tracking-tight">
-                  ฿{(dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount).toLocaleString()}
-                </p>
+                {(hideDeliveryAmount && hideBilledAmount) ? (
+                  <p className="text-2xl font-black text-slate-400 font-mono tracking-widest select-none">
+                    ฿ ••••••••
+                  </p>
+                ) : (
+                  <p className="text-2xl font-black text-slate-900 font-mono tracking-tight">
+                    ฿{(dashboardStats.totalDeliveryAmount + dashboardStats.totalBilledAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>ความพึงพอใจคู่ค้า:</span>
                   <span className="font-sans font-bold text-violet-600 flex items-center gap-0.5"><Award className="w-3 h-3" /> 99.8%</span>
@@ -1946,52 +2128,175 @@ export default function PartnerBillingManagement({
             </div>
           )}
 
+          {/* Summary Stats Header with Privacy Eye Toggle */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-800 font-sans">สรุปยอดรวมรายการคู่ค้า (Financial Overview)</span>
+              <span className="text-[11px] text-slate-400 font-sans hidden md:inline">| กดรูปตา 👁️ เพื่อเปิดดู/ปิดซ่อนตัวเลขไม่ให้ผู้อื่นเห็น</span>
+            </div>
+            <button
+              type="button"
+              onClick={toggleAllAmountsVisibility}
+              className={`px-3 py-1.5 rounded-sm text-xs font-semibold flex items-center gap-2 transition cursor-pointer border ${
+                isAllAmountsHidden
+                  ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 shadow-xs'
+                  : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+              }`}
+              title={isAllAmountsHidden ? "กดเพื่อเปิดดูยอดเงินทั้งหมด" : "กดเพื่อปิดซ่อนยอดเงินทั้งหมดไม่ให้คนอื่นเห็น"}
+              aria-label={isAllAmountsHidden ? "เปิดดูยอดเงินทั้งหมด" : "ปิดซ่อนยอดเงินทั้งหมด"}
+            >
+              {isAllAmountsHidden ? (
+                <>
+                  <Eye className="w-3.5 h-3.5 text-blue-600" />
+                  <span>เปิดดูยอดเงินทั้งหมด (Show All)</span>
+                </>
+              ) : (
+                <>
+                  <EyeOff className="w-3.5 h-3.5 text-amber-600" />
+                  <span>ปิดซ่อนยอดเงินทั้งหมด (Hide All)</span>
+                </>
+              )}
+            </button>
+          </div>
+
           {/* Summary Stats Panels */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Card 1: Deliveries */}
-            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs space-y-2">
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs space-y-2 hover:border-blue-300 transition duration-200">
               <div className="flex justify-between items-center">
-                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">ใบส่งของรอดำเนินการ (DO)</span>
-                <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-xs font-mono">{stats.deliveryCount} ฉบับ</span>
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-500">1.ใบส่งของรอดำเนินการ (DO)</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleSingleAmount('do', hideDeliveryAmount, setHideDeliveryAmount, 'hr_hide_partner_do_amount', 'ใบส่งของ DO')}
+                    className="p-1 rounded-sm text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition cursor-pointer"
+                    title={hideDeliveryAmount ? "กดรูปตาเพื่อเปิดดูยอดเงินใบส่งของ" : "กดรูปตาเพื่อปิดซ่อนยอดเงินใบส่งของ"}
+                    aria-label={hideDeliveryAmount ? "เปิดดูยอดเงินใบส่งของ" : "ปิดซ่อนยอดเงินใบส่งของ"}
+                  >
+                    {hideDeliveryAmount ? (
+                      <EyeOff className="w-3.5 h-3.5 text-amber-500" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5 text-slate-400 hover:text-blue-600" />
+                    )}
+                  </button>
+                  <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-xs font-mono">{stats.deliveryCount} ฉบับ</span>
+                </div>
               </div>
               <div className="flex items-baseline justify-between">
-                <p className="text-xl font-black text-slate-950 font-mono">฿{stats.totalDeliveryAmount.toLocaleString()}</p>
+                {hideDeliveryAmount ? (
+                  <p className="text-xl font-black text-slate-400 font-mono tracking-widest select-none" title="ยอดเงินถูกปิดซ่อนไว้ กดรูปตาเพื่อดู">
+                    ฿ ••••••••
+                  </p>
+                ) : (
+                  <p className="text-xl font-black text-slate-950 font-mono">
+                    ฿{stats.totalDeliveryAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
                 <span className="text-[10px] text-slate-400">มูลค่ารวมส่งของ</span>
               </div>
             </div>
 
             {/* Card 2: Billed / Outstanding */}
-            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs space-y-2">
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs space-y-2 hover:border-indigo-300 transition duration-200">
               <div className="flex justify-between items-center">
-                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">ใบวางบิลในระบบ (BI)</span>
-                <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded-xs font-mono">{stats.billedCount} ฉบับ</span>
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-500">2.ใบวางบิลในระบบ (BI)</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleSingleAmount('bi', hideBilledAmount, setHideBilledAmount, 'hr_hide_partner_bi_amount', 'ใบวางบิล BI')}
+                    className="p-1 rounded-sm text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
+                    title={hideBilledAmount ? "กดรูปตาเพื่อเปิดดูยอดเงินใบวางบิล" : "กดรูปตาเพื่อปิดซ่อนยอดเงินใบวางบิล"}
+                    aria-label={hideBilledAmount ? "เปิดดูยอดเงินใบวางบิล" : "ปิดซ่อนยอดเงินใบวางบิล"}
+                  >
+                    {hideBilledAmount ? (
+                      <EyeOff className="w-3.5 h-3.5 text-amber-500" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5 text-slate-400 hover:text-indigo-600" />
+                    )}
+                  </button>
+                  <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded-xs font-mono">{stats.billedCount} ฉบับ</span>
+                </div>
               </div>
               <div className="flex items-baseline justify-between">
-                <p className="text-xl font-black text-indigo-600 font-mono">฿{stats.totalBilledAmount.toLocaleString()}</p>
+                {hideBilledAmount ? (
+                  <p className="text-xl font-black text-slate-400 font-mono tracking-widest select-none" title="ยอดเงินถูกปิดซ่อนไว้ กดรูปตาเพื่อดู">
+                    ฿ ••••••••
+                  </p>
+                ) : (
+                  <p className="text-xl font-black text-indigo-600 font-mono">
+                    ฿{stats.totalBilledAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
                 <span className="text-[10px] text-slate-400">มูลค่าวางบิล</span>
               </div>
             </div>
 
             {/* Card 3: Pending Payments */}
-            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs space-y-2">
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs space-y-2 hover:border-amber-300 transition duration-200">
               <div className="flex justify-between items-center">
-                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400 font-bold text-amber-600">ยอดค้างจ่ายคู่ค้าทั้งหมด</span>
-                <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 text-[10px] font-bold rounded-xs font-mono">{stats.pendingCount} รายการ</span>
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-amber-600">3.ยอดค้างจ่ายคู่ค้าทั้งหมด</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleSingleAmount('pending', hidePendingAmount, setHidePendingAmount, 'hr_hide_partner_pending_amount', 'ยอดค้างจ่ายคู่ค้า')}
+                    className="p-1 rounded-sm text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer"
+                    title={hidePendingAmount ? "กดรูปตาเพื่อเปิดดูยอดค้างจ่ายคู่ค้า" : "กดรูปตาเพื่อปิดซ่อนยอดค้างจ่ายคู่ค้า"}
+                    aria-label={hidePendingAmount ? "เปิดดูยอดค้างจ่ายคู่ค้า" : "ปิดซ่อนยอดค้างจ่ายคู่ค้า"}
+                  >
+                    {hidePendingAmount ? (
+                      <EyeOff className="w-3.5 h-3.5 text-amber-500" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5 text-slate-400 hover:text-amber-600" />
+                    )}
+                  </button>
+                  <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 text-[10px] font-bold rounded-xs font-mono">{stats.pendingCount} รายการ</span>
+                </div>
               </div>
               <div className="flex items-baseline justify-between">
-                <p className="text-xl font-black text-amber-600 font-mono">฿{stats.totalPendingAmount.toLocaleString()}</p>
+                {hidePendingAmount ? (
+                  <p className="text-xl font-black text-slate-400 font-mono tracking-widest select-none" title="ยอดเงินถูกปิดซ่อนไว้ กดรูปตาเพื่อดู">
+                    ฿ ••••••••
+                  </p>
+                ) : (
+                  <p className="text-xl font-black text-amber-600 font-mono">
+                    ฿{stats.totalPendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
                 <span className="text-[10px] text-slate-400">รอเคลียร์ชำระ</span>
               </div>
             </div>
 
             {/* Card 4: Paid completed */}
-            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs space-y-2">
+            <div className="bg-white p-4 border border-slate-200 rounded-sm shadow-xs space-y-2 hover:border-emerald-300 transition duration-200">
               <div className="flex justify-between items-center">
-                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400 font-bold text-emerald-600">ชำระเงินเรียบร้อยแล้ว</span>
-                <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded-xs font-mono">{stats.paidCount} สำเร็จ</span>
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-emerald-600">4.ชำระเงินเรียบร้อยแล้ว</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleSingleAmount('paid', hidePaidAmount, setHidePaidAmount, 'hr_hide_partner_paid_amount', 'ยอดชำระแล้ว')}
+                    className="p-1 rounded-sm text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
+                    title={hidePaidAmount ? "กดรูปตาเพื่อเปิดดูยอดชำระแล้ว" : "กดรูปตาเพื่อปิดซ่อนยอดชำระแล้ว"}
+                    aria-label={hidePaidAmount ? "เปิดดูยอดชำระแล้ว" : "ปิดซ่อนยอดชำระแล้ว"}
+                  >
+                    {hidePaidAmount ? (
+                      <EyeOff className="w-3.5 h-3.5 text-amber-500" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5 text-slate-400 hover:text-emerald-600" />
+                    )}
+                  </button>
+                  <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded-xs font-mono">{stats.paidCount} สำเร็จ</span>
+                </div>
               </div>
               <div className="flex items-baseline justify-between">
-                <p className="text-xl font-black text-emerald-600 font-mono">฿{stats.totalPaidAmount.toLocaleString()}</p>
+                {hidePaidAmount ? (
+                  <p className="text-xl font-black text-slate-400 font-mono tracking-widest select-none" title="ยอดเงินถูกปิดซ่อนไว้ กดรูปตาเพื่อดู">
+                    ฿ ••••••••
+                  </p>
+                ) : (
+                  <p className="text-xl font-black text-emerald-600 font-mono">
+                    ฿{stats.totalPaidAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                )}
                 <span className="text-[10px] text-slate-400">จ่ายแล้วสะสม</span>
               </div>
             </div>
