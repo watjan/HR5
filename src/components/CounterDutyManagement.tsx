@@ -24,7 +24,15 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   AlertTriangle,
-  FileDown
+  FileDown,
+  ArrowUp,
+  ArrowDown,
+  Database,
+  Search,
+  Building,
+  Sparkles,
+  SlidersHorizontal,
+  RefreshCw
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -61,9 +69,24 @@ export default function CounterDutyManagement({
     return activeEmployees.slice(0, 6).map(e => e.id);
   });
 
+  // Automatically initialize pool from active employees if empty on initial load
+  useEffect(() => {
+    if (poolIds.length === 0 && activeEmployees.length > 0) {
+      const defaultPool = activeEmployees.slice(0, Math.min(6, activeEmployees.length)).map(e => e.id);
+      setPoolIds(defaultPool);
+      setEmployeeWeeklyOffs(prev => {
+        const next = { ...prev };
+        defaultPool.forEach(id => {
+          if (!next[id]) next[id] = [0];
+        });
+        return next;
+      });
+    }
+  }, [activeEmployees, poolIds.length]);
+
   // Dynamic pool size modifier
   const setPoolSize = (newSize: number) => {
-    if (newSize < 2 || newSize > 12) return;
+    if (newSize < 2 || newSize > 20) return;
     let updatedPool = [...poolIds];
     if (newSize > poolIds.length) {
       const diff = newSize - poolIds.length;
@@ -83,6 +106,177 @@ export default function CounterDutyManagement({
     }
     setPoolIds(updatedPool);
     setCurrentSchedule(null); // Reset preview
+  };
+
+  // Reorder queue: Move member UP in sequence rank
+  const movePoolMemberUp = (index: number) => {
+    if (index <= 0) return;
+    const updated = [...poolIds];
+    const temp = updated[index];
+    updated[index] = updated[index - 1];
+    updated[index - 1] = temp;
+    setPoolIds(updated);
+    setCurrentSchedule(null);
+    triggerAlert('success', `เลื่อนลำดับขึ้น: คุณ ${activeEmployees.find(e => e.id === temp)?.name || 'พนักงาน'} อยู่ลำดับที่ ${index}`);
+  };
+
+  // Reorder queue: Move member DOWN in sequence rank
+  const movePoolMemberDown = (index: number) => {
+    if (index >= poolIds.length - 1) return;
+    const updated = [...poolIds];
+    const temp = updated[index];
+    updated[index] = updated[index + 1];
+    updated[index + 1] = temp;
+    setPoolIds(updated);
+    setCurrentSchedule(null);
+    triggerAlert('success', `เลื่อนลำดับลง: คุณ ${activeEmployees.find(e => e.id === temp)?.name || 'พนักงาน'} อยู่ลำดับที่ ${index + 2}`);
+  };
+
+  // Remove member from queue
+  const removePoolMember = (index: number) => {
+    if (poolIds.length <= 2) {
+      triggerAlert('error', 'ต้องมีพนักงานในคิวจัดเวรอย่างน้อย 2 คน');
+      return;
+    }
+    const removedEmpId = poolIds[index];
+    const empName = activeEmployees.find(e => e.id === removedEmpId)?.name || 'พนักงาน';
+    const updated = poolIds.filter((_, idx) => idx !== index);
+    setPoolIds(updated);
+    setCurrentSchedule(null);
+    triggerAlert('success', `ลบ ${empName} ออกจากคิวจัดเวรแล้ว`);
+  };
+
+  // Add new queue slot
+  const addPoolSlot = (empId?: string) => {
+    if (poolIds.length >= 20) {
+      triggerAlert('error', 'จำกัดพนักงานในคิวไม่เกิน 20 คน');
+      return;
+    }
+    const newEmpId = empId || activeEmployees.find(e => !poolIds.includes(e.id))?.id || "";
+    setPoolIds(prev => [...prev, newEmpId]);
+    if (newEmpId && !employeeWeeklyOffs[newEmpId]) {
+      setEmployeeWeeklyOffs(prev => ({
+        ...prev,
+        [newEmpId]: [0]
+      }));
+    }
+    setCurrentSchedule(null);
+  };
+
+  // Pull all active employees from employee database
+  const handlePullAllActiveFromDatabase = () => {
+    if (activeEmployees.length < 2) {
+      triggerAlert('error', 'พบพนักงานในฐานข้อมูลน้อยกว่า 2 คน');
+      return;
+    }
+    const newPool = activeEmployees.map(e => e.id);
+    setPoolIds(newPool);
+    setEmployeeWeeklyOffs(prev => {
+      const next = { ...prev };
+      newPool.forEach(id => {
+        if (!next[id]) next[id] = [0];
+      });
+      return next;
+    });
+    setCurrentSchedule(null);
+    triggerAlert('success', `ดึงรายชื่อพนักงานทั้งหมด ${newPool.length} คน จากฐานข้อมูลเข้าสู่คิวจัดเวรสำเร็จ`);
+  };
+
+  // Pull first 6 active employees from database
+  const handlePullTop6FromDatabase = () => {
+    if (activeEmployees.length === 0) {
+      triggerAlert('error', 'ไม่พบพนักงานที่ปฏิบัติงานในฐานข้อมูล');
+      return;
+    }
+    const top6 = activeEmployees.slice(0, Math.min(6, activeEmployees.length)).map(e => e.id);
+    setPoolIds(top6);
+    setEmployeeWeeklyOffs(prev => {
+      const next = { ...prev };
+      top6.forEach(id => {
+        if (!next[id]) next[id] = [0];
+      });
+      return next;
+    });
+    setCurrentSchedule(null);
+    triggerAlert('success', `ดึงรายชื่อ 6 คนแรกจากฐานข้อมูลพนักงานเข้าสู่คิวจัดเวรเรียบร้อย`);
+  };
+
+  // Pull by specific department from database
+  const handlePullByDepartment = (dept: string) => {
+    const deptEmps = activeEmployees.filter(e => e.department === dept);
+    if (deptEmps.length < 2) {
+      triggerAlert('error', `พบพนักงานแผนก "${dept}" น้อยกว่า 2 คนในฐานข้อมูล`);
+      return;
+    }
+    const deptPool = deptEmps.map(e => e.id);
+    setPoolIds(deptPool);
+    setEmployeeWeeklyOffs(prev => {
+      const next = { ...prev };
+      deptPool.forEach(id => {
+        if (!next[id]) next[id] = [0];
+      });
+      return next;
+    });
+    setCurrentSchedule(null);
+    triggerAlert('success', `ดึงพนักงานแผนก "${dept}" จำนวน ${deptPool.length} คน เข้าสู่คิวจัดเวรเรียบร้อย`);
+  };
+
+  // Database Picker Modal State
+  const [showDbModal, setShowDbModal] = useState<boolean>(false);
+  const [modalTargetIndex, setModalTargetIndex] = useState<number | null>(null); // null = add as new slot, number = replace slot at target index
+  const [dbSearchQuery, setDbSearchQuery] = useState<string>('');
+  const [dbDepartmentFilter, setDbDepartmentFilter] = useState<string>('all');
+  const [dbStatusFilter, setDbStatusFilter] = useState<'all' | 'active'>('active');
+
+  // Unique departments from database
+  const uniqueDepartments = useMemo(() => {
+    const set = new Set<string>();
+    employees.forEach(e => {
+      if (e.department && e.department.trim()) {
+        set.add(e.department.trim());
+      }
+    });
+    return Array.from(set);
+  }, [employees]);
+
+  // Filtered employees for database picker modal
+  const filteredDbEmployees = useMemo(() => {
+    return employees.filter(emp => {
+      if (dbStatusFilter === 'active' && emp.status !== 'active') return false;
+      if (dbDepartmentFilter !== 'all' && emp.department !== dbDepartmentFilter) return false;
+      if (!dbSearchQuery.trim()) return true;
+      const q = dbSearchQuery.toLowerCase();
+      return (
+        emp.name.toLowerCase().includes(q) ||
+        (emp.role && emp.role.toLowerCase().includes(q)) ||
+        (emp.department && emp.department.toLowerCase().includes(q)) ||
+        emp.id.toLowerCase().includes(q) ||
+        (emp.phone && emp.phone.includes(q))
+      );
+    });
+  }, [employees, dbStatusFilter, dbDepartmentFilter, dbSearchQuery]);
+
+  // Select employee from database modal
+  const handleSelectFromDbModal = (empId: string) => {
+    if (modalTargetIndex !== null) {
+      // Replace existing slot
+      selectPoolMember(modalTargetIndex, empId);
+    } else {
+      // Append new slot
+      addPoolSlot(empId);
+    }
+    setShowDbModal(false);
+    setModalTargetIndex(null);
+    setDbSearchQuery('');
+  };
+
+  // Open database modal for a specific slot or new slot
+  const openDatabaseModalForSlot = (index: number | null) => {
+    setModalTargetIndex(index);
+    setDbSearchQuery('');
+    setDbDepartmentFilter('all');
+    setDbStatusFilter('active');
+    setShowDbModal(true);
   };
 
   // Individual weekly off days state: { [empId]: number[] }
@@ -283,10 +477,12 @@ export default function CounterDutyManagement({
         const empId = queue[0];
         const emp = activeEmployees.find(e => e.id === empId);
         if (emp) {
+          const rank = validPoolIds.indexOf(empId) + 1;
           newAssignments[dateStr] = {
             employeeId: empId,
             employeeName: emp.name,
-            isSubstitute: false
+            isSubstitute: false,
+            poolRank: rank > 0 ? rank : undefined
           };
           assigned = true;
           // Rotate this person to the back of the queue
@@ -302,6 +498,8 @@ export default function CounterDutyManagement({
         const emp = activeEmployees.find(e => e.id === empId);
 
         if (emp) {
+          const originalRank = validPoolIds.indexOf(originalEmployeeId) + 1;
+          const subRank = validPoolIds.indexOf(empId) + 1;
           const skipStatus = checkDayOffOrLeave(originalEmployeeId, dateStr);
           newAssignments[dateStr] = {
             employeeId: empId,
@@ -309,7 +507,8 @@ export default function CounterDutyManagement({
             isSubstitute: true,
             originalEmployeeId,
             originalEmployeeName: originalEmp?.name || "ไม่ทราบ",
-            skipReason: skipStatus.reason
+            skipReason: skipStatus.reason,
+            poolRank: subRank > 0 ? subRank : undefined
           };
           assigned = true;
 
@@ -317,7 +516,7 @@ export default function CounterDutyManagement({
           logs.push({
             id: `LOG-${dateStr}-${originalEmployeeId}-${Date.now()}`,
             date: dateStr,
-            message: `ข้าม ${originalEmp?.name || "พนักงาน"} เนื่องจากตรงกับ${skipStatus.reason} โดยให้คุณ ${emp.name} ปฏิบัติหน้าที่แทน (และเลื่อน ${originalEmp?.name || "พนักงาน"} ไปขึ้นเวรในวันถัดไปแทน)`,
+            message: `ข้ามพนักงานจัดเวรลำดับที่ ${originalRank} (${originalEmp?.name || "พนักงาน"}) เนื่องจากตรงกับ${skipStatus.reason} โดยให้ลำดับที่ ${subRank} (คุณ ${emp.name}) ปฏิบัติหน้าที่แทน (และเลื่อนลำดับที่ ${originalRank} ไปขึ้นเวรในวันถัดไปแทน)`,
             type: skipStatus.type === 'leave' ? 'leave' : 'skip'
           });
 
@@ -335,15 +534,17 @@ export default function CounterDutyManagement({
         const fallbackEmpId = queue[0];
         const fallbackEmp = activeEmployees.find(e => e.id === fallbackEmpId);
         if (fallbackEmp) {
+          const fallbackRank = validPoolIds.indexOf(fallbackEmpId) + 1;
           newAssignments[dateStr] = {
             employeeId: fallbackEmpId,
             employeeName: fallbackEmp.name,
-            isSubstitute: false
+            isSubstitute: false,
+            poolRank: fallbackRank > 0 ? fallbackRank : undefined
           };
           logs.push({
             id: `LOG-${dateStr}-fallback-${Date.now()}`,
             date: dateStr,
-            message: `พนักงานทุกคนในคิวไม่ว่างในวันนี้ ระบบบังคับเลือกพนักงานคิวแรก ${fallbackEmp.name} เป็นกรณีพิเศษ`,
+            message: `พนักงานทุกคนในคิวไม่ว่างในวันนี้ ระบบเลือกพนักงานจัดเวรลำดับที่ ${fallbackRank} (${fallbackEmp.name}) เป็นกรณีพิเศษ`,
             type: 'override'
           });
           // Rotate to the back
@@ -419,13 +620,15 @@ export default function CounterDutyManagement({
     const updated = { ...currentSchedule };
     const originalAssignment = updated.assignments[dateStr];
 
+    const rank = poolIds.indexOf(empId) + 1;
     updated.assignments[dateStr] = {
       employeeId: empId,
       employeeName: emp.name,
       isSubstitute: true, // mark as manual swap
       originalEmployeeId: originalAssignment?.employeeId,
       originalEmployeeName: originalAssignment?.employeeName,
-      skipReason: "การปรับสลับเวรด้วยตนเองโดยหัวหน้างาน"
+      skipReason: "การปรับสลับเวรด้วยตนเองโดยหัวหน้างาน",
+      poolRank: rank > 0 ? rank : undefined
     };
 
     // Add manual log
@@ -709,74 +912,152 @@ export default function CounterDutyManagement({
         {/* Left column: Parameters & Pool configuration */}
         <div className="lg:col-span-1 space-y-6 no-print">
           
-          {/* Pool selection */}
+          {/* Pool selection with sequence queue and database pull */}
           <div className="bg-white p-6 rounded-sm border border-slate-200 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-indigo-500" />
-                <h2 className="text-sm font-bold text-slate-800">พนักงานจัดเวรลำดับที่ 1-{poolIds.length} (วนเวรตามคิว)</h2>
+            <div className="flex flex-col gap-2 pb-3 border-b border-slate-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <Database className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800">พนักงานจัดเวรลำดับที่ 1-{poolIds.length}</h2>
+                    <p className="text-[10px] text-slate-400">ดึงรายชื่อจากฐานข้อมูลพนักงานและจัดลำดับคิวหมุนเวียน</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
+                  {poolIds.length} ลำดับ
+                </span>
+              </div>
+
+              {/* Database Quick Actions Toolbar */}
+              <div className="pt-2 flex flex-wrap items-center gap-1.5">
+                <button
+                  onClick={() => openDatabaseModalForSlot(null)}
+                  className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-sm text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                  title="เปิดหน้าต่างค้นหาและดึงรายชื่อจากฐานข้อมูลพนักงาน"
+                >
+                  <Database className="w-3.5 h-3.5" /> ดึงรายชื่อจากฐานข้อมูลพนักงาน
+                </button>
+                <button
+                  onClick={handlePullTop6FromDatabase}
+                  className="px-2 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-sm text-[11px] font-medium transition cursor-pointer"
+                  title="ดึงพนักงาน 6 คนแรกจากฐานข้อมูลเข้าสู่คิว"
+                >
+                  6 คนแรก
+                </button>
+                <button
+                  onClick={handlePullAllActiveFromDatabase}
+                  className="px-2 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-sm text-[11px] font-medium transition cursor-pointer"
+                  title={`ดึงพนักงานที่ปฏิบัติงานอยู่ทั้งหมด (${activeEmployees.length} คน) เข้าสู่คิว`}
+                >
+                  ดึงพนักงานทั้งหมด ({activeEmployees.length})
+                </button>
+                <button
+                  onClick={() => addPoolSlot()}
+                  className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-sm text-[11px] font-bold flex items-center gap-1 transition cursor-pointer ml-auto"
+                  title="เพิ่มตำแหน่งลำดับถัดไปในคิว"
+                >
+                  <Plus className="w-3 h-3" /> เพิ่มลำดับ
+                </button>
               </div>
             </div>
 
-            <p className="text-xs text-slate-400 leading-relaxed">ลำดับในการวนคิวจะเรียงจากพนักงานคนแรกไปถึงคนสุดท้ายสลับวันกันอย่างเป็นธรรม หากพนักงานในคิวลาหยุดหรือถึงวันหยุดประจำตัวของตนเอง ระบบจะข้ามไปคิวพนักงานคนถัดไปโดยอัตโนมัติ</p>
+            <p className="text-[11px] text-slate-500 leading-relaxed bg-slate-50 p-2.5 rounded-sm border border-slate-150">
+              💡 <strong>หลักการวนเวรตามลำดับ:</strong> ระบบจะเริ่มจัดเวรในวันที่ 1 จาก <strong>"พนักงานจัดเวรลำดับที่ 1"</strong> และหมุนเวียนไปลำดับที่ 2, 3... ตามลำดับ หากพนักงานในลำดับใดติดวันลาหรือวันหยุด ระบบจะข้ามไปลำดับถัดไปโดยอัตโนมัติ และยกยอดให้กลับมาขึ้นเวรในวันถัดไปทันที
+            </p>
 
-            {/* Custom pool size selection */}
-            <div className="flex items-center justify-between bg-indigo-50/50 p-3 rounded-sm border border-indigo-100 mb-2">
-              <span className="text-xs font-bold text-indigo-800">จำนวนพนักงานที่จะร่วมอยู่เวร:</span>
-              <select
-                value={poolIds.length}
-                onChange={(e) => setPoolSize(Number(e.target.value))}
-                className="text-xs font-bold px-2 py-1 bg-white border border-indigo-200 rounded-sm focus:outline-none focus:border-indigo-500 text-slate-700 cursor-pointer"
-              >
-                {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(size => (
-                  <option key={size} value={size}>{size} คน</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2.5">
+            {/* List of queue slots */}
+            <div className="space-y-3">
               {poolIds.map((empId, index) => {
                 const emp = activeEmployees.find(e => e.id === empId);
 
                 return (
-                  <div key={index} className="relative">
+                  <div key={index} className="relative bg-slate-50/70 rounded-sm border border-slate-200 p-3 space-y-2.5 hover:border-slate-300 transition">
+                    
+                    {/* Slot Header: Rank number and sequence controls */}
+                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[11px] font-black px-2 py-0.5 rounded-sm flex items-center gap-1 shadow-2xs ${
+                          index === 0 
+                            ? 'bg-indigo-600 text-white' 
+                            : 'bg-slate-700 text-white'
+                        }`}>
+                          พนักงานจัดเวรลำดับที่ {index + 1}
+                        </span>
+                        {index === 0 && (
+                          <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-sm">
+                            คิวแรก (เริ่มวันที่ 1)
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Sequence Rank Control Buttons (Up, Down, Remove) */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => movePoolMemberUp(index)}
+                          disabled={index === 0}
+                          className="w-6 h-6 rounded-sm bg-white hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 border border-slate-200 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center transition cursor-pointer"
+                          title="เลื่อนขึ้นไปลำดับก่อนหน้า"
+                        >
+                          <ArrowUp className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => movePoolMemberDown(index)}
+                          disabled={index === poolIds.length - 1}
+                          className="w-6 h-6 rounded-sm bg-white hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 border border-slate-200 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center transition cursor-pointer"
+                          title="เลื่อนลงไปลำดับถัดไป"
+                        >
+                          <ArrowDown className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => removePoolMember(index)}
+                          disabled={poolIds.length <= 2}
+                          className="w-6 h-6 rounded-sm bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center transition cursor-pointer ml-1"
+                          title="ลบลำดับนี้ออกจากคิว"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+
                     {emp ? (
-                      <div className="p-3 bg-slate-50 rounded-sm border border-slate-200 hover:border-slate-300 transition space-y-2.5">
-                        <div className="flex items-center justify-between">
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 font-bold flex items-center justify-center text-xs shrink-0">
+                            <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0 border border-indigo-200 overflow-hidden">
                               {emp.avatar ? (
-                                <img src={emp.avatar} alt="" className="w-full h-full rounded-full object-cover" referrerPolicy="no-referrer" />
+                                <img src={emp.avatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               ) : (
-                                <span className="text-xs">{index + 1}</span>
+                                <span>{emp.name.charAt(0)}</span>
                               )}
                             </div>
                             <div className="truncate">
-                              <div className="text-xs font-bold text-slate-700 truncate">{emp.name}</div>
-                              <div className="text-[10px] text-slate-400 font-medium truncate">{emp.role || 'พนักงาน'}</div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-bold text-slate-800 truncate">{emp.name}</span>
+                                {emp.nickname && (
+                                  <span className="text-[10px] text-slate-500 font-medium">({emp.nickname})</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                                {emp.department && (
+                                  <span className="px-1.5 py-0.2 bg-slate-200/80 text-slate-700 rounded text-[9px] font-semibold">
+                                    {emp.department}
+                                  </span>
+                                )}
+                                <span>{emp.role || 'พนักงาน'}</span>
+                                <span className="text-slate-400 font-mono text-[9px]">• {emp.id}</span>
+                              </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
+
+                          <div className="flex items-center gap-1.5 shrink-0">
                             <button 
-                              onClick={() => {
-                                setSelectedConfigEmpId(emp.id);
-                              }}
-                              className={`text-[9px] px-2 py-1 rounded-sm font-bold border transition ${
-                                selectedConfigEmpId === emp.id 
-                                  ? 'bg-indigo-50 text-indigo-600 border-indigo-200' 
-                                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
-                              }`}
+                              onClick={() => openDatabaseModalForSlot(index)}
+                              className="text-[10px] text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-1 rounded-sm font-bold flex items-center gap-1 transition cursor-pointer"
+                              title="เปิดฐานข้อมูลเพื่อเปลี่ยนพนักงานในลำดับนี้"
                             >
-                              ตัวเลือกเพิ่มเติม
-                            </button>
-                            <button 
-                              onClick={() => {
-                                setShowSelectorIndex(index);
-                                setSearchTerm('');
-                              }}
-                              className="text-[9px] text-slate-400 hover:text-indigo-600 font-semibold cursor-pointer border border-slate-200 bg-white hover:bg-indigo-50 px-2 py-1 rounded-sm"
-                            >
-                              เปลี่ยนคน
+                              <Database className="w-3 h-3" /> ดึงคนอื่น
                             </button>
                           </div>
                         </div>
@@ -792,7 +1073,7 @@ export default function CounterDutyManagement({
                                 <button
                                   key={dayIdx}
                                   onClick={() => toggleIndividualWeeklyOff(emp.id, dayIdx)}
-                                  className={`w-5.5 h-5.5 rounded-full text-[9px] font-black flex items-center justify-center transition border ${
+                                  className={`w-5.5 h-5.5 rounded-full text-[9px] font-black flex items-center justify-center transition border cursor-pointer ${
                                     isOff 
                                       ? 'bg-rose-500 text-white border-rose-600 shadow-sm' 
                                       : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300 hover:text-slate-600'
@@ -808,55 +1089,25 @@ export default function CounterDutyManagement({
                       </div>
                     ) : (
                       <button 
-                        onClick={() => {
-                          setShowSelectorIndex(index);
-                          setSearchTerm('');
-                        }}
-                        className="w-full flex items-center justify-center gap-2 p-2.5 bg-slate-50 hover:bg-slate-100 transition border border-dashed border-slate-300 rounded-sm text-xs text-slate-500 font-medium"
+                        onClick={() => openDatabaseModalForSlot(index)}
+                        className="w-full flex items-center justify-center gap-2 p-3 bg-white hover:bg-indigo-50/50 transition border border-dashed border-indigo-300 rounded-sm text-xs text-indigo-600 font-bold cursor-pointer"
                       >
-                        <Plus className="w-4 h-4 text-slate-400" /> เลือกคนจัดเวรตำแหน่งที่ {index + 1}
+                        <Database className="w-4 h-4 text-indigo-500" /> 
+                        คลิกเพื่อดึงรายชื่อจากฐานข้อมูลพนักงาน ลงลำดับที่ {index + 1}
                       </button>
-                    )}
-
-                    {/* Employee select modal dropdown popup */}
-                    {showSelectorIndex === index && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-sm shadow-xl z-20 max-h-60 overflow-y-auto p-2">
-                        <div className="text-[11px] font-bold text-slate-500 px-2 py-1.5 bg-slate-50 rounded-sm mb-2">เลือกคนจัดเวรตำแหน่งที่ {index + 1}</div>
-                        <input 
-                          type="text" 
-                          placeholder="พิมพ์ชื่อค้นหาพนักงาน..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-sm mb-2 focus:outline-none focus:border-indigo-500"
-                        />
-                        <div className="space-y-1">
-                          {filteredSelectorEmployees.length > 0 ? (
-                            filteredSelectorEmployees.map(item => (
-                              <button
-                                key={item.id}
-                                onClick={() => selectPoolMember(index, item.id)}
-                                className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-indigo-50 text-left rounded-sm transition text-xs"
-                              >
-                                <span className="font-bold text-slate-700">{item.name}</span>
-                                <span className="text-[10px] text-slate-400">({item.role})</span>
-                              </button>
-                            ))
-                          ) : (
-                            <div className="text-[10px] text-slate-400 text-center py-2">ไม่พบพนักงานอื่นในระบบหลัก</div>
-                          )}
-                        </div>
-                        <button 
-                          onClick={() => setShowSelectorIndex(null)}
-                          className="w-full mt-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-sm text-[10px] font-semibold text-center block"
-                        >
-                          ปิดการค้นหา
-                        </button>
-                      </div>
                     )}
                   </div>
                 );
               })}
             </div>
+
+            {/* Add next rank slot button */}
+            <button
+              onClick={() => openDatabaseModalForSlot(null)}
+              className="w-full py-2.5 bg-slate-50 hover:bg-indigo-50 border border-dashed border-slate-300 hover:border-indigo-300 rounded-sm text-xs font-bold text-slate-600 hover:text-indigo-600 flex items-center justify-center gap-2 transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" /> เพิ่มพนักงานจัดเวรลำดับที่ {poolIds.length + 1} จากฐานข้อมูล
+            </button>
           </div>
 
           {/* Config options */}
@@ -1117,11 +1368,18 @@ export default function CounterDutyManagement({
                           )}
                         </div>
 
-                        {/* Assignment name */}
+                        {/* Assignment name with sequence rank */}
                         {assignment ? (
                           <div className="mt-1">
-                            <div className={`text-xs font-bold truncate leading-tight ${assignment.isSubstitute ? 'text-amber-700' : 'text-slate-800'}`}>
-                              {assignment.employeeName}
+                            <div className="flex items-center justify-between gap-1">
+                              <span className={`text-xs font-bold truncate leading-tight ${assignment.isSubstitute ? 'text-amber-700' : 'text-slate-800'}`}>
+                                {assignment.employeeName}
+                              </span>
+                              {assignment.poolRank && (
+                                <span className="text-[8px] px-1 py-0.2 font-mono font-bold rounded-xs bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0" title={`พนักงานจัดเวรลำดับที่ ${assignment.poolRank}`}>
+                                  #{assignment.poolRank}
+                                </span>
+                              )}
                             </div>
                             {assignment.isSubstitute && (
                               <div className="text-[8px] text-amber-600 font-semibold mt-0.5 truncate flex items-center gap-0.5" title={`ทดแทนเนื่องจาก: ${assignment.skipReason || assignment.originalEmployeeName}`}>
@@ -1160,7 +1418,7 @@ export default function CounterDutyManagement({
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-                    {poolIds.map((empId) => {
+                    {poolIds.map((empId, empIdx) => {
                       const emp = activeEmployees.find(e => e.id === empId);
                       if (!emp) return null;
 
@@ -1172,10 +1430,15 @@ export default function CounterDutyManagement({
                           onClick={() => handleManualOverride(editingDate, empId)}
                           className={`p-2.5 rounded-sm border text-left flex flex-col justify-between transition cursor-pointer ${
                             isCurrent 
-                              ? 'bg-indigo-600 border-indigo-600 text-white' 
+                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs' 
                               : 'bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-700'
                           }`}
                         >
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className={`text-[9px] font-mono font-bold px-1 rounded-xs ${isCurrent ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                              ลำดับที่ {empIdx + 1}
+                            </span>
+                          </div>
                           <span className="text-xs font-bold leading-tight truncate">{emp.name}</span>
                           <span className={`text-[9px] mt-1 ${isCurrent ? 'text-indigo-200' : 'text-slate-400'}`}>
                             {isCurrent ? 'เวรเฝ้าอยู่ตอนนี้' : 'คลิกเพื่อสลับ'}
@@ -1198,24 +1461,34 @@ export default function CounterDutyManagement({
                   </div>
 
                   <div className="space-y-3">
-                    {fairnessStats.map(stat => (
-                      <div key={stat.id} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-700">{stat.name}</span>
-                          <span className="text-[10px] text-slate-500 font-mono font-semibold">
-                            วันปฏิบัติงาน {stat.totalDuties} วัน (ธรรมดา {stat.weekdayDuties} / หยุดสุดสัปดาห์ {stat.weekendDuties})
-                          </span>
+                    {fairnessStats.map(stat => {
+                      const rankIndex = poolIds.indexOf(stat.id);
+                      return (
+                        <div key={stat.id} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              {rankIndex !== -1 && (
+                                <span className="text-[9px] px-1.5 py-0.2 bg-indigo-100 text-indigo-800 font-bold rounded-xs font-mono shrink-0">
+                                  ลำดับที่ {rankIndex + 1}
+                                </span>
+                              )}
+                              <span className="font-bold text-slate-700 truncate">{stat.name}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 font-mono font-semibold shrink-0">
+                              วันปฏิบัติงาน {stat.totalDuties} วัน (ธรรมดา {stat.weekdayDuties} / หยุดสุดสัปดาห์ {stat.weekendDuties})
+                            </span>
+                          </div>
+                          {/* Custom visual progress bar */}
+                          <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden flex">
+                            <div 
+                              className="bg-indigo-600 h-full rounded-l-full transition-all" 
+                              style={{ width: `${stat.percentage}%` }}
+                              title={`สัดส่วนภาระงานเวรธรรมดา ${stat.percentage}%`}
+                            ></div>
+                          </div>
                         </div>
-                        {/* Custom visual progress bar */}
-                        <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden flex">
-                          <div 
-                            className="bg-indigo-600 h-full rounded-l-full transition-all" 
-                            style={{ width: `${stat.percentage}%` }}
-                            title={`สัดส่วนภาระงานเวรธรรมดา ${stat.percentage}%`}
-                          ></div>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1269,6 +1542,221 @@ export default function CounterDutyManagement({
         </div>
 
       </div>
+
+      {/* Employee Database Directory Modal */}
+      {showDbModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-lg shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">
+                    ดึงรายชื่อจากฐานข้อมูลพนักงาน (Employee Database)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {modalTargetIndex !== null 
+                      ? `คลิกเลือกพนักงานเพื่อแทนที่ลงใน "พนักงานจัดเวรลำดับที่ ${modalTargetIndex + 1}"` 
+                      : `คลิกเลือกพนักงานเพื่อเพิ่มต่อท้ายคิว (พนักงานจัดเวรลำดับที่ ${poolIds.length + 1})`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDbModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Filter & Search Controls */}
+            <div className="p-4 border-b border-slate-200 bg-white space-y-3">
+              <div className="flex flex-col sm:flex-row items-center gap-2.5">
+                
+                {/* Search box */}
+                <div className="relative flex-1 w-full">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="ค้นหาชื่อพนักงาน, ชื่อเล่น, ตำแหน่ง, แผนก หรือรหัสพนักงาน..."
+                    value={dbSearchQuery}
+                    onChange={(e) => setDbSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-sm text-xs focus:outline-none focus:border-indigo-500 focus:bg-white text-slate-800"
+                    autoFocus
+                  />
+                  {dbSearchQuery && (
+                    <button
+                      onClick={() => setDbSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                    >
+                      ล้าง
+                    </button>
+                  )}
+                </div>
+
+                {/* Department filter */}
+                <div className="w-full sm:w-auto shrink-0 flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-slate-600 whitespace-nowrap">แผนก:</span>
+                  <select
+                    value={dbDepartmentFilter}
+                    onChange={(e) => setDbDepartmentFilter(e.target.value)}
+                    className="px-2.5 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-sm focus:outline-none focus:border-indigo-500 text-slate-700 cursor-pointer"
+                  >
+                    <option value="all">ทุกแผนก ({activeEmployees.length})</option>
+                    {uniqueDepartments.map((dept) => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-slate-400 font-medium">ดึงแบบกลุ่ม:</span>
+                  <button
+                    onClick={handlePullTop6FromDatabase}
+                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xs font-semibold text-[11px] transition cursor-pointer"
+                  >
+                    ดึง 6 คนแรก
+                  </button>
+                  <button
+                    onClick={handlePullAllActiveFromDatabase}
+                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xs font-semibold text-[11px] transition cursor-pointer"
+                  >
+                    ดึงทั้งหมด ({activeEmployees.length} คน)
+                  </button>
+                  {dbDepartmentFilter !== 'all' && (
+                    <button
+                      onClick={() => handlePullByDepartment(dbDepartmentFilter)}
+                      className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xs font-bold text-[11px] transition cursor-pointer"
+                    >
+                      ดึงเฉพาะแผนก "{dbDepartmentFilter}" ทั้งหมด
+                    </button>
+                  )}
+                </div>
+
+                <div className="text-[11px] text-slate-400">
+                  พบ <span className="font-bold text-indigo-600">{filteredDbEmployees.length}</span> คน จากฐานข้อมูล
+                </div>
+              </div>
+            </div>
+
+            {/* Employee Cards Grid */}
+            <div className="flex-1 overflow-y-auto p-4 max-h-[55vh]">
+              {filteredDbEmployees.length === 0 ? (
+                <div className="text-center py-12 space-y-2">
+                  <Users className="w-12 h-12 text-slate-300 mx-auto stroke-1" />
+                  <p className="text-sm font-bold text-slate-600">ไม่พบข้อมูลพนักงานที่ตรงกับเงื่อนไข</p>
+                  <p className="text-xs text-slate-400">ลองเปลี่ยนคำค้นหา หรือเลือกแผนกอื่น</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {filteredDbEmployees.map((emp) => {
+                    const existingIndex = poolIds.indexOf(emp.id);
+                    const isInQueue = existingIndex !== -1;
+                    const isCurrentSlotTarget = modalTargetIndex !== null && poolIds[modalTargetIndex] === emp.id;
+
+                    return (
+                      <div
+                        key={emp.id}
+                        className={`p-3.5 rounded-sm border transition flex flex-col justify-between space-y-3 ${
+                          isCurrentSlotTarget
+                            ? 'bg-indigo-50/70 border-indigo-400 ring-1 ring-indigo-400'
+                            : isInQueue
+                              ? 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                              : 'bg-white border-slate-200 hover:border-indigo-400 hover:shadow-sm'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-sm shrink-0 overflow-hidden border border-slate-200">
+                            {emp.avatar ? (
+                              <img src={emp.avatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <span>{emp.name.charAt(0)}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold text-slate-800 leading-tight">
+                                {emp.name}
+                              </span>
+                              {emp.nickname && (
+                                <span className="text-[10px] text-slate-500 font-medium">({emp.nickname})</span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                              {emp.role || 'พนักงาน'}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                              {emp.department && (
+                                <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded text-[9px] font-semibold border border-slate-200">
+                                  {emp.department}
+                                </span>
+                              )}
+                              <span className="text-[9px] font-mono text-slate-400">{emp.id}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Status & Action */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                          <div>
+                            {isInQueue ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-sm border border-indigo-200">
+                                <CheckCircle2 className="w-3 h-3" /> ลำดับที่ {existingIndex + 1}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">ยังไม่อยู่ในคิวเวร</span>
+                            )}
+                          </div>
+
+                          <button
+                            onClick={() => handleSelectFromDbModal(emp.id)}
+                            className={`px-3 py-1.5 rounded-sm text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                              isCurrentSlotTarget
+                                ? 'bg-indigo-600 text-white shadow-xs'
+                                : isInQueue
+                                  ? 'bg-slate-200 hover:bg-indigo-600 hover:text-white text-slate-700'
+                                  : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
+                            }`}
+                          >
+                            {modalTargetIndex !== null ? (
+                              isCurrentSlotTarget ? 'ตำแหน่งนี้อยู่แล้ว' : `ใส่ลำดับที่ ${modalTargetIndex + 1}`
+                            ) : (
+                              isInQueue ? 'เลือกแล้ว (แทนที่)' : '+ เพิ่มเข้าคิว'
+                            )}
+                          </button>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div className="text-xs text-slate-500">
+                รายชื่อดึงสดจากฐานข้อมูลพนักงานบริษัท ({activeEmployees.length} คนสถานะทำงานอยู่)
+              </div>
+              <button
+                onClick={() => setShowDbModal(false)}
+                className="px-4 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-sm text-xs font-bold transition cursor-pointer"
+              >
+                เสร็จสิ้น / ปิดหน้าต่าง
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

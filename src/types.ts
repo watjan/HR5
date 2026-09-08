@@ -1,6 +1,7 @@
 export interface Employee {
   id: string;
   name: string;
+  nickname?: string;
   avatar: string;
   role: string;
   department: string;
@@ -250,6 +251,7 @@ export interface CounterDutyAssignment {
   originalEmployeeId?: string;
   originalEmployeeName?: string;
   skipReason?: string;
+  poolRank?: number; // ลำดับที่ในคิวจัดเวร (1, 2, 3...)
 }
 
 export interface CounterDuty {
