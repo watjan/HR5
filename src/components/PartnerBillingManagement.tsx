@@ -10,7 +10,7 @@ import {
   Building2, Mail, MapPin, PlusCircle, Check, ChevronRight,
   TrendingUp, Activity, Sparkles, Layers, Award, ShieldCheck,
   ArrowRight, ChevronDown, Workflow, Users, Percent, BarChart3, Coins,
-  Volume2, VolumeX, Truck
+  Volume2, VolumeX, Truck, FileSpreadsheet
 } from 'lucide-react';
 
 interface PartnerBillingManagementProps {
@@ -29,6 +29,7 @@ interface PartnerBillingManagementProps {
   onUpdateWaybill?: (waybill: TransportWaybill) => void;
   onDeleteWaybill?: (id: string) => void;
   initialSubTab?: 'dashboard' | 'documents' | 'partners' | 'transport_waybills';
+  onNavigateToMonthlyReports?: () => void;
 }
 
 export default function PartnerBillingManagement({
@@ -46,7 +47,8 @@ export default function PartnerBillingManagement({
   onAddWaybill,
   onUpdateWaybill,
   onDeleteWaybill,
-  initialSubTab
+  initialSubTab,
+  onNavigateToMonthlyReports
 }: PartnerBillingManagementProps) {
   // Navigation / Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -121,32 +123,42 @@ export default function PartnerBillingManagement({
   const itemsPerPage = 10;
 
   // Eye / Privacy Toggle States for Amounts (1. ใบส่งของ DO, 2. ใบวางบิล BI, 3. ยอดค้างจ่าย, 4. ชำระแล้ว)
+  // ข้อกำหนด: ถ้าเข้าใช้งานครั้งแรกแต่ละครั้ง ให้ "ปิดการดู" (Default: Closed/Masked) เสมอเพื่อความปลอดภัย
+  // ใช้ sessionStorage เฉพาะเพื่อคงสถานะการเปิดดูระหว่างทำงานในเซสชันปัจจุบัน (เปิดไว้ขณะสลับแท็บเอกสาร)
   const [hideDeliveryAmount, setHideDeliveryAmount] = useState<boolean>(() => {
     try {
-      return safeStorage.getItem('hr_hide_partner_do_amount') === 'true';
+      safeStorage.removeItem('hr_hide_partner_do_amount');
+      const sessionVal = sessionStorage.getItem('hr_partner_amounts_revealed_session');
+      return sessionVal !== 'true'; // ถ้าเข้าใช้งานครั้งแรกของแต่ละครั้ง จะเป็น true เสมอ (ปิดการดู)
     } catch {
-      return false;
+      return true;
     }
   });
   const [hideBilledAmount, setHideBilledAmount] = useState<boolean>(() => {
     try {
-      return safeStorage.getItem('hr_hide_partner_bi_amount') === 'true';
+      safeStorage.removeItem('hr_hide_partner_bi_amount');
+      const sessionVal = sessionStorage.getItem('hr_partner_amounts_revealed_session');
+      return sessionVal !== 'true';
     } catch {
-      return false;
+      return true;
     }
   });
   const [hidePendingAmount, setHidePendingAmount] = useState<boolean>(() => {
     try {
-      return safeStorage.getItem('hr_hide_partner_pending_amount') === 'true';
+      safeStorage.removeItem('hr_hide_partner_pending_amount');
+      const sessionVal = sessionStorage.getItem('hr_partner_amounts_revealed_session');
+      return sessionVal !== 'true';
     } catch {
-      return false;
+      return true;
     }
   });
   const [hidePaidAmount, setHidePaidAmount] = useState<boolean>(() => {
     try {
-      return safeStorage.getItem('hr_hide_partner_paid_amount') === 'true';
+      safeStorage.removeItem('hr_hide_partner_paid_amount');
+      const sessionVal = sessionStorage.getItem('hr_partner_amounts_revealed_session');
+      return sessionVal !== 'true';
     } catch {
-      return false;
+      return true;
     }
   });
 
@@ -161,13 +173,11 @@ export default function PartnerBillingManagement({
     setHidePendingAmount(targetHide);
     setHidePaidAmount(targetHide);
     try {
-      safeStorage.setItem('hr_hide_partner_do_amount', String(targetHide));
-      safeStorage.setItem('hr_hide_partner_bi_amount', String(targetHide));
-      safeStorage.setItem('hr_hide_partner_pending_amount', String(targetHide));
-      safeStorage.setItem('hr_hide_partner_paid_amount', String(targetHide));
+      // บันทึกเฉพาะใน sessionStorage สำหรับเซสชันปัจจุบัน ไม่เก็บค้างใน permanent localStorage เพื่อให้การเข้าใช้งานครั้งแรกแต่ละครั้งเริ่มต้นแบบปิดการดูเสมอ
+      sessionStorage.setItem('hr_partner_amounts_revealed_session', String(!targetHide));
     } catch {}
     playNotificationSound();
-    showSuccess(targetHide ? 'ปิดซ่อนยอดเงินทั้งหมดเรียบร้อย (Privacy Mode On)' : 'เปิดแสดงยอดเงินทั้งหมดเรียบร้อย (Privacy Mode Off)');
+    showSuccess(targetHide ? 'ปิดซ่อนยอดเงินทั้งหมดเรียบร้อย (Privacy Mode On)' : 'เปิดแสดงยอดเงินทั้งหมดเรียบร้อย (Show All Amounts)');
   };
 
   const toggleSingleAmount = (
@@ -180,7 +190,7 @@ export default function PartnerBillingManagement({
     const nextVal = !currentValue;
     setter(nextVal);
     try {
-      safeStorage.setItem(storageKey, String(nextVal));
+      sessionStorage.setItem(`hr_hide_partner_${keyName}_session`, String(nextVal));
     } catch {}
     playNotificationSound();
     showSuccess(nextVal ? `ปิดซ่อนยอดเงิน ${label} เรียบร้อย` : `เปิดแสดงยอดเงิน ${label} เรียบร้อย`);
@@ -1144,6 +1154,19 @@ export default function PartnerBillingManagement({
               </span>
               <span>แจ้งเตือนค้างจ่าย ({unPaidBilledBillings.length})</span>
             </button>
+
+            {/* MONTHLY REPORT SHORTCUT */}
+            {onNavigateToMonthlyReports && (
+              <button
+                type="button"
+                onClick={onNavigateToMonthlyReports}
+                className="flex-1 sm:flex-initial px-3.5 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100/80 border border-indigo-200 cursor-pointer shadow-2xs"
+                title="เปิดหน้ารายงานของแต่ละเดือน (ยอดคู่ค้า 4 สถานะ และตรวจเช็คกระแสเงินสดขารับ-ขาจ่าย)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                <span>1. หน้ารายงานประจำเดือน</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1462,14 +1485,14 @@ export default function PartnerBillingManagement({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-800 font-sans">ภาพรวมสถิติทางการเงิน (Financial Analytics)</span>
-              <span className="text-[11px] text-slate-400 font-sans hidden md:inline">| กดรูปตา 👁️ เพื่อเปิดดู/ปิดซ่อนตัวเลข</span>
+              <span className="text-[11px] text-slate-400 font-sans hidden md:inline">| เริ่มต้นปิดการดูเพื่อความปลอดภัย (กดรูปตา 👁️ เพื่อเปิดดู)</span>
             </div>
             <button
               type="button"
               onClick={toggleAllAmountsVisibility}
               className={`px-3 py-1.5 rounded-sm text-xs font-semibold flex items-center gap-2 transition cursor-pointer border ${
                 isAllAmountsHidden
-                  ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 shadow-xs'
+                  ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:border-blue-300 shadow-xs'
                   : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
               }`}
               title={isAllAmountsHidden ? "กดเพื่อเปิดดูยอดเงินทั้งหมด" : "กดเพื่อปิดซ่อนยอดเงินทั้งหมดไม่ให้คนอื่นเห็น"}
@@ -2132,14 +2155,14 @@ export default function PartnerBillingManagement({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-800 font-sans">สรุปยอดรวมรายการคู่ค้า (Financial Overview)</span>
-              <span className="text-[11px] text-slate-400 font-sans hidden md:inline">| กดรูปตา 👁️ เพื่อเปิดดู/ปิดซ่อนตัวเลขไม่ให้ผู้อื่นเห็น</span>
+              <span className="text-[11px] text-slate-400 font-sans hidden md:inline">| เริ่มต้นปิดการดูเพื่อความปลอดภัย (กดปุ่ม "เปิดดูยอดเงินทั้งหมด" หรือรูปตา 👁️ เพื่อดูตัวเลข)</span>
             </div>
             <button
               type="button"
               onClick={toggleAllAmountsVisibility}
               className={`px-3 py-1.5 rounded-sm text-xs font-semibold flex items-center gap-2 transition cursor-pointer border ${
                 isAllAmountsHidden
-                  ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 shadow-xs'
+                  ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:border-blue-300 shadow-xs'
                   : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
               }`}
               title={isAllAmountsHidden ? "กดเพื่อเปิดดูยอดเงินทั้งหมด" : "กดเพื่อปิดซ่อนยอดเงินทั้งหมดไม่ให้คนอื่นเห็น"}

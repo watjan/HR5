@@ -190,6 +190,7 @@ export interface AdminPermissions {
   transport_waybills?: boolean;
   permits?: boolean;
   official_expenses?: boolean;
+  monthly_reports?: boolean;
   recruitment: boolean;
   performance: boolean;
   settings: boolean;

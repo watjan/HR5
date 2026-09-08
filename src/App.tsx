@@ -44,6 +44,7 @@ import ApiwatLogo3D from './components/ApiwatLogo3D';
 import CounterDutyManagement from './components/CounterDutyManagement';
 import PermitsManagement from './components/PermitsManagement';
 import { OfficialExpensesManagement } from './components/OfficialExpensesManagement';
+import MonthlyFinancialReports from './components/MonthlyFinancialReports';
 
 
 // Icons
@@ -78,7 +79,8 @@ import {
   Truck,
   FileCheck,
   ShieldCheck,
-  FileText
+  FileText,
+  FileSpreadsheet
 } from 'lucide-react';
 
 // Hostinger MySQL system (u753988669_hr)
@@ -1797,6 +1799,7 @@ export default function App() {
     if (tabId === 'database_inspector') return !!permissions.database_inspector;
     if (tabId === 'permits') return permissions.permits !== false;
     if (tabId === 'official_expenses') return permissions.official_expenses !== false;
+    if (tabId === 'monthly_reports') return permissions.monthly_reports !== false;
     
     return true;
   };
@@ -1812,6 +1815,7 @@ export default function App() {
   const sidebarItems = [
     { id: 'overview', name: 'แผงภาพรวมระบบ', icon: LayoutDashboard },
     { id: 'stock_dashboard', name: 'ทดลองโค้ด 1.เหมือนหุ้น', icon: TrendingUp },
+    { id: 'monthly_reports', name: '1. หน้ารายงานประจำเดือน', icon: FileSpreadsheet },
     { id: 'employees', name: 'รายชื่อพนักงาน', icon: Users },
     { id: 'counter_duty', name: '1. เฝ้าเคาเตอร์', icon: Clock },
     { id: 'attendance', name: 'ลงเวลา & สลับวันหยุด', icon: Clock },
@@ -2361,6 +2365,7 @@ export default function App() {
               onAddTransaction={handleAddTransaction}
               onUpdateTransaction={handleUpdateTransaction}
               onDeleteTransaction={handleDeleteTransaction}
+              onNavigateToMonthlyReports={() => setActiveTab('monthly_reports')}
             />
           )}
 
@@ -2396,6 +2401,20 @@ export default function App() {
               onUpdateWaybill={handleUpdateTransportWaybill}
               onDeleteWaybill={handleDeleteTransportWaybill}
               initialSubTab={activeTab === 'transport_waybills' ? 'transport_waybills' : 'dashboard'}
+              onNavigateToMonthlyReports={() => setActiveTab('monthly_reports')}
+            />
+          )}
+
+          {activeTab === 'monthly_reports' && (
+            <MonthlyFinancialReports 
+              partnerBillings={partnerBillings}
+              partners={partnerCompanies}
+              cashFlow={cashFlow}
+              payroll={payroll}
+              cheques={cheques}
+              sales={sales}
+              officialExpenses={officialExpenses}
+              onNavigateToTab={(tabId) => setActiveTab(tabId)}
             />
           )}
 

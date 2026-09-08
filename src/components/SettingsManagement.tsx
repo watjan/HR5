@@ -1534,6 +1534,7 @@ export default function SettingsManagement({
                             else if (key === 'backup_restore') { label = 'สำรองและกู้คืนข้อมูล'; desc = 'ดาวน์โหลดสำรองและอัปโหลดข้อมูล JSON'; }
                             else if (key === 'database_inspector') { label = 'ตรวจสอบตารางฐานข้อมูล'; desc = 'ตรวจสอบตารางฐานข้อมูลระดับระบบ'; }
                             else if (key === 'permits') { label = 'ขอใบอนุญาต & ต่ออายุ'; desc = 'จัดการทะเบียนคำขอ ใบอนุญาต และการต่ออายุ'; }
+                            else if (key === 'monthly_reports') { label = 'หน้ารายงานประจำเดือน'; desc = 'รายงานยอดคู่ค้า 4 สถานะ และตรวจเช็คกระแสเงินสดขารับ-ขาจ่าย'; }
 
                             // Prevent current active admin from disabling settings permission on themselves
                             const isSelf = editingAdminId.toLowerCase() === currentAdminId.toLowerCase();
@@ -1692,6 +1693,7 @@ export default function SettingsManagement({
                                       else if (key === 'settings') name = 'ตั้งค่าระบบ';
                                       else if (key === 'backup_restore') name = 'จัดการข้อมูลสำรอง';
                                       else if (key === 'database_inspector') name = 'ตรวจสอบฐานข้อมูล';
+                                      else if (key === 'monthly_reports') name = 'รายงานประจำเดือน';
 
                                       return (
                                         <span 

@@ -16,7 +16,8 @@ import {
   Activity,
   AlertCircle,
   Edit2,
-  Trash2
+  Trash2,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface CashFlowLedgerProps {
@@ -25,6 +26,7 @@ interface CashFlowLedgerProps {
   onAddTransaction: (tx: CashFlowTransaction) => void;
   onUpdateTransaction?: (tx: CashFlowTransaction) => void;
   onDeleteTransaction?: (id: string) => void;
+  onNavigateToMonthlyReports?: () => void;
 }
 
 export default function CashFlowLedger({ 
@@ -32,7 +34,8 @@ export default function CashFlowLedger({
   payroll, 
   onAddTransaction,
   onUpdateTransaction,
-  onDeleteTransaction
+  onDeleteTransaction,
+  onNavigateToMonthlyReports
 }: CashFlowLedgerProps) {
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -202,12 +205,25 @@ export default function CashFlowLedger({
           <h2 className="text-xl font-light text-slate-900">ตรวจเช็คกระแสเงินสดขารับและขาจ่าย (System Ledger)</h2>
           <p className="text-xs text-slate-500 mt-1 font-sans">ติดตามสถานะการรับเงินและชำระจ่ายของบริษัท รวมถึงงบเงินเดือนและภาษีที่นำส่งจริงแบบเรียลไทม์</p>
         </div>
-        <button
-          onClick={handleOpenAdd}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-mono font-bold uppercase tracking-wider rounded-sm shadow-xs transition cursor-pointer"
-        >
-          <Plus className="w-4 h-4" /> ลงบันทึกธุรกรรมใหม่
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onNavigateToMonthlyReports && (
+            <button
+              type="button"
+              onClick={onNavigateToMonthlyReports}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold uppercase tracking-wider rounded-sm shadow-2xs transition cursor-pointer"
+              title="เปิดหน้ารายงานของแต่ละเดือน (ยอดคู่ค้า 4 สถานะ และตรวจเช็คกระแสเงินสดขารับ-ขาจ่าย)"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+              <span>1. หน้ารายงานประจำเดือน</span>
+            </button>
+          )}
+          <button
+            onClick={handleOpenAdd}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-mono font-bold uppercase tracking-wider rounded-sm shadow-xs transition cursor-pointer"
+          >
+            <Plus className="w-4 h-4" /> ลงบันทึกธุรกรรมใหม่
+          </button>
+        </div>
       </div>
 
       {/* Aggregate Financial Metrics Row */}
