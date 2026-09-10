@@ -2468,7 +2468,7 @@ export default function PartnerBillingManagement({
           {/* Main Billing Table List */}
           <div className="bg-white border border-slate-200 rounded-sm shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse min-w-[760px]">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-[10px] font-mono font-bold uppercase tracking-wider border-b border-slate-200">
                     <th className="py-3 px-4">รหัส & คู่ค้า</th>

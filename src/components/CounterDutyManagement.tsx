@@ -865,41 +865,41 @@ export default function CounterDutyManagement({
       </AnimatePresence>
 
       {/* Header Panel */}
-      <div className="bg-white p-6 rounded-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm no-print">
+      <div className="bg-white p-4 sm:p-6 rounded-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm no-print">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-sm bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
-            <Clock className="w-6 h-6" />
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-sm bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
+            <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-800 font-sans tracking-tight flex items-center gap-2">
+            <h1 className="text-lg sm:text-xl font-bold text-slate-800 font-sans tracking-tight flex flex-wrap items-center gap-2">
               <span>จัดเวรเฝ้าเคาเตอร์</span>
               <span className="bg-indigo-100 text-indigo-700 text-[10px] px-2 py-0.5 rounded-full font-bold">ระบบอัตโนมัติคิวหมุนเวียน</span>
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">ระบบวิเคราะห์คิวหมุนเวียนต่อเนื่อง {poolIds.length} คน คัดกรองวันหยุดนักขัตฤกษ์ วันลาอนุมัติ และวันหยุดประจําตัวของพนักงานแต่ละคนโดยฉลาด</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {currentSchedule && (
             <>
               <button 
                 onClick={handleExportPDF}
                 disabled={isExportingPdf}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-sm flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 sm:px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-sm flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <FileDown className="w-4 h-4" /> 
-                {isExportingPdf ? 'กำลังสร้าง PDF...' : 'ดาวน์โหลด PDF (เฉพาะตารางเวร)'}
+                {isExportingPdf ? 'กำลังสร้าง PDF...' : 'ดาวน์โหลด PDF'}
               </button>
               <button 
                 onClick={handlePrint}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-sm flex items-center justify-center gap-1.5 border border-slate-200 transition cursor-pointer"
+                className="px-3 sm:px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-sm flex items-center justify-center gap-1.5 border border-slate-200 transition cursor-pointer"
               >
-                <Printer className="w-4 h-4" /> พิมพ์ตารางเวร (Print)
+                <Printer className="w-4 h-4" /> พิมพ์ตารางเวร
               </button>
               <button 
                 onClick={handleSaveToFirebase}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-sm flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
+                className="px-3 sm:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-sm flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
               >
-                <Save className="w-4 h-4" /> บันทึกลงฐานข้อมูล Firebase
+                <Save className="w-4 h-4" /> บันทึก Firebase
               </button>
             </>
           )}
@@ -1322,13 +1322,20 @@ export default function CounterDutyManagement({
                   </div>
                 </div>
 
+                {/* Mobile scroll hint */}
+                <div className="md:hidden flex items-center justify-between text-[11px] text-slate-500 bg-indigo-50/70 border border-indigo-100 px-2.5 py-1.5 rounded-sm no-print">
+                  <span>👈 เลื่อนซ้าย-ขวา เพื่อดูตารางครบ 7 วัน 👉</span>
+                  <span className="font-bold text-indigo-700">7 วัน</span>
+                </div>
+
                 {/* Calendar Grid */}
-                <div className="grid grid-cols-7 gap-1 print-grid">
-                  {WEEKDAYS.map((day, idx) => (
-                    <div key={idx} className="py-2 text-center text-xs font-bold text-slate-600 bg-slate-100/60 rounded-sm border border-slate-200">
-                      {day}
-                    </div>
-                  ))}
+                <div className="overflow-x-auto pb-1">
+                  <div className="min-w-[620px] md:min-w-0 grid grid-cols-7 gap-1 print-grid">
+                    {WEEKDAYS.map((day, idx) => (
+                      <div key={idx} className="py-2 text-center text-xs font-bold text-slate-600 bg-slate-100/60 rounded-sm border border-slate-200">
+                        {day}
+                      </div>
+                    ))}
 
                   {calendarDays.map((dayObj, idx) => {
                     if (!dayObj) {
@@ -1398,6 +1405,7 @@ export default function CounterDutyManagement({
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               </div>
 

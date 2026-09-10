@@ -2008,23 +2008,35 @@ export default function App() {
         </div>
       </aside>
 
+      {/* Mobile Sidebar Backdrop Overlay */}
+      {sidebarOpen && (
+        <div 
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-35 md:hidden transition-opacity"
+          aria-hidden="true"
+        />
+      )}
+
       {/* MAIN CONTAINER CONTENT */}
       <div className="flex-1 md:pl-64 flex flex-col min-h-screen">
         
         {/* TOP COMPONENT HEADER */}
-        <header id="top-app-header" className="bg-white border-b border-slate-200 h-16 px-6 flex items-center justify-between sticky top-0 z-30 no-print">
-          <div className="flex items-center gap-3">
+        <header id="top-app-header" className="bg-white border-b border-slate-200 h-16 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30 no-print gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Mobile menu toggle */}
             <button 
               onClick={() => setSidebarOpen(true)}
-              className="p-1.5 md:hidden hover:bg-slate-50 text-slate-500 rounded-lg"
+              className="p-1.5 md:hidden hover:bg-slate-50 text-slate-500 rounded-lg shrink-0"
+              aria-label="เปิดเมนู"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">System Overview</span>
-              <span className="text-slate-300 text-xs font-mono">/</span>
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider font-mono">Main Dashboard</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono hidden sm:inline">System Overview</span>
+              <span className="text-slate-300 text-xs font-mono hidden sm:inline">/</span>
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider font-mono truncate">
+                {sidebarItems.find(i => i.id === activeTab)?.name || 'Dashboard'}
+              </span>
             </div>
           </div>
 
@@ -2237,7 +2249,7 @@ export default function App() {
             {/* Red ZIP Download Button */}
             <a
               href="/api/download-zip"
-              className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3 py-1.5 rounded-sm shadow-md flex items-center gap-1.5 transition-colors cursor-pointer animate-pulse-once"
+              className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-2.5 sm:px-3 py-1.5 rounded-sm shadow-md flex items-center gap-1 sm:gap-1.5 transition-colors cursor-pointer shrink-0"
               title="ดาวน์โหลดโค้ดทั้งโปรเจกต์เป็นไฟล์ ZIP เพื่อนำไปติดตั้งบน Hostinger"
             >
               <Download className="w-3.5 h-3.5" />
@@ -2245,8 +2257,8 @@ export default function App() {
               <span className="inline md:hidden">ZIP</span>
             </a>
 
-            <div className="w-px h-6 bg-slate-250"></div>
-            <div className="flex items-center gap-2.5">
+            <div className="w-px h-6 bg-slate-250 hidden xs:block"></div>
+            <div className="flex items-center gap-2 shrink-0">
               <span className="text-xs font-bold text-slate-700 hidden sm:inline-block font-mono uppercase">ADMIN</span>
               <div className="w-7 h-7 bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-full flex items-center justify-center text-xs">
                 A
@@ -2256,7 +2268,7 @@ export default function App() {
         </header>
 
         {/* BODY TAB CONTENT PANEL */}
-        <main id="tab-content-panel" className="p-8 flex-1 space-y-8 max-w-7xl mx-auto w-full">
+        <main id="tab-content-panel" className="p-3.5 sm:p-6 md:p-8 flex-1 space-y-6 sm:space-y-8 max-w-7xl mx-auto w-full pb-20 md:pb-8">
 
           {activeTab === 'overview' && (
             <DashboardOverview 
@@ -2561,6 +2573,61 @@ export default function App() {
             />
           )}
         </main>
+
+        {/* Mobile Bottom Navigation Bar (< md screens) */}
+        <nav 
+          id="mobile-bottom-navigation" 
+          aria-label="แถบเมนูด่วนสำหรับมือถือ"
+          className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1 py-1.5 flex items-center justify-around shadow-[0_-2px_12px_rgba(0,0,0,0.06)] no-print"
+        >
+          <button
+            onClick={() => { setActiveTab('overview'); playNotificationSound(); }}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-sm transition min-w-[50px] cursor-pointer ${
+              activeTab === 'overview' ? 'text-blue-600 font-bold' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            <span className="text-[10px] mt-0.5 font-sans">ภาพรวม</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('counter_duty'); playNotificationSound(); }}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-sm transition min-w-[50px] cursor-pointer ${
+              activeTab === 'counter_duty' ? 'text-indigo-600 font-bold' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            <span className="text-[10px] mt-0.5 font-sans">เวรเคาน์เตอร์</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('employees'); playNotificationSound(); }}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-sm transition min-w-[50px] cursor-pointer ${
+              activeTab === 'employees' ? 'text-blue-600 font-bold' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span className="text-[10px] mt-0.5 font-sans">พนักงาน</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('attendance'); playNotificationSound(); }}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-sm transition min-w-[50px] cursor-pointer ${
+              activeTab === 'attendance' ? 'text-blue-600 font-bold' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            <span className="text-[10px] mt-0.5 font-sans">เวลา/ขาดลา</span>
+          </button>
+
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="flex flex-col items-center justify-center py-1 px-2 rounded-sm transition min-w-[50px] text-slate-500 hover:text-slate-900 cursor-pointer"
+          >
+            <Menu className="w-4 h-4" />
+            <span className="text-[10px] mt-0.5 font-sans">เมนู</span>
+          </button>
+        </nav>
       </div>
     </div>
   );

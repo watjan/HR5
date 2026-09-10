@@ -666,7 +666,7 @@ export default function PayrollManagement({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[780px]">
             <thead>
               <tr className="border-b border-slate-200 text-slate-400 text-[11px] font-semibold uppercase tracking-wider bg-slate-50/20">
                 <th className="py-3 px-6">ชื่อพนักงาน & งวดการจ่าย</th>

@@ -479,12 +479,12 @@ export default function EmployeeDirectory({
           />
         </div>
         {/* Department Filter & Segment Switcher */}
-        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+        <div className="flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 items-center">
           <select
             id="department-filter"
             value={deptFilter}
             onChange={(e) => setDeptFilter(e.target.value)}
-            className="px-3.5 py-2 border border-slate-200 rounded-sm text-sm bg-white focus:outline-none focus:border-blue-500 text-slate-700"
+            className="flex-1 sm:flex-initial px-3.5 py-2 border border-slate-200 rounded-sm text-sm bg-white focus:outline-none focus:border-blue-500 text-slate-700"
           >
             {departments.map(dept => (
               <option key={dept} value={dept}>
@@ -498,7 +498,7 @@ export default function EmployeeDirectory({
             id="status-filter"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3.5 py-2 border border-slate-200 rounded-sm text-sm bg-white focus:outline-none focus:border-blue-500 text-slate-700"
+            className="flex-1 sm:flex-initial px-3.5 py-2 border border-slate-200 rounded-sm text-sm bg-white focus:outline-none focus:border-blue-500 text-slate-700"
           >
             <option value="All">ทุกสถานะ</option>
             <option value="active">ปกติ (Active)</option>
@@ -507,12 +507,12 @@ export default function EmployeeDirectory({
           </select>
 
           {/* View Mode Toggle Segmented Control */}
-          <div className="flex border border-slate-200 rounded-sm overflow-hidden p-0.5 bg-slate-100 self-center">
+          <div className="w-full sm:w-auto flex border border-slate-200 rounded-sm overflow-hidden p-0.5 bg-slate-100 justify-between sm:justify-start">
             <button
               id="view-mode-cards-btn"
               type="button"
               onClick={() => setViewMode('cards')}
-              className={`px-3 py-1 rounded-xs text-xs font-bold transition flex items-center gap-1.5 ${viewMode === 'cards' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+              className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 rounded-xs text-xs font-bold transition flex items-center justify-center gap-1.5 ${viewMode === 'cards' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
               title="สลับเป็นมุมมอง บัตรเครดิตพนักงาน"
             >
               <CreditCard className="w-3.5 h-3.5" /> บัตรพนักงาน
@@ -521,7 +521,7 @@ export default function EmployeeDirectory({
               id="view-mode-table-btn"
               type="button"
               onClick={() => setViewMode('table')}
-              className={`px-3 py-1 rounded-xs text-xs font-bold transition flex items-center gap-1.5 ${viewMode === 'table' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+              className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 rounded-xs text-xs font-bold transition flex items-center justify-center gap-1.5 ${viewMode === 'table' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
               title="สลับเป็นมุมมอง ตาราง"
             >
               <Eye className="w-3.5 h-3.5" /> ตาราง
@@ -530,10 +530,10 @@ export default function EmployeeDirectory({
               id="view-mode-stats-btn"
               type="button"
               onClick={() => setViewMode('stats')}
-              className={`px-3 py-1 rounded-xs text-xs font-bold transition flex items-center gap-1.5 ${viewMode === 'stats' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+              className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 rounded-xs text-xs font-bold transition flex items-center justify-center gap-1.5 ${viewMode === 'stats' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
               title="สลับเป็นมุมมอง ตารางสะสม ขาด ลา สาย"
             >
-              <Calendar className="w-3.5 h-3.5 text-rose-600" /> ตาราง ขาด ลา สาย (2026)
+              <Calendar className="w-3.5 h-3.5 text-rose-600" /> ขาด/ลา/สาย
             </button>
           </div>
         </div>
@@ -567,7 +567,7 @@ export default function EmployeeDirectory({
             </div>
           ) : viewMode === 'table' ? (
             <div id="employee-table-container" className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse min-w-[560px]">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 text-[11px] font-semibold uppercase tracking-wider bg-slate-50/30">
                     <th className="py-3 px-6">พนักงาน</th>
@@ -638,7 +638,7 @@ export default function EmployeeDirectory({
           ) : (
             <div id="employee-stats-container" className="space-y-0">
               {/* Stats Summary Panel */}
-              <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 border-b border-slate-200/60">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 p-3 sm:p-4 bg-slate-50 border-b border-slate-200/60">
                 <div className="bg-white border border-slate-200 p-3 rounded-sm text-center">
                   <span className="text-[10px] uppercase font-mono tracking-wider text-slate-400 block font-bold">สถิติขาดงานรวม (2026)</span>
                   <span className="text-lg font-bold text-rose-600 font-mono mt-1 block">
@@ -661,7 +661,7 @@ export default function EmployeeDirectory({
 
               {/* Stats Table */}
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="w-full text-left border-collapse min-w-[620px]">
                   <thead>
                     <tr className="border-b border-slate-200 text-slate-400 text-[11px] font-semibold uppercase tracking-wider bg-slate-50/50">
                       <th className="py-3 px-4">พนักงาน</th>

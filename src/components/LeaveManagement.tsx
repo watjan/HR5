@@ -445,7 +445,7 @@ export default function LeaveManagement({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[650px]">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 text-[11px] font-semibold uppercase tracking-wider bg-slate-50/30">
                   <th className="py-3 px-6">ชื่อพนักงาน</th>
@@ -892,7 +892,7 @@ export default function LeaveManagement({
             </div>
 
             {/* Table Container (Printable Area) */}
-            <div className="flex-1 overflow-y-auto border border-slate-200 rounded-sm">
+            <div className="flex-1 overflow-auto border border-slate-200 rounded-sm">
               <table id="leave-report-printable-table" className="w-full text-xs text-left border-collapse font-sans min-w-[700px]">
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-250 text-[10px] font-bold text-slate-500 font-mono tracking-wider uppercase sticky top-0 z-10 shadow-3xs">

@@ -726,8 +726,8 @@ export default function AttendanceManagement({
       </div>
 
       {/* Sub Tabs Navigation */}
-      <div className="border-b border-slate-200 flex justify-between items-center no-print">
-        <div className="flex gap-1">
+      <div className="border-b border-slate-200 flex justify-between items-center no-print overflow-x-auto">
+        <div className="flex gap-1 whitespace-nowrap min-w-max">
           <button
             onClick={() => setActiveSubTab('grid')}
             className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition cursor-pointer ${
@@ -1388,7 +1388,7 @@ export default function AttendanceManagement({
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono">ประวัติและรายการขอสลับวันหยุดปฏิบัติหน้าที่</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-slate-700 text-left border-collapse">
+              <table className="w-full text-sm text-slate-700 text-left border-collapse min-w-[700px]">
                 <thead>
                   <tr className="bg-slate-100 text-slate-500 text-[10px] font-mono font-bold uppercase tracking-wider border-b border-slate-200">
                     <th className="py-3 px-6">พนักงาน</th>
