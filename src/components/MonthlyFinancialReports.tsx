@@ -37,7 +37,8 @@ import {
   ChevronUp,
   PieChart as PieIcon,
   ShieldCheck,
-  FileSpreadsheet
+  FileSpreadsheet,
+  SlidersHorizontal
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -102,6 +103,10 @@ export default function MonthlyFinancialReports({
   // Search & Filter within partner documents list
   const [partnerDocFilter, setPartnerDocFilter] = useState<'all' | 'pending' | 'billed' | 'paid' | 'cancelled'>('all');
   const [searchPartnerQuery, setSearchPartnerQuery] = useState<string>('');
+
+  // Limit of displayed partner documents (User request: default 10 latest items, or choose any number)
+  const [partnerDocLimit, setPartnerDocLimit] = useState<'10' | '20' | '50' | '100' | 'all' | 'custom'>('10');
+  const [customPartnerDocLimit, setCustomPartnerDocLimit] = useState<string>('10');
 
   // Privacy mask toggle - default hidden (closed eye) on initial entry for maximum financial safety
   const [isAmountsHidden, setIsAmountsHidden] = useState<boolean>(() => {
@@ -271,21 +276,41 @@ export default function MonthlyFinancialReports({
     return Array.from(map.values()).sort((a, b) => b.total - a.total);
   }, [filteredPartnerBillings, getBillingItemNet]);
 
-  // Filtered list for detailed view table
-  const displayedPartnerBillings = useMemo(() => {
-    return filteredPartnerBillings.filter(b => {
-      if (partnerDocFilter !== 'all' && b.status !== partnerDocFilter) return false;
-      if (searchPartnerQuery.trim()) {
-        const q = searchPartnerQuery.toLowerCase();
-        const matchName = (b.partnerName || '').toLowerCase().includes(q);
-        const matchDoc = (b.docNumber || '').toLowerCase().includes(q);
-        const matchDelivery = (b.deliveryDocNumber || '').toLowerCase().includes(q);
-        const matchBilling = (b.billingDocNumber || '').toLowerCase().includes(q);
-        return matchName || matchDoc || matchDelivery || matchBilling;
-      }
-      return true;
-    });
+  // Filtered and sorted list for detailed view table (sorted by latest date first)
+  const allFilteredPartnerBillings = useMemo(() => {
+    return [...filteredPartnerBillings]
+      .filter(b => {
+        if (partnerDocFilter !== 'all' && b.status !== partnerDocFilter) return false;
+        if (searchPartnerQuery.trim()) {
+          const q = searchPartnerQuery.toLowerCase();
+          const matchName = (b.partnerName || '').toLowerCase().includes(q);
+          const matchDoc = (b.docNumber || '').toLowerCase().includes(q);
+          const matchDelivery = (b.deliveryDocNumber || '').toLowerCase().includes(q);
+          const matchBilling = (b.billingDocNumber || '').toLowerCase().includes(q);
+          return matchName || matchDoc || matchDelivery || matchBilling;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const dateA = a.issueDate || a.dueDate || '';
+        const dateB = b.issueDate || b.dueDate || '';
+        if (dateB !== dateA) return dateB.localeCompare(dateA);
+        return (b.id || '').localeCompare(a.id || '');
+      });
   }, [filteredPartnerBillings, partnerDocFilter, searchPartnerQuery]);
+
+  const effectivePartnerDocLimit = useMemo(() => {
+    if (partnerDocLimit === 'all') return allFilteredPartnerBillings.length;
+    if (partnerDocLimit === 'custom') {
+      const parsed = parseInt(customPartnerDocLimit, 10);
+      return isNaN(parsed) || parsed <= 0 ? 10 : parsed;
+    }
+    return parseInt(partnerDocLimit, 10) || 10;
+  }, [partnerDocLimit, customPartnerDocLimit, allFilteredPartnerBillings.length]);
+
+  const displayedPartnerBillings = useMemo(() => {
+    return allFilteredPartnerBillings.slice(0, effectivePartnerDocLimit);
+  }, [allFilteredPartnerBillings, effectivePartnerDocLimit]);
 
   // ─────────────────────────────────────────────────────────────
   // 2. CASH FLOW & CHEQUES CALCULATIONS (ขารับ vs ขาจ่าย - จ่ายแล้ว vs ยังไม่จ่าย)
@@ -1240,6 +1265,113 @@ export default function MonthlyFinancialReports({
             </div>
           </div>
 
+          {/* Sub-bar: Display Count Selector & Status (User request: 10 รายการล่าสุด หรือเลือกกี่รายการก็ได้) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50 border border-slate-200 rounded-md px-3.5 py-2 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-slate-700 font-sans flex items-center gap-1.5">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600" />
+                <span>จำนวนรายการที่แสดง:</span>
+              </span>
+
+              {/* Quick Select Buttons */}
+              <div className="inline-flex rounded-md shadow-2xs border border-slate-200 bg-white p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setPartnerDocLimit('10')}
+                  className={`px-2.5 py-1 text-xs font-bold rounded transition cursor-pointer ${
+                    partnerDocLimit === '10'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  10 รายการล่าสุด
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPartnerDocLimit('20')}
+                  className={`px-2.5 py-1 text-xs font-bold rounded transition cursor-pointer ${
+                    partnerDocLimit === '20'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  20 รายการ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPartnerDocLimit('50')}
+                  className={`px-2.5 py-1 text-xs font-bold rounded transition cursor-pointer ${
+                    partnerDocLimit === '50'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  50 รายการ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPartnerDocLimit('all')}
+                  className={`px-2.5 py-1 text-xs font-bold rounded transition cursor-pointer ${
+                    partnerDocLimit === 'all'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  แสดงทั้งหมด ({allFilteredPartnerBillings.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPartnerDocLimit('custom')}
+                  className={`px-2.5 py-1 text-xs font-bold rounded transition cursor-pointer ${
+                    partnerDocLimit === 'custom'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  กำหนดเอง...
+                </button>
+              </div>
+
+              {/* Custom number input if 'custom' is selected */}
+              {partnerDocLimit === 'custom' && (
+                <div className="inline-flex items-center gap-1.5 ml-1">
+                  <input
+                    type="number"
+                    min="1"
+                    max="10000"
+                    value={customPartnerDocLimit}
+                    onChange={e => setCustomPartnerDocLimit(e.target.value)}
+                    className="w-20 px-2 py-1 text-xs bg-white border border-indigo-300 rounded font-mono font-bold text-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    placeholder="ระบุจำนวน"
+                  />
+                  <span className="text-slate-500 text-xs font-sans">รายการ</span>
+                </div>
+              )}
+            </div>
+
+            {/* Status Information */}
+            <div className="text-slate-500 text-xs font-sans flex items-center gap-1.5">
+              <span>กำลังแสดง</span>
+              <strong className="font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                {displayedPartnerBillings.length}
+              </strong>
+              <span>จากทั้งหมด</span>
+              <strong className="font-mono text-slate-800">
+                {allFilteredPartnerBillings.length}
+              </strong>
+              <span>รายการ (เรียงตามล่าสุด)</span>
+              {partnerDocLimit !== 'all' && allFilteredPartnerBillings.length > displayedPartnerBillings.length && (
+                <button
+                  type="button"
+                  onClick={() => setPartnerDocLimit('all')}
+                  className="text-indigo-600 hover:underline font-bold ml-1 cursor-pointer"
+                >
+                  (ดูทั้งหมด)
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Partner Billings Table */}
           <div className="overflow-x-auto border border-slate-200 rounded-lg">
             <table className="w-full text-xs text-left">
@@ -1328,6 +1460,21 @@ export default function MonthlyFinancialReports({
               </tbody>
             </table>
           </div>
+
+          {allFilteredPartnerBillings.length > displayedPartnerBillings.length && (
+            <div className="flex items-center justify-between p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-md text-xs text-indigo-900">
+              <span className="font-sans">
+                กำลังแสดง <strong>{displayedPartnerBillings.length}</strong> รายการล่าสุด จากทั้งหมด <strong>{allFilteredPartnerBillings.length}</strong> รายการ
+              </span>
+              <button
+                type="button"
+                onClick={() => setPartnerDocLimit('all')}
+                className="px-3 py-1 bg-indigo-600 text-white font-bold rounded shadow-xs hover:bg-indigo-700 transition cursor-pointer"
+              >
+                ดูทั้งหมด {allFilteredPartnerBillings.length} รายการ
+              </button>
+            </div>
+          )}
 
           {/* Partner Company Matrix Breakdown */}
           {partnerCompanyBreakdown.length > 0 && (

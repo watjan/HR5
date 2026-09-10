@@ -22,7 +22,11 @@ import {
   ClipboardList,
   RefreshCw,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
 
 
@@ -54,6 +58,13 @@ export default function TransportWaybillManagement({
   const [searchTerm, setSearchTerm] = useState('');
   const [carrierFilter, setCarrierFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 10;
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, carrierFilter, statusFilter]);
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -332,6 +343,15 @@ export default function TransportWaybillManagement({
     });
   }, [waybills, searchTerm, carrierFilter, statusFilter]);
 
+  const totalWaybills = filteredWaybills.length;
+  const totalPages = Math.max(1, Math.ceil(totalWaybills / pageSize));
+  const activePage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const paginatedWaybills = useMemo(() => {
+    const startIdx = (activePage - 1) * pageSize;
+    return filteredWaybills.slice(startIdx, startIdx + pageSize);
+  }, [filteredWaybills, activePage, pageSize]);
+
   // Statistics Summary
   const stats = useMemo(() => {
     const totalCount = waybills.length;
@@ -556,13 +576,16 @@ export default function TransportWaybillManagement({
 
       {/* 📋 TRANSPORT WAYBILLS TABLE */}
       <div className="bg-white rounded-md shadow-xs border border-slate-200 overflow-hidden">
-        <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
+        <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2 font-bold text-slate-700">
             <ClipboardList className="w-4 h-4 text-indigo-600" />
-            <span>ตารางตารางข้อมูลใบขนส่งและใบหัก ณ ที่จ่าย ({filteredWaybills.length} รายการ)</span>
+            <span>ตารางข้อมูลใบขนส่งและใบหัก ณ ที่จ่าย ({totalWaybills} รายการ)</span>
+            <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-[10px] font-mono font-bold">
+              หน้าละ 10 รายการ
+            </span>
           </div>
-          <span className="text-[11px] text-slate-500">
-            เรียงตามวันที่จัดส่งล่าสุด
+          <span className="text-[11px] text-slate-500 font-sans">
+            แสดงหน้า <strong className="font-mono text-indigo-700">{activePage}</strong> จาก <strong className="font-mono text-slate-700">{totalPages}</strong> (เรียงตามวันที่จัดส่งล่าสุด)
           </span>
         </div>
 
@@ -581,8 +604,8 @@ export default function TransportWaybillManagement({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredWaybills.length > 0 ? (
-                filteredWaybills.map((wb) => {
+              {paginatedWaybills.length > 0 ? (
+                paginatedWaybills.map((wb) => {
                   const isPending = wb.status === 'pending_receipt';
                   const isReceived = wb.status === 'receipt_received';
 
@@ -745,6 +768,105 @@ export default function TransportWaybillManagement({
             </tbody>
           </table>
         </div>
+
+        {/* 📄 PAGINATION CONTROLS (หน้าละ 10 รายการ) */}
+        {totalWaybills > 0 && (
+          <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="text-slate-600 font-sans flex items-center gap-2">
+              <span>
+                แสดง <strong className="font-mono text-slate-800">{(activePage - 1) * pageSize + 1}</strong> - <strong className="font-mono text-slate-800">{Math.min(activePage * pageSize, totalWaybills)}</strong> จากทั้งหมด <strong className="font-mono text-slate-900">{totalWaybills}</strong> รายการ
+              </span>
+              <span className="text-slate-400">|</span>
+              <span>
+                หน้า <strong className="font-mono text-indigo-700">{activePage}</strong> / <strong className="font-mono text-slate-700">{totalPages}</strong>
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(1)}
+                disabled={activePage === 1}
+                className="p-1.5 rounded-sm border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-35 disabled:cursor-not-allowed transition cursor-pointer"
+                title="หน้าแรก"
+              >
+                <ChevronsLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={activePage === 1}
+                className="px-2.5 py-1.5 rounded-sm border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-35 disabled:cursor-not-allowed transition font-semibold flex items-center gap-1 cursor-pointer"
+                title="หน้าก่อนหน้า"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">ก่อนหน้า</span>
+              </button>
+
+              {/* Page Number Buttons */}
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => {
+                    if (totalPages <= 7) return true;
+                    if (p === 1 || p === totalPages) return true;
+                    if (Math.abs(p - activePage) <= 1) return true;
+                    return false;
+                  })
+                  .reduce<(number | string)[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && typeof arr[idx - 1] === 'number' && (p as number) - (arr[idx - 1] as number) > 1) {
+                      acc.push(`dots-${p}`);
+                    }
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((item) => {
+                    if (typeof item === 'string') {
+                      return (
+                        <span key={item} className="px-1 text-slate-400 font-mono">
+                          ...
+                        </span>
+                      );
+                    }
+                    const isCur = item === activePage;
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setCurrentPage(item)}
+                        className={`min-w-[30px] h-[30px] px-1 rounded-sm font-mono font-bold text-xs transition cursor-pointer ${
+                          isCur
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    );
+                  })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={activePage === totalPages}
+                className="px-2.5 py-1.5 rounded-sm border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-35 disabled:cursor-not-allowed transition font-semibold flex items-center gap-1 cursor-pointer"
+                title="หน้าถัดไป"
+              >
+                <span className="hidden sm:inline">ถัดไป</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={activePage === totalPages}
+                className="p-1.5 rounded-sm border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-35 disabled:cursor-not-allowed transition cursor-pointer"
+                title="หน้าสุดท้าย"
+              >
+                <ChevronsRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 📝 ADD / EDIT WAYBILL MODAL */}

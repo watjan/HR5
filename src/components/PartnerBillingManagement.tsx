@@ -117,10 +117,13 @@ export default function PartnerBillingManagement({
   const [filterMonth, setFilterMonth] = useState<string>('All');
   const [filterYear, setFilterYear] = useState<string>('All');
 
-  // Pagination State
+  // Pagination State & Page Size Configuration (User request: default 10 items or choose any number)
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [currentPartnerPage, setCurrentPartnerPage] = useState<number>(1);
-  const itemsPerPage = 10;
+  const partnerItemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState<number | 'all' | 'custom'>(10);
+  const [customItemsPerPage, setCustomItemsPerPage] = useState<string>('10');
+  const [recentItemsLimit, setRecentItemsLimit] = useState<number | 'all'>(10);
 
   // Eye / Privacy Toggle States for Amounts (1. ใบส่งของ DO, 2. ใบวางบิล BI, 3. ยอดค้างจ่าย, 4. ชำระแล้ว)
   // ข้อกำหนด: ถ้าเข้าใช้งานครั้งแรกแต่ละครั้ง ให้ "ปิดการดู" (Default: Closed/Masked) เสมอเพื่อความปลอดภัย
@@ -458,17 +461,26 @@ export default function PartnerBillingManagement({
     });
   }, [billings, searchQuery, docTypeFilter, statusFilter, filterYear, filterMonth, filterDay]);
 
-  // Reset page when search or filters change
+  const totalItems = filteredBillings.length;
+
+  const effectiveItemsPerPage = useMemo(() => {
+    if (itemsPerPage === 'all') return Math.max(1, totalItems);
+    if (typeof itemsPerPage === 'number') return itemsPerPage;
+    const parsed = parseInt(customItemsPerPage, 10);
+    return isNaN(parsed) || parsed <= 0 ? 10 : parsed;
+  }, [itemsPerPage, customItemsPerPage, totalItems]);
+
+  // Reset page when search, filters, or itemsPerPage change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, docTypeFilter, statusFilter, filterYear, filterMonth, filterDay]);
+  }, [searchQuery, docTypeFilter, statusFilter, filterYear, filterMonth, filterDay, itemsPerPage, customItemsPerPage]);
 
-  const totalItems = filteredBillings.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
+  const totalPages = Math.max(1, Math.ceil(totalItems / effectiveItemsPerPage));
+  const activePage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (activePage - 1) * effectiveItemsPerPage;
   const paginatedBillings = useMemo(() => {
-    return filteredBillings.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredBillings, startIndex]);
+    return filteredBillings.slice(startIndex, startIndex + effectiveItemsPerPage);
+  }, [filteredBillings, startIndex, effectiveItemsPerPage]);
 
   // Calculations for Summary Dashboard Cards
   const stats = useMemo(() => {
@@ -612,12 +624,17 @@ export default function PartnerBillingManagement({
       return b.id.localeCompare(a.id);
     });
     
+    const limitNum = recentItemsLimit === 'all'
+      ? sorted.length
+      : (typeof recentItemsLimit === 'number' ? recentItemsLimit : 10);
+
     return {
-      items: sorted.slice(0, 10),
+      items: sorted.slice(0, limitNum),
+      totalCount: sorted.length,
       year: targetYear,
       month: targetMonth
     };
-  }, [billings]);
+  }, [billings, recentItemsLimit]);
 
   const filteredPartners = useMemo(() => {
     return partners.filter(p => {
@@ -633,11 +650,11 @@ export default function PartnerBillingManagement({
   }, [partners, partnerSearchQuery]);
 
   const paginatedPartners = useMemo(() => {
-    const startIndex = (currentPartnerPage - 1) * itemsPerPage;
-    return filteredPartners.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredPartners, currentPartnerPage, itemsPerPage]);
+    const startIndex = (currentPartnerPage - 1) * partnerItemsPerPage;
+    return filteredPartners.slice(startIndex, startIndex + partnerItemsPerPage);
+  }, [filteredPartners, currentPartnerPage, partnerItemsPerPage]);
 
-  const totalPartnerPages = Math.ceil(filteredPartners.length / itemsPerPage);
+  const totalPartnerPages = Math.ceil(filteredPartners.length / partnerItemsPerPage);
 
   // Open Add Modal
   const handleOpenAdd = () => {
@@ -1821,8 +1838,26 @@ export default function PartnerBillingManagement({
                 /* TAB 1: NEWEST 10 ITEMS - SORTED BY NEWEST ON TOP */
                 <div className="space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-50 border border-slate-150 rounded-sm p-3 text-[10.5px] text-slate-600 font-sans gap-2">
-                    <div>
-                      รอบบัญชีปัจจุบัน: <strong className="text-slate-800 font-bold font-sans">{formatThaiMonthYear(latestMonthBillings.year, latestMonthBillings.month)}</strong>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div>
+                        รอบบัญชีปัจจุบัน: <strong className="text-slate-800 font-bold font-sans">{formatThaiMonthYear(latestMonthBillings.year, latestMonthBillings.month)}</strong>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        <span className="text-[10px] text-slate-500 font-bold">แสดง:</span>
+                        <select
+                          value={recentItemsLimit}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setRecentItemsLimit(val === 'all' ? 'all' : Number(val));
+                          }}
+                          className="text-[10.5px] font-bold text-violet-700 bg-transparent focus:outline-none cursor-pointer"
+                        >
+                          <option value={10}>10 รายการล่าสุด</option>
+                          <option value={20}>20 รายการ</option>
+                          <option value={50}>50 รายการ</option>
+                          <option value="all">แสดงทั้งหมด ({latestMonthBillings.totalCount})</option>
+                        </select>
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-4">
                       <span>ค้างชำระในรอบเดือน: <strong className="text-rose-600 font-bold font-mono">฿{latestMonthBillings.items.filter(b => b.status === 'pending' || b.status === 'billed').reduce((sum, item) => sum + item.amount, 0).toLocaleString()}</strong></span>
@@ -2696,12 +2731,12 @@ export default function PartnerBillingManagement({
               </table>
             </div>
 
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-slate-150 px-4 py-3 bg-white">
-                <div className="flex flex-1 justify-between sm:hidden">
+            {/* Pagination Controls & Items Per Page Selector */}
+            {totalItems > 0 && (
+              <div className="flex flex-col md:flex-row items-center justify-between border-t border-slate-150 px-4 py-3 bg-white gap-3">
+                <div className="flex flex-1 justify-between sm:hidden w-full">
                   <button
-                    disabled={currentPage === 1}
+                    disabled={activePage === 1}
                     onClick={() => {
                       setCurrentPage(prev => Math.max(prev - 1, 1));
                       playNotificationSound();
@@ -2711,7 +2746,7 @@ export default function PartnerBillingManagement({
                     ก่อนหน้า
                   </button>
                   <button
-                    disabled={currentPage === totalPages}
+                    disabled={activePage === totalPages}
                     onClick={() => {
                       setCurrentPage(prev => Math.min(prev + 1, totalPages));
                       playNotificationSound();
@@ -2721,88 +2756,128 @@ export default function PartnerBillingManagement({
                     ถัดไป
                   </button>
                 </div>
-                <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between text-xs font-sans text-slate-500">
-                  <div>
+                <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between text-xs font-sans text-slate-500 w-full">
+                  <div className="flex flex-wrap items-center gap-3">
                     <p>
-                      แสดงรายการที่ <span className="font-bold text-slate-900">{startIndex + 1}</span> ถึง{' '}
-                      <span className="font-bold text-slate-900">{Math.min(startIndex + itemsPerPage, totalItems)}</span> จากทั้งหมด{' '}
-                      <span className="font-bold text-slate-900">{totalItems}</span> รายการ
+                      แสดงรายการที่ <span className="font-bold text-slate-900 font-mono">{startIndex + 1}</span> ถึง{' '}
+                      <span className="font-bold text-slate-900 font-mono">{Math.min(startIndex + effectiveItemsPerPage, totalItems)}</span> จากทั้งหมด{' '}
+                      <span className="font-bold text-slate-900 font-mono">{totalItems}</span> รายการ
                     </p>
-                  </div>
-                  <div>
-                    <nav className="isolate inline-flex -space-x-px rounded-sm shadow-xs" aria-label="Pagination">
-                      <button
-                        disabled={currentPage === 1}
-                        onClick={() => {
-                          setCurrentPage(1);
-                          playNotificationSound();
-                        }}
-                        className="relative inline-flex items-center rounded-l-sm px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
-                        title="หน้าแรก"
-                      >
-                        «
-                      </button>
-                      <button
-                        disabled={currentPage === 1}
-                        onClick={() => {
-                          setCurrentPage(prev => Math.max(prev - 1, 1));
-                          playNotificationSound();
-                        }}
-                        className="relative inline-flex items-center px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
-                      >
-                        ‹ ก่อนหน้า
-                      </button>
-                      
-                      {/* Page numbers */}
-                      {Array.from({ length: totalPages }, (_, i) => i + 1)
-                        .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-                        .map((p, idx, arr) => {
-                          const isCurrent = p === currentPage;
-                          return (
-                            <React.Fragment key={p}>
-                              {idx > 0 && arr[idx - 1] !== p - 1 && (
-                                <span className="relative inline-flex items-center px-3 py-2 text-slate-500 ring-1 ring-inset ring-slate-305 bg-white select-none">...</span>
-                              )}
-                              <button
-                                onClick={() => {
-                                  setCurrentPage(p);
-                                  playNotificationSound();
-                                }}
-                                className={`relative inline-flex items-center px-3 py-2 text-xs font-semibold ring-1 ring-inset focus:z-20 focus:outline-offset-0 transition cursor-pointer ${
-                                  isCurrent
-                                    ? 'z-10 bg-blue-600 text-white ring-blue-600'
-                                    : 'text-slate-900 ring-slate-305 hover:bg-slate-50 bg-white'
-                                }`}
-                              >
-                                {p}
-                              </button>
-                            </React.Fragment>
-                          );
-                        })}
 
-                      <button
-                        disabled={currentPage === totalPages}
-                        onClick={() => {
-                          setCurrentPage(prev => Math.min(prev + 1, totalPages));
-                          playNotificationSound();
+                    {/* Select items per page (default 10, or choose any) */}
+                    <div className="flex items-center gap-1.5 pl-3 border-l border-slate-200">
+                      <span className="text-[11px] font-bold text-slate-600">แสดงหน้าละ:</span>
+                      <select
+                        value={typeof itemsPerPage === 'number' ? itemsPerPage : itemsPerPage}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === 'all') setItemsPerPage('all');
+                          else if (val === 'custom') setItemsPerPage('custom');
+                          else setItemsPerPage(Number(val));
                         }}
-                        className="relative inline-flex items-center px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                        className="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs font-bold font-mono text-slate-800 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer"
                       >
-                        ถัดไป ›
-                      </button>
-                      <button
-                        disabled={currentPage === totalPages}
-                        onClick={() => {
-                          setCurrentPage(totalPages);
-                          playNotificationSound();
-                        }}
-                        className="relative inline-flex items-center rounded-r-sm px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
-                        title="หน้าสุดท้าย"
-                      >
-                        »
-                      </button>
-                    </nav>
+                        <option value={10}>10 รายการ (ค่าเริ่มต้น)</option>
+                        <option value={20}>20 รายการ</option>
+                        <option value={50}>50 รายการ</option>
+                        <option value={100}>100 รายการ</option>
+                        <option value="custom">กำหนดเอง...</option>
+                        <option value="all">แสดงทั้งหมด ({totalItems})</option>
+                      </select>
+
+                      {itemsPerPage === 'custom' && (
+                        <div className="inline-flex items-center gap-1">
+                          <input
+                            type="number"
+                            min="1"
+                            max="5000"
+                            value={customItemsPerPage}
+                            onChange={e => setCustomItemsPerPage(e.target.value)}
+                            className="w-16 px-1.5 py-0.5 border border-blue-400 rounded font-mono font-bold text-xs bg-white text-blue-700 focus:outline-none"
+                            placeholder="จำนวน"
+                          />
+                          <span className="text-[11px] text-slate-500">รายการ</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
+
+                  {totalPages > 1 && (
+                    <div>
+                      <nav className="isolate inline-flex -space-x-px rounded-sm shadow-xs" aria-label="Pagination">
+                        <button
+                          disabled={activePage === 1}
+                          onClick={() => {
+                            setCurrentPage(1);
+                            playNotificationSound();
+                          }}
+                          className="relative inline-flex items-center rounded-l-sm px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                          title="หน้าแรก"
+                        >
+                          «
+                        </button>
+                        <button
+                          disabled={activePage === 1}
+                          onClick={() => {
+                            setCurrentPage(prev => Math.max(prev - 1, 1));
+                            playNotificationSound();
+                          }}
+                          className="relative inline-flex items-center px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                        >
+                          ‹ ก่อนหน้า
+                        </button>
+                        
+                        {/* Page numbers */}
+                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                          .filter(p => p === 1 || p === totalPages || Math.abs(p - activePage) <= 1)
+                          .map((p, idx, arr) => {
+                            const isCurrent = p === activePage;
+                            return (
+                              <React.Fragment key={p}>
+                                {idx > 0 && arr[idx - 1] !== p - 1 && (
+                                  <span className="relative inline-flex items-center px-3 py-2 text-slate-500 ring-1 ring-inset ring-slate-305 bg-white select-none">...</span>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    setCurrentPage(p);
+                                    playNotificationSound();
+                                  }}
+                                  className={`relative inline-flex items-center px-3 py-2 text-xs font-semibold ring-1 ring-inset focus:z-20 focus:outline-offset-0 transition cursor-pointer ${
+                                    isCurrent
+                                      ? 'z-10 bg-blue-600 text-white ring-blue-600'
+                                      : 'text-slate-900 ring-slate-305 hover:bg-slate-50 bg-white'
+                                  }`}
+                                >
+                                  {p}
+                                </button>
+                              </React.Fragment>
+                            );
+                          })}
+
+                        <button
+                          disabled={activePage === totalPages}
+                          onClick={() => {
+                            setCurrentPage(prev => Math.min(prev + 1, totalPages));
+                            playNotificationSound();
+                          }}
+                          className="relative inline-flex items-center px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                        >
+                          ถัดไป ›
+                        </button>
+                        <button
+                          disabled={activePage === totalPages}
+                          onClick={() => {
+                            setCurrentPage(totalPages);
+                            playNotificationSound();
+                          }}
+                          className="relative inline-flex items-center rounded-r-sm px-2.5 py-2 text-slate-400 ring-1 ring-inset ring-slate-305 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                          title="หน้าสุดท้าย"
+                        >
+                          »
+                        </button>
+                      </nav>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -2951,9 +3026,9 @@ export default function PartnerBillingManagement({
                 <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between text-xs font-sans text-slate-500">
                   <div>
                     <p>
-                      แสดงคู่ค้าที่ <span className="font-bold text-slate-900">{(currentPartnerPage - 1) * itemsPerPage + 1}</span> ถึง{' '}
-                      <span className="font-bold text-slate-900">{Math.min((currentPartnerPage - 1) * itemsPerPage + itemsPerPage, filteredPartners.length)}</span> จากทั้งหมด{' '}
-                      <span className="font-bold text-slate-900">{filteredPartners.length}</span> รายการ
+                      แสดงคู่ค้าที่ <span className="font-bold text-slate-900 font-mono">{(currentPartnerPage - 1) * partnerItemsPerPage + 1}</span> ถึง{' '}
+                      <span className="font-bold text-slate-900 font-mono">{Math.min((currentPartnerPage - 1) * partnerItemsPerPage + partnerItemsPerPage, filteredPartners.length)}</span> จากทั้งหมด{' '}
+                      <span className="font-bold text-slate-900 font-mono">{filteredPartners.length}</span> รายการ
                     </p>
                   </div>
                   <div>
