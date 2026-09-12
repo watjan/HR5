@@ -766,7 +766,7 @@ export default function SalesManagement({
         
         <button
           onClick={openAddModal}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-mono font-bold uppercase tracking-wider rounded-sm shadow-xs transition cursor-pointer"
+          className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-mono font-bold uppercase tracking-wider rounded-sm shadow-xs transition cursor-pointer"
         >
           <Plus className="w-4 h-4 shrink-0" />
           <span>บันทึกธุรกรรมยอดขายใหม่</span>
@@ -774,14 +774,14 @@ export default function SalesManagement({
       </div>
 
       {/* 2. STATS KPI CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-sm p-5 space-y-2 relative overflow-hidden">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+        <div className="bg-white border border-slate-200 rounded-sm p-4 sm:p-5 space-y-2 relative overflow-hidden">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-[10px] uppercase font-bold tracking-widest font-sans">ยอดขายรวมทั้งหมด</span>
             <Coins className="w-4 h-4 text-emerald-500" />
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900 font-mono tracking-tight">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono tracking-tight break-all">
               ฿{totalSalesAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
@@ -791,13 +791,13 @@ export default function SalesManagement({
           <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 rounded-full -mr-12 -mt-12 -z-10 opacity-40"></div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-sm p-5 space-y-2 relative overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-sm p-4 sm:p-5 space-y-2 relative overflow-hidden">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-[10px] uppercase font-bold tracking-widest font-sans">ยอดขายเดือนปัจจุบัน (MTD)</span>
             <TrendingUp className="w-4 h-4 text-blue-500" />
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900 font-mono tracking-tight">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono tracking-tight break-all">
               ฿{mtdSalesAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
@@ -807,13 +807,13 @@ export default function SalesManagement({
           <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full -mr-12 -mt-12 -z-10 opacity-30"></div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-sm p-5 space-y-2 relative overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-sm p-4 sm:p-5 space-y-2 relative overflow-hidden">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-[10px] uppercase font-bold tracking-widest font-sans">จำนวนรายการธุรกรรม</span>
             <FileText className="w-4 h-4 text-amber-500" />
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900 font-mono tracking-tight">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono tracking-tight">
               {totalInvoicesCount.toLocaleString()} รายการ
             </span>
           </div>
@@ -823,13 +823,13 @@ export default function SalesManagement({
           <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-full -mr-12 -mt-12 -z-10 opacity-30"></div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-sm p-5 space-y-2 relative overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-sm p-4 sm:p-5 space-y-2 relative overflow-hidden">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-[10px] uppercase font-bold tracking-widest font-sans">มูลค่าเฉลี่ยต่อรายการ</span>
             <ArrowUpRight className="w-4 h-4 text-purple-500" />
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900 font-mono tracking-tight">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono tracking-tight break-all">
               ฿{averageOrderValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
@@ -845,7 +845,7 @@ export default function SalesManagement({
           
           {/* CHARTS & ANALYTICS VISUALIZER */}
           {filteredSales.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-sm p-5 space-y-6">
+            <div className="bg-white border border-slate-200 rounded-sm p-4 sm:p-5 space-y-6">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-100">
                 <div>
                   <div className="flex items-center gap-2">
@@ -856,11 +856,11 @@ export default function SalesManagement({
                 </div>
                 
                 {/* Chart Sub-Tabs */}
-                <div className="flex bg-slate-100 p-0.5 rounded-sm self-stretch md:self-auto">
+                <div className="flex flex-col sm:flex-row bg-slate-100 p-0.5 rounded-sm w-full md:w-auto gap-0.5">
                   <button
                     type="button"
                     onClick={() => setChartTab('trends')}
-                    className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold transition rounded-xs cursor-pointer ${
+                    className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold transition rounded-xs cursor-pointer ${
                       chartTab === 'trends' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
@@ -870,7 +870,7 @@ export default function SalesManagement({
                   <button
                     type="button"
                     onClick={() => setChartTab('breakdown')}
-                    className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold transition rounded-xs cursor-pointer ${
+                    className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold transition rounded-xs cursor-pointer ${
                       chartTab === 'breakdown' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
@@ -1188,12 +1188,12 @@ export default function SalesManagement({
           {/* TAB SYSTEM & MAIN TAB PANEL */}
           <div className="space-y-4">
             {/* Navigation Tabs */}
-            <div className="flex border-b border-slate-200 bg-white p-1 rounded-sm gap-1 overflow-x-auto">
+            <div className="flex border-b border-slate-200 bg-white p-1 rounded-sm gap-1 overflow-x-auto scrollbar-thin pb-1.5 max-w-full">
               <button
                 onClick={() => setActiveTab('daily')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition rounded-sm cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs font-bold transition rounded-sm cursor-pointer whitespace-nowrap shrink-0 ${
                   activeTab === 'daily'
-                    ? 'bg-slate-900 text-white'
+                    ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >
@@ -1203,9 +1203,9 @@ export default function SalesManagement({
 
               <button
                 onClick={() => setActiveTab('monthly')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition rounded-sm cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs font-bold transition rounded-sm cursor-pointer whitespace-nowrap shrink-0 ${
                   activeTab === 'monthly'
-                    ? 'bg-slate-900 text-white'
+                    ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >
@@ -1215,9 +1215,9 @@ export default function SalesManagement({
 
               <button
                 onClick={() => setActiveTab('yearly')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition rounded-sm cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs font-bold transition rounded-sm cursor-pointer whitespace-nowrap shrink-0 ${
                   activeTab === 'yearly'
-                    ? 'bg-slate-900 text-white'
+                    ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >
@@ -1227,9 +1227,9 @@ export default function SalesManagement({
 
               <button
                 onClick={() => setActiveTab('comparison')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition rounded-sm cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs font-bold transition rounded-sm cursor-pointer whitespace-nowrap shrink-0 ${
                   activeTab === 'comparison'
-                    ? 'bg-slate-900 text-white'
+                    ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >
@@ -1239,9 +1239,9 @@ export default function SalesManagement({
 
               <button
                 onClick={() => setActiveTab('all_records')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition rounded-sm cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs font-bold transition rounded-sm cursor-pointer whitespace-nowrap shrink-0 ${
                   activeTab === 'all_records'
-                    ? 'bg-slate-900 text-white'
+                    ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >
@@ -1279,11 +1279,11 @@ export default function SalesManagement({
                       </div>
 
                       {/* View Mode Switcher */}
-                      <div className="flex items-center bg-slate-800 p-1 rounded-sm border border-slate-700 self-start md:self-auto">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center bg-slate-800 p-1 rounded-sm border border-slate-700 w-full md:w-auto gap-1">
                         <button
                           type="button"
                           onClick={() => setDailyViewMode('monthly_31days')}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-xs transition flex items-center gap-1.5 cursor-pointer ${
+                          className={`px-3 py-1.5 text-xs font-bold rounded-xs transition flex items-center justify-center gap-1.5 cursor-pointer ${
                             dailyViewMode === 'monthly_31days'
                               ? 'bg-indigo-600 text-white shadow-sm'
                               : 'text-slate-400 hover:text-white'
@@ -1295,7 +1295,7 @@ export default function SalesManagement({
                         <button
                           type="button"
                           onClick={() => setDailyViewMode('all_active')}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-xs transition flex items-center gap-1.5 cursor-pointer ${
+                          className={`px-3 py-1.5 text-xs font-bold rounded-xs transition flex items-center justify-center gap-1.5 cursor-pointer ${
                             dailyViewMode === 'all_active'
                               ? 'bg-indigo-600 text-white shadow-sm'
                               : 'text-slate-400 hover:text-white'
@@ -1368,11 +1368,11 @@ export default function SalesManagement({
 
                     {/* 12-Month Quick Navigation Pills */}
                     <div className="pt-2 border-t border-slate-800/80">
-                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                         <span>เลือกเปลี่ยนหน้าตามเดือนประจำปี พ.ศ. {dailySelectedYear + 543}:</span>
                         <span>(หน้าละ 31 วัน)</span>
                       </div>
-                      <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-12 gap-1.5">
+                      <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-12 gap-1.5">
                         {MONTHS_THAI_LIST.map((mName, idx) => {
                           const mNum = idx + 1;
                           const isSelected = mNum === dailySelectedMonth;
@@ -1463,7 +1463,7 @@ export default function SalesManagement({
 
                       {/* 31-Day Table */}
                       <div className="border border-slate-200 rounded-sm overflow-hidden bg-white shadow-2xs">
-                        <div className="bg-slate-100 px-4 py-2.5 border-b border-slate-200 flex justify-between items-center text-xs font-bold text-slate-700">
+                        <div className="bg-slate-100 px-4 py-2.5 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs font-bold text-slate-700">
                           <div className="flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-indigo-600" />
                             <span>ตารางยอดขายรายวัน 31 วัน (1 ถึง 31 {MONTHS_THAI_LIST[dailySelectedMonth - 1]} {dailySelectedYear + 543})</span>
@@ -1473,8 +1473,8 @@ export default function SalesManagement({
                           </span>
                         </div>
 
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse">
+                        <div className="overflow-x-auto scrollbar-thin">
+                          <table className="w-full text-left border-collapse min-w-[720px]">
                             <thead>
                               <tr className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-wider font-mono">
                                 <th className="py-3 px-4 text-center w-20">ลำดับวัน</th>
@@ -1648,8 +1648,8 @@ export default function SalesManagement({
                     </>
                   ) : (
                     /* ALL ACTIVE DAYS LIST VIEW */
-                    <div className="overflow-x-auto border border-slate-200 rounded-sm">
-                      <table className="w-full text-left border-collapse">
+                    <div className="overflow-x-auto border border-slate-200 rounded-sm scrollbar-thin">
+                      <table className="w-full text-left border-collapse min-w-[680px]">
                         <thead>
                           <tr className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-wider font-mono">
                             <th className="py-3.5 px-6">วันที่ทำรายการ (Date)</th>
@@ -1717,8 +1717,8 @@ export default function SalesManagement({
 
               {/* TAB: MONTHLY AGGREGATION */}
               {activeTab === 'monthly' && (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                <div className="overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-left border-collapse min-w-[650px]">
                     <thead>
                       <tr className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-wider font-mono">
                         <th className="py-3.5 px-6">เดือนปี (Month-Year)</th>
@@ -1783,8 +1783,8 @@ export default function SalesManagement({
 
               {/* TAB: YEARLY AGGREGATION */}
               {activeTab === 'yearly' && (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                <div className="overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-left border-collapse min-w-[600px]">
                     <thead>
                       <tr className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-wider font-mono">
                         <th className="py-3.5 px-6">ปีปฏิทิน (Year)</th>
@@ -2047,8 +2047,8 @@ export default function SalesManagement({
                   </div>
 
                   {/* Main Comparison Grid Table */}
-                  <div className="overflow-x-auto border border-slate-200 rounded-sm">
-                    <table className="w-full text-left border-collapse">
+                  <div className="overflow-x-auto border border-slate-200 rounded-sm scrollbar-thin">
+                    <table className="w-full text-left border-collapse min-w-[720px]">
                       <thead>
                         <tr className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-wider font-mono">
                           <th className="py-3 px-4 w-32 border-r border-slate-800">เดือน (Month)</th>
@@ -2202,8 +2202,8 @@ export default function SalesManagement({
 
               {/* TAB: ALL TRANSACTIONS LIST */}
               {activeTab === 'all_records' && (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                <div className="overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-left border-collapse min-w-[780px]">
                     <thead>
                       <tr className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-wider font-mono">
                         <th className="py-3.5 px-4 w-32">วันที่ / บิลเลขที่</th>
@@ -2304,11 +2304,11 @@ export default function SalesManagement({
 
       {/* 6. CREATE / EDIT DIALOG MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white border border-slate-200 rounded-sm shadow-xl w-full max-w-lg overflow-hidden animate-slide-up">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-sm shadow-xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden animate-slide-up my-auto">
             
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-900 text-white">
+            <div className="px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 flex justify-between items-center bg-slate-900 text-white shrink-0">
               <div className="flex items-center gap-2">
                 <Coins className="w-4 h-4 text-blue-400" />
                 <span className="text-sm font-bold uppercase tracking-wider font-sans">
@@ -2324,7 +2324,7 @@ export default function SalesManagement({
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-4 font-sans text-xs">
+            <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 font-sans text-xs overflow-y-auto scrollbar-thin">
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Sale Date */}

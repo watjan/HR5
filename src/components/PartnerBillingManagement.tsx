@@ -1257,8 +1257,8 @@ export default function PartnerBillingManagement({
           )}
           
           {/* 1.1 THE 5 PIPELINE COLUMNS (KANBAN FLOW TRACKS) */}
-          <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
-            <div className="min-w-[1100px] grid grid-cols-5 gap-3.5 items-start">
+          <div className="pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 items-start">
               
               {/* Column 1: Unaware (รอจัดเตรียม/รอจัดส่ง) */}
               <div className="bg-slate-50 border border-slate-200 rounded-md p-3.5 space-y-3 shadow-xs">

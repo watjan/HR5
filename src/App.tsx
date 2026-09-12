@@ -61,6 +61,7 @@ import {
   UserCircle,
   Menu,
   X,
+  ChevronLeft,
   Coins,
   CreditCard,
   AlertCircle,
@@ -89,7 +90,28 @@ let clientDb: any = null;
 export default function App() {
   // Navigation active tab
   const [activeTab, setActiveTab] = useState<string>('counter_duty');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
+    try {
+      const saved = safeStorage.getItem('hr_sidebar_open');
+      if (saved !== null) return saved === 'true';
+      if (typeof window !== 'undefined') {
+        return window.innerWidth >= 1024;
+      }
+      return true;
+    } catch {
+      return true;
+    }
+  });
+
+  // Persist sidebar state
+  useEffect(() => {
+    try {
+      safeStorage.setItem('hr_sidebar_open', String(sidebarOpen));
+    } catch {
+      // ignore
+    }
+  }, [sidebarOpen]);
+
   const [showNotifications, setShowNotifications] = useState(false);
 
   // Login & Authentication States
@@ -1851,24 +1873,33 @@ export default function App() {
   return (
     <div id="app-root-container" className="min-h-screen bg-slate-50 flex text-slate-900 antialiased font-sans">
       
-      {/* LEFT SIDEBAR (Desktop) */}
-      <aside id="sidebar-panel" className={`bg-slate-900 text-slate-400 w-64 fixed inset-y-0 left-0 z-40 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col justify-between border-r border-slate-800`}>
+      {/* LEFT SIDEBAR (Hamburger Toggleable - กดแอบ / กดอีกทีออกมา) */}
+      <aside 
+        id="sidebar-panel" 
+        className={`bg-slate-900 text-slate-400 w-64 fixed inset-y-0 left-0 z-40 transform ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } transition-transform duration-300 ease-in-out flex flex-col justify-between border-r border-slate-800 shadow-2xl`}
+      >
         <div className="flex flex-col h-full overflow-y-auto">
           {/* Logo & Company Name */}
-          <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between shrink-0">
+          <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
-              <ApiwatLogo3D size="sm" className="w-10 h-10 shrink-0" />
+              <ApiwatLogo3D size="sm" className="w-9 h-9 shrink-0" />
               <div>
                 <span className="font-extrabold text-white tracking-tight block leading-none text-xs">อภิวัฒน์เครื่องครัว</span>
                 <span className="text-[9px] text-amber-500 mt-1 block tracking-wider font-mono font-bold">HR MANAGEMENT</span>
               </div>
             </div>
-            {/* Mobile close toggle */}
+            {/* Collapse toggle (แอบเมนู) */}
             <button 
+              type="button"
               onClick={() => setSidebarOpen(false)} 
-              className="p-1 md:hidden hover:bg-slate-800 text-slate-500 hover:text-slate-300 rounded-sm"
+              className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-md transition cursor-pointer border border-transparent hover:border-slate-700"
+              title="กดเพื่อแอบ/ซ่อนเมนูซ้ายมือ (Collapse Sidebar)"
+              aria-label="ซ่อนเมนู"
             >
-              <X className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4 hidden md:block" />
+              <X className="w-4 h-4 md:hidden" />
             </button>
           </div>
 
@@ -1886,7 +1917,9 @@ export default function App() {
                       id={`nav-tab-${item.id}`}
                       onClick={() => {
                         setActiveTab(item.id);
-                        setSidebarOpen(false);
+                        if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                          setSidebarOpen(false);
+                        }
                         playNotificationSound();
                       }}
                       className={`w-full flex items-center justify-between px-4 py-2.5 rounded-sm text-xs font-semibold transition ${
@@ -1924,7 +1957,9 @@ export default function App() {
                       id={`nav-tab-${item.id}`}
                       onClick={() => {
                         setActiveTab(item.id);
-                        setSidebarOpen(false);
+                        if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                          setSidebarOpen(false);
+                        }
                         playNotificationSound();
                       }}
                       className={`w-full flex items-center justify-between px-4 py-2.5 rounded-sm text-xs font-semibold transition ${
@@ -1956,7 +1991,9 @@ export default function App() {
                       id={`nav-tab-${item.id}`}
                       onClick={() => {
                         setActiveTab(item.id);
-                        setSidebarOpen(false);
+                        if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                          setSidebarOpen(false);
+                        }
                         playNotificationSound();
                       }}
                       className={`w-full flex items-center justify-between px-4 py-2.5 rounded-sm text-xs font-semibold transition ${
@@ -2018,18 +2055,28 @@ export default function App() {
       )}
 
       {/* MAIN CONTAINER CONTENT */}
-      <div className="flex-1 md:pl-64 flex flex-col min-h-screen">
+      <div className={`flex-1 flex flex-col min-h-screen transition-[padding] duration-300 ease-in-out ${sidebarOpen ? 'md:pl-64' : 'pl-0'}`}>
         
         {/* TOP COMPONENT HEADER */}
         <header id="top-app-header" className="bg-white border-b border-slate-200 h-16 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30 no-print gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            {/* Mobile menu toggle */}
+            {/* Hamburger menu toggle (Desktop & Mobile - กดแอบ / กดอีกทีออกมา) */}
             <button 
-              onClick={() => setSidebarOpen(true)}
-              className="p-1.5 md:hidden hover:bg-slate-50 text-slate-500 rounded-lg shrink-0"
-              aria-label="เปิดเมนู"
+              id="hamburger-menu-toggle"
+              type="button"
+              onClick={() => setSidebarOpen(prev => !prev)}
+              className={`p-2 rounded-md transition-all cursor-pointer border flex items-center gap-2 shrink-0 ${
+                sidebarOpen 
+                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800' 
+                  : 'bg-white hover:bg-blue-50 border-slate-200 hover:border-blue-300 text-slate-700 hover:text-blue-600 shadow-xs'
+              }`}
+              aria-label={sidebarOpen ? "กดเพื่อแอบ/ซ่อนเมนูซ้ายมือ" : "กดเพื่อเปิดเมนูซ้ายมือ"}
+              title={sidebarOpen ? "กดแอบเมนูซ้ายมือ (Hide Sidebar)" : "กดแสดงเมนูซ้ายมือ (Show Sidebar)"}
             >
               <Menu className="w-5 h-5" />
+              <span className="text-xs font-bold font-sans hidden sm:inline-block">
+                {sidebarOpen ? 'ซ่อนเมนู' : 'เมนูหลัก'}
+              </span>
             </button>
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono hidden sm:inline">System Overview</span>
@@ -2621,11 +2668,15 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setSidebarOpen(true)}
-            className="flex flex-col items-center justify-center py-1 px-2 rounded-sm transition min-w-[50px] text-slate-500 hover:text-slate-900 cursor-pointer"
+            type="button"
+            onClick={() => setSidebarOpen(prev => !prev)}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-sm transition min-w-[50px] cursor-pointer ${
+              sidebarOpen ? 'text-blue-600 font-bold' : 'text-slate-500 hover:text-slate-900'
+            }`}
+            aria-label={sidebarOpen ? "ปิดเมนู" : "เปิดเมนู"}
           >
             <Menu className="w-4 h-4" />
-            <span className="text-[10px] mt-0.5 font-sans">เมนู</span>
+            <span className="text-[10px] mt-0.5 font-sans">{sidebarOpen ? 'ปิดเมนู' : 'เมนู'}</span>
           </button>
         </nav>
       </div>
