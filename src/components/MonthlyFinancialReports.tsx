@@ -38,7 +38,10 @@ import {
   PieChart as PieIcon,
   ShieldCheck,
   FileSpreadsheet,
-  SlidersHorizontal
+  SlidersHorizontal,
+  ExternalLink,
+  Landmark,
+  CheckSquare
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -98,7 +101,7 @@ export default function MonthlyFinancialReports({
 
   const [selectedYear, setSelectedYear] = useState<string>(currentYearStr);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr); // 'all' or '01' - '12'
-  const [activeViewMode, setActiveViewMode] = useState<'combined' | 'partner' | 'cashflow' | 'matrix'>('combined');
+  const [activeViewMode, setActiveViewMode] = useState<'combined' | 'partner' | 'cheques' | 'cashflow' | 'matrix'>('combined');
   
   // Search & Filter within partner documents list
   const [partnerDocFilter, setPartnerDocFilter] = useState<'all' | 'pending' | 'billed' | 'paid' | 'cancelled'>('all');
@@ -107,6 +110,13 @@ export default function MonthlyFinancialReports({
   // Limit of displayed partner documents (User request: default 10 latest items, or choose any number)
   const [partnerDocLimit, setPartnerDocLimit] = useState<'10' | '20' | '50' | '100' | 'all' | 'custom'>('10');
   const [customPartnerDocLimit, setCustomPartnerDocLimit] = useState<string>('10');
+
+  // Search & Filter within Cheque Registry (1.2 รายงาน ทะเบียนเช็คจ่ายคู่ค้า & เช็ครับลูกค้า)
+  const [chequeTypeFilter, setChequeTypeFilter] = useState<'all' | 'payable' | 'receivable'>('all');
+  const [chequeStatusFilter, setChequeStatusFilter] = useState<'all' | 'pending' | 'cleared' | 'bounced' | 'cancelled'>('all');
+  const [searchChequeQuery, setSearchChequeQuery] = useState<string>('');
+  const [chequeLimit, setChequeLimit] = useState<'10' | '20' | '50' | '100' | 'all' | 'custom'>('10');
+  const [customChequeLimit, setCustomChequeLimit] = useState<string>('10');
 
   // Privacy mask toggle - default hidden (closed eye) on initial entry for maximum financial safety
   const [isAmountsHidden, setIsAmountsHidden] = useState<boolean>(() => {
@@ -313,6 +323,197 @@ export default function MonthlyFinancialReports({
   }, [allFilteredPartnerBillings, effectivePartnerDocLimit]);
 
   // ─────────────────────────────────────────────────────────────
+  // 1.2 CHEQUE REGISTRY CALCULATIONS (ทะเบียนเช็คจ่ายคู่ค้า & เช็ครับลูกค้า)
+  // ─────────────────────────────────────────────────────────────
+  const filteredCheques = useMemo(() => {
+    return cheques.filter(ch => matchesPeriod(ch.dueDate || ch.issueDate));
+  }, [cheques, matchesPeriod]);
+
+  // Cheques Payable (เช็คจ่ายคู่ค้า) ในงวดที่เลือก:
+  // - ยอดเช็คจ่ายคู่ค้ายังไม่จ่ายในงวด (Pending)
+  const periodPayablePendingList = useMemo(() => {
+    return filteredCheques.filter(ch => ch.type === 'payable' && ch.status === 'pending');
+  }, [filteredCheques]);
+  const periodPayablePendingTotal = useMemo(() => {
+    return periodPayablePendingList.reduce((sum, ch) => sum + (ch.amount || 0), 0);
+  }, [periodPayablePendingList]);
+
+  // - ยอดเช็คจ่ายคู่ค้าจ่ายแล้วในงวด (Cleared / Paid)
+  const periodPayableClearedList = useMemo(() => {
+    return filteredCheques.filter(ch => ch.type === 'payable' && ch.status === 'cleared');
+  }, [filteredCheques]);
+  const periodPayableClearedTotal = useMemo(() => {
+    return periodPayableClearedList.reduce((sum, ch) => sum + (ch.amount || 0), 0);
+  }, [periodPayableClearedList]);
+
+  // - เช็คจ่ายเด้ง (Bounced)
+  const periodPayableBouncedList = useMemo(() => {
+    return filteredCheques.filter(ch => ch.type === 'payable' && ch.status === 'bounced');
+  }, [filteredCheques]);
+  const periodPayableBouncedTotal = useMemo(() => {
+    return periodPayableBouncedList.reduce((sum, ch) => sum + (ch.amount || 0), 0);
+  }, [periodPayableBouncedList]);
+
+  // - เช็คจ่ายยกเลิก (Cancelled)
+  const periodPayableCancelledList = useMemo(() => {
+    return filteredCheques.filter(ch => ch.type === 'payable' && ch.status === 'cancelled');
+  }, [filteredCheques]);
+  const periodPayableCancelledTotal = useMemo(() => {
+    return periodPayableCancelledList.reduce((sum, ch) => sum + (ch.amount || 0), 0);
+  }, [periodPayableCancelledList]);
+
+  // รวมยอดเช็คจ่ายหมุนเวียนในงวด (ยังไม่จ่าย + จ่ายแล้ว)
+  const periodPayableActiveTotal = periodPayablePendingTotal + periodPayableClearedTotal;
+  const periodPayableClearanceRate = periodPayableActiveTotal > 0
+    ? (periodPayableClearedTotal / periodPayableActiveTotal) * 100
+    : 0;
+
+  // และยอดเช็คจ่ายคู่ค้าทั้งหมดที่ยังไม่จ่ายสะสมในระบบ (All-time Grand Total Unpaid Payable Cheques)
+  const allTimePayablePendingList = useMemo(() => {
+    return cheques.filter(ch => ch.type === 'payable' && ch.status === 'pending');
+  }, [cheques]);
+  const allTimePayablePendingTotal = useMemo(() => {
+    return allTimePayablePendingList.reduce((sum, ch) => sum + (ch.amount || 0), 0);
+  }, [allTimePayablePendingList]);
+
+  // Cheques Receivable (เช็ครับลูกค้า) ในงวดที่เลือก:
+  // - รอนำฝาก / ยังไม่เข้า (Pending)
+  const periodReceivablePendingList = useMemo(() => {
+    return filteredCheques.filter(ch => ch.type === 'receivable' && ch.status === 'pending');
+  }, [filteredCheques]);
+  const periodReceivablePendingTotal = useMemo(() => {
+    return periodReceivablePendingList.reduce((sum, ch) => sum + (ch.amount || 0), 0);
+  }, [periodReceivablePendingList]);
+
+  // - เข้าบัญชีแล้ว / ขึ้นเงินแล้ว (Cleared)
+  const periodReceivableClearedList = useMemo(() => {
+    return filteredCheques.filter(ch => ch.type === 'receivable' && ch.status === 'cleared');
+  }, [filteredCheques]);
+  const periodReceivableClearedTotal = useMemo(() => {
+    return periodReceivableClearedList.reduce((sum, ch) => sum + (ch.amount || 0), 0);
+  }, [periodReceivableClearedList]);
+
+  // - เช็ครับเด้ง (Bounced)
+  const periodReceivableBouncedList = useMemo(() => {
+    return filteredCheques.filter(ch => ch.type === 'receivable' && ch.status === 'bounced');
+  }, [filteredCheques]);
+  const periodReceivableBouncedTotal = useMemo(() => {
+    return periodReceivableBouncedList.reduce((sum, ch) => sum + (ch.amount || 0), 0);
+  }, [periodReceivableBouncedList]);
+
+  // - เช็ครับยกเลิก (Cancelled)
+  const periodReceivableCancelledList = useMemo(() => {
+    return filteredCheques.filter(ch => ch.type === 'receivable' && ch.status === 'cancelled');
+  }, [filteredCheques]);
+  const periodReceivableCancelledTotal = useMemo(() => {
+    return periodReceivableCancelledList.reduce((sum, ch) => sum + (ch.amount || 0), 0);
+  }, [periodReceivableCancelledList]);
+
+  // รวมยอดเช็ครับทั้งหมดในงวด (ยังไม่เข้า + เข้าแล้ว)
+  const periodReceivableActiveTotal = periodReceivablePendingTotal + periodReceivableClearedTotal;
+
+  // และยอดเช็ครับลูกค้าทั้งหมดที่ยังไม่เข้าสะสมในระบบ (All-time Grand Total Uncollected Receivable Cheques)
+  const allTimeReceivablePendingList = useMemo(() => {
+    return cheques.filter(ch => ch.type === 'receivable' && ch.status === 'pending');
+  }, [cheques]);
+  const allTimeReceivablePendingTotal = useMemo(() => {
+    return allTimeReceivablePendingList.reduce((sum, ch) => sum + (ch.amount || 0), 0);
+  }, [allTimeReceivablePendingList]);
+
+  // สุทธิเช็ครับ - เช็คจ่าย (Net Cheque Realized)
+  const periodChequeNetRealized = periodReceivableClearedTotal - periodPayableClearedTotal;
+
+  // Filtered Cheques List for Table
+  const allFilteredCheques = useMemo(() => {
+    return filteredCheques
+      .filter(ch => {
+        if (chequeTypeFilter !== 'all' && ch.type !== chequeTypeFilter) return false;
+        if (chequeStatusFilter !== 'all' && ch.status !== chequeStatusFilter) return false;
+        if (searchChequeQuery.trim()) {
+          const q = searchChequeQuery.toLowerCase().trim();
+          const matchNum = (ch.chequeNumber || '').toLowerCase().includes(q);
+          const matchPartner = (ch.partnerName || '').toLowerCase().includes(q);
+          const matchBank = (ch.bank || '').toLowerCase().includes(q);
+          const matchNotes = (ch.notes || '').toLowerCase().includes(q);
+          return matchNum || matchPartner || matchBank || matchNotes;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const dateA = a.dueDate || a.issueDate || '';
+        const dateB = b.dueDate || b.issueDate || '';
+        if (dateB !== dateA) return dateB.localeCompare(dateA);
+        return (b.chequeNumber || '').localeCompare(a.chequeNumber || '');
+      });
+  }, [filteredCheques, chequeTypeFilter, chequeStatusFilter, searchChequeQuery]);
+
+  const effectiveChequeLimit = useMemo(() => {
+    if (chequeLimit === 'all') return allFilteredCheques.length;
+    if (chequeLimit === 'custom') {
+      const parsed = parseInt(customChequeLimit, 10);
+      return isNaN(parsed) || parsed <= 0 ? 10 : parsed;
+    }
+    return parseInt(chequeLimit, 10) || 10;
+  }, [chequeLimit, customChequeLimit, allFilteredCheques.length]);
+
+  const displayedCheques = useMemo(() => {
+    return allFilteredCheques.slice(0, effectiveChequeLimit);
+  }, [allFilteredCheques, effectiveChequeLimit]);
+
+  // Bank breakdown for Cheques
+  const chequeBankBreakdown = useMemo(() => {
+    const map = new Map<string, {
+      bank: string;
+      payablePending: number;
+      payablePendingCount: number;
+      payableCleared: number;
+      payableClearedCount: number;
+      receivablePending: number;
+      receivableCleared: number;
+      totalAmount: number;
+      totalCount: number;
+    }>();
+
+    filteredCheques.forEach(ch => {
+      const bankName = (ch.bank || '').trim() || 'ไม่ระบุธนาคาร';
+      if (!map.has(bankName)) {
+        map.set(bankName, {
+          bank: bankName,
+          payablePending: 0,
+          payablePendingCount: 0,
+          payableCleared: 0,
+          payableClearedCount: 0,
+          receivablePending: 0,
+          receivableCleared: 0,
+          totalAmount: 0,
+          totalCount: 0
+        });
+      }
+      const entry = map.get(bankName)!;
+      entry.totalCount += 1;
+      entry.totalAmount += (ch.amount || 0);
+
+      if (ch.type === 'payable') {
+        if (ch.status === 'pending') {
+          entry.payablePending += (ch.amount || 0);
+          entry.payablePendingCount += 1;
+        } else if (ch.status === 'cleared') {
+          entry.payableCleared += (ch.amount || 0);
+          entry.payableClearedCount += 1;
+        }
+      } else if (ch.type === 'receivable') {
+        if (ch.status === 'pending') {
+          entry.receivablePending += (ch.amount || 0);
+        } else if (ch.status === 'cleared') {
+          entry.receivableCleared += (ch.amount || 0);
+        }
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [filteredCheques]);
+
+  // ─────────────────────────────────────────────────────────────
   // 2. CASH FLOW & CHEQUES CALCULATIONS (ขารับ vs ขาจ่าย - จ่ายแล้ว vs ยังไม่จ่าย)
   // ─────────────────────────────────────────────────────────────
 
@@ -501,6 +702,28 @@ export default function MonthlyFinancialReports({
 
       const mNetRealized = mInflowPaid - mOutflowPaid;
 
+      // Cheques breakdown for month
+      const mPayablePendingCheques = cheques.filter(ch => ch.type === 'payable' && ch.status === 'pending' && periodMatcher(ch.dueDate || ch.issueDate));
+      const mChequePayablePending = mPayablePendingCheques.reduce((s, ch) => s + (ch.amount || 0), 0);
+      const mChequePayablePendingCount = mPayablePendingCheques.length;
+
+      const mPayableClearedCheques = cheques.filter(ch => ch.type === 'payable' && ch.status === 'cleared' && periodMatcher(ch.dueDate || ch.issueDate));
+      const mChequePayableCleared = mPayableClearedCheques.reduce((s, ch) => s + (ch.amount || 0), 0);
+      const mChequePayableClearedCount = mPayableClearedCheques.length;
+
+      const mChequePayableTotal = mChequePayablePending + mChequePayableCleared;
+
+      const mReceivablePendingCheques = cheques.filter(ch => ch.type === 'receivable' && ch.status === 'pending' && periodMatcher(ch.dueDate || ch.issueDate));
+      const mChequeReceivablePending = mReceivablePendingCheques.reduce((s, ch) => s + (ch.amount || 0), 0);
+      const mChequeReceivablePendingCount = mReceivablePendingCheques.length;
+
+      const mReceivableClearedCheques = cheques.filter(ch => ch.type === 'receivable' && ch.status === 'cleared' && periodMatcher(ch.dueDate || ch.issueDate));
+      const mChequeReceivableCleared = mReceivableClearedCheques.reduce((s, ch) => s + (ch.amount || 0), 0);
+      const mChequeReceivableClearedCount = mReceivableClearedCheques.length;
+
+      const mChequeReceivableTotal = mChequeReceivablePending + mChequeReceivableCleared;
+      const mChequeNetRealized = mChequeReceivableCleared - mChequePayableCleared;
+
       return {
         monthCode,
         monthName: m.name,
@@ -516,7 +739,18 @@ export default function MonthlyFinancialReports({
         outflowPaid: mOutflowPaid,
         outflowPending: mOutflowPending,
         outflowTotal: mOutflowPaid + mOutflowPending,
-        netRealized: mNetRealized
+        netRealized: mNetRealized,
+        chequePayablePending: mChequePayablePending,
+        chequePayablePendingCount: mChequePayablePendingCount,
+        chequePayableCleared: mChequePayableCleared,
+        chequePayableClearedCount: mChequePayableClearedCount,
+        chequePayableTotal: mChequePayableTotal,
+        chequeReceivablePending: mChequeReceivablePending,
+        chequeReceivablePendingCount: mChequeReceivablePendingCount,
+        chequeReceivableCleared: mChequeReceivableCleared,
+        chequeReceivableClearedCount: mChequeReceivableClearedCount,
+        chequeReceivableTotal: mChequeReceivableTotal,
+        chequeNetRealized: mChequeNetRealized
       };
     });
   }, [
@@ -553,13 +787,19 @@ export default function MonthlyFinancialReports({
       : `เดือน_${selectedMonth}_ปี_${selectedYear}`;
 
     let csv = `รายงานสรุปประจำงวด: ${periodLabel}\n\n`;
-    csv += `1. สรุปรายการคู่ค้า\n`;
+    csv += `1.1 สรุปรายการคู่ค้า (Partner Invoices & Billings)\n`;
     csv += `สถานะ,จำนวนรายการ,ยอดรวม (บาท)\n`;
     csv += `1.1 รอวางบิล,${partnerPendingList.length},${partnerPendingTotal}\n`;
     csv += `1.2 วางบิลแล้ว,${partnerBilledList.length},${partnerBilledTotal}\n`;
     csv += `1.3 ชำระแล้ว,${partnerPaidList.length},${partnerPaidTotal}\n`;
     csv += `1.4 ยกเลิก,${partnerCancelledList.length},${partnerCancelledTotal}\n`;
     csv += `รวมยอดค้างจ่าย (รอวางบิล + วางบิลแล้ว),${partnerPendingList.length + partnerBilledList.length},${partnerOutstandingTotal}\n\n`;
+
+    csv += `1.2 สรุปทะเบียนเช็คจ่ายคู่ค้า & เช็ครับลูกค้า (Cheque Registry)\n`;
+    csv += `ประเภทเช็ค,จำนวนใบ,จ่ายแล้ว/ขึ้นเงินแล้ว (บาท),ยังไม่จ่าย/รอนำฝาก (บาท),รวมทั้งสิ้น (บาท)\n`;
+    csv += `เช็คจ่ายคู่ค้า (Payable),${periodPayablePendingList.length + periodPayableClearedList.length},${periodPayableClearedTotal},${periodPayablePendingTotal},${periodPayableActiveTotal}\n`;
+    csv += `เช็ครับลูกค้า (Receivable),${periodReceivablePendingList.length + periodReceivableClearedList.length},${periodReceivableClearedTotal},${periodReceivablePendingTotal},${periodReceivableActiveTotal}\n`;
+    csv += `* ยอดเช็คจ่ายคู่ค้ายังไม่จ่ายสะสมทั้งหมดในระบบ,${allTimePayablePendingList.length} ใบ,,${allTimePayablePendingTotal}\n\n`;
 
     csv += `2. สรุปกระแสเงินสดขารับและขาจ่าย\n`;
     csv += `หมวดหมู่,รับแล้ว/จ่ายแล้ว (บาท),ยังไม่ได้รับ/ยังไม่จ่าย (บาท),รวมสุทธิ (บาท)\n`;
@@ -568,9 +808,9 @@ export default function MonthlyFinancialReports({
     csv += `กระแสเงินสดสุทธิ (Net),${netRealized},${totalInflowPending - totalOutflowPending},${netProjected}\n\n`;
 
     csv += `3. ตารางสรุป 12 เดือนประจำปี ${selectedYear}\n`;
-    csv += `เดือน,คู่ค้ารอวางบิล,คู่ค่าวางบิลแล้ว,คู่ค้าชำระแล้ว,คู่ค้ายกเลิก,ขารับ (รับแล้ว),ขารับ (ค้างรับ),ขาจ่าย (จ่ายแล้ว),ขาจ่าย (ยังไม่จ่าย),สุทธิรับจริง\n`;
+    csv += `เดือน,คู่ค้ารอวางบิล,คู่ค่าวางบิลแล้ว,คู่ค้าชำระแล้ว,คู่ค้ายกเลิก,เช็คจ่ายยังไม่จ่าย,เช็คจ่ายจ่ายแล้ว,เช็ครับยังไม่เข้า,เช็ครับเข้าแล้ว,ขารับ (รับแล้ว),ขารับ (ค้างรับ),ขาจ่าย (จ่ายแล้ว),ขาจ่าย (ยังไม่จ่าย),สุทธิรับจริง\n`;
     twelveMonthsData.forEach(r => {
-      csv += `${r.monthName},${r.partnerPending},${r.partnerBilled},${r.partnerPaid},${r.partnerCancelled},${r.inflowPaid},${r.inflowPending},${r.outflowPaid},${r.outflowPending},${r.netRealized}\n`;
+      csv += `${r.monthName},${r.partnerPending},${r.partnerBilled},${r.partnerPaid},${r.partnerCancelled},${r.chequePayablePending},${r.chequePayableCleared},${r.chequeReceivablePending},${r.chequeReceivableCleared},${r.inflowPaid},${r.inflowPending},${r.outflowPaid},${r.outflowPending},${r.netRealized}\n`;
     });
 
     const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
@@ -602,7 +842,7 @@ export default function MonthlyFinancialReports({
                 หน้ารายงานของแต่ละเดือน (Monthly Reports)
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                1. รายการคู่ค้า (รอวางบิล / วางบิลแล้ว / ชำระแล้ว / ยกเลิก) และ 2. ตรวจเช็คกระแสเงินสดขารับ-ขาจ่าย (จ่ายแล้ว / ยังไม่จ่าย)
+                1.1 รายการคู่ค้า (ใบส่งของ/วางบิล) | 1.2 ทะเบียนเช็คจ่ายคู่ค้า & เช็ครับลูกค้า | 2. กระแสเงินสดขารับ-ขาจ่าย
               </p>
             </div>
           </div>
@@ -723,7 +963,20 @@ export default function MonthlyFinancialReports({
               }`}
             >
               <Building2 className="w-3.5 h-3.5" />
-              <span>1. รายการคู่ค้า ({filteredPartnerBillings.length})</span>
+              <span>1.1 รายการคู่ค้า ({filteredPartnerBillings.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveViewMode('cheques')}
+              className={`px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                activeViewMode === 'cheques'
+                  ? 'bg-white text-indigo-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>1.2 ทะเบียนเช็คคู่ค้า & ลูกค้า ({filteredCheques.length})</span>
             </button>
 
             <button
@@ -778,12 +1031,12 @@ export default function MonthlyFinancialReports({
       {(activeViewMode === 'combined' || activeViewMode === 'partner') && (
         <div className="space-y-4">
           
-          {/* Section Header: 1. รายการคู่ค้า */}
+          {/* Section Header: 1.1 รายการคู่ค้า */}
           <div className="flex items-center justify-between bg-indigo-900 text-white px-4 py-2.5 rounded-lg shadow-xs">
             <div className="flex items-center gap-2">
               <Building2 className="w-5 h-5 text-indigo-300" />
               <h2 className="text-sm sm:text-base font-black tracking-wide">
-                1. รายการคู่ค้าประจำเดือน ({selectedMonthName} {selectedYear})
+                1.1 รายการคู่ค้าประจำเดือน ({selectedMonthName} {selectedYear})
               </h2>
             </div>
             <div className="text-xs font-bold text-indigo-200">
@@ -951,6 +1204,636 @@ export default function MonthlyFinancialReports({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SECTION 1.2: CHEQUE REGISTRY (ทะเบียนเช็คจ่ายคู่ค้า & เช็ครับลูกค้า)
+         ───────────────────────────────────────────────────────────── */}
+      {(activeViewMode === 'combined' || activeViewMode === 'cheques') && (
+        <div className="space-y-4">
+          
+          {/* Section Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 py-3 rounded-lg shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-md bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+                <CreditCard className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-black tracking-wide flex items-center gap-2">
+                  <span>1.2 รายงาน ทะเบียนเช็คจ่ายคู่ค้า & เช็ครับลูกค้า (Cheque Registry)</span>
+                </h2>
+                <p className="text-xs text-indigo-200 mt-0.5">
+                  สรุปยอดเช็คจ่ายคู่ค้ายังไม่จ่าย / จ่ายแล้วแต่ละเดือน, ยอดเช็ครับลูกค้า, และยอดค้างจ่ายสะสมทั้งหมด ประจำงวด {selectedMonthName} {selectedYear}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              {onNavigateToTab && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateToTab('cheques')}
+                  className="px-2.5 py-1 text-xs font-bold bg-white/10 hover:bg-white/20 text-indigo-200 hover:text-white rounded transition flex items-center gap-1.5 border border-white/10 cursor-pointer"
+                  title="เปิดหน้าเมนูจัดการทะเบียนเช็ค"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span>เปิดระบบทะเบียนเช็ค</span>
+                </button>
+              )}
+              <span className="text-xs font-bold text-slate-300 bg-white/10 px-2.5 py-1 rounded-md border border-white/10">
+                รวมในงวด {filteredCheques.length} ใบ
+              </span>
+            </div>
+          </div>
+
+          {/* 4 Cheque Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            
+            {/* 1. ยอดเช็คจ่ายคู่ค้ายังไม่จ่ายในงวด */}
+            <div className="bg-white border-2 border-amber-300/90 rounded-lg p-4 shadow-xs space-y-2 hover:shadow-sm transition relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>ยอดเช็คจ่ายยังไม่จ่าย (งวดนี้)</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                  {periodPayablePendingList.length} ใบ
+                </span>
+              </div>
+              <div className="text-xl sm:text-2xl font-black font-mono text-amber-900">
+                {formatMoney(periodPayablePendingTotal)}
+              </div>
+              <div className="text-[11px] text-slate-500 flex items-center justify-between border-t border-slate-100 pt-1.5">
+                <span>เช็คสั่งจ่ายรอตัดเงินตามนัด</span>
+                <span className="font-mono font-semibold text-amber-700">
+                  {periodPayableActiveTotal > 0 ? ((periodPayablePendingTotal / periodPayableActiveTotal) * 100).toFixed(0) : 0}% ของงวด
+                </span>
+              </div>
+            </div>
+
+            {/* 2. ยอดเช็คจ่ายคู่ค้าจ่ายแล้วในงวด */}
+            <div className="bg-white border-2 border-emerald-300/90 rounded-lg p-4 shadow-xs space-y-2 hover:shadow-sm transition relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>ยอดเช็คจ่ายจ่ายแล้ว (งวดนี้)</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  {periodPayableClearedList.length} ใบ
+                </span>
+              </div>
+              <div className="text-xl sm:text-2xl font-black font-mono text-emerald-900">
+                {formatMoney(periodPayableClearedTotal)}
+              </div>
+              <div className="text-[11px] text-slate-500 flex items-center justify-between border-t border-slate-100 pt-1.5">
+                <span>ตัดจ่ายเงินสำเร็จเรียบร้อย</span>
+                <span className="font-mono font-semibold text-emerald-700">
+                  {periodPayableClearanceRate.toFixed(0)}% สำเร็จ
+                </span>
+              </div>
+            </div>
+
+            {/* 3. ยอดเช็คจ่ายคู่ค้าทั้งหมดที่ยังไม่จ่ายสะสมในระบบ (User Request: "และยอดทั้งหมดที่ยังไม่จ่าย") */}
+            <div className="bg-gradient-to-br from-rose-50 to-amber-50/50 border-2 border-rose-300 rounded-lg p-4 shadow-xs space-y-2 hover:shadow-sm transition relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                  <span className="font-black">ยอดทั้งหมดที่ยังไม่จ่าย (สะสม)</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-black bg-rose-600 text-white shadow-2xs">
+                  {allTimePayablePendingList.length} ใบสะสม
+                </span>
+              </div>
+              <div className="text-xl sm:text-2xl font-black font-mono text-rose-700">
+                {formatMoney(allTimePayablePendingTotal)}
+              </div>
+              <div className="text-[11px] text-rose-900/80 flex items-center justify-between border-t border-rose-200/60 pt-1.5 font-medium">
+                <span>ภาระหนี้เช็คจ่ายค้างชำระทั้งหมดในระบบ</span>
+                <span className="text-[10px] font-bold text-rose-700 bg-white/80 px-1.5 py-0.2 rounded border border-rose-200">
+                  All-Time Unpaid
+                </span>
+              </div>
+            </div>
+
+            {/* 4. ยอดเช็ครับลูกค้า (Customer Cheques Receivable) */}
+            <div className="bg-white border-2 border-blue-300/90 rounded-lg p-4 shadow-xs space-y-2 hover:shadow-sm transition relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                  <Coins className="w-3.5 h-3.5 text-blue-600" />
+                  <span>ยอดเช็ครับลูกค้า (งวดนี้)</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                  {periodReceivablePendingList.length + periodReceivableClearedList.length} ใบ
+                </span>
+              </div>
+              <div className="text-xl sm:text-2xl font-black font-mono text-blue-900">
+                {formatMoney(periodReceivableActiveTotal)}
+              </div>
+              <div className="text-[10.5px] text-slate-600 flex items-center justify-between border-t border-slate-100 pt-1.5 font-mono">
+                <span className="text-emerald-700">เข้าแล้ว: {formatMoney(periodReceivableClearedTotal)}</span>
+                <span className="text-amber-700">รอเข้า: {formatMoney(periodReceivablePendingTotal)}</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Sub-KPI Treasury Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs">
+            <div>
+              <span className="text-slate-500 text-[11px] block">อัตราการตัดจ่ายเช็ค (Clearance Rate)</span>
+              <strong className="font-mono text-indigo-700 text-sm">{periodPayableClearanceRate.toFixed(1)}%</strong>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[11px] block">ยอดเช็คจ่ายรวมในงวด (Active)</span>
+              <strong className="font-mono text-slate-800 text-sm">{formatMoney(periodPayableActiveTotal)}</strong>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[11px] block">สุทธิเช็ครับ - เช็คจ่าย (รับจริง)</span>
+              <strong className={`font-mono text-sm ${periodChequeNetRealized >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {formatMoney(periodChequeNetRealized)}
+              </strong>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[11px] block">เช็ครับลูกค้าค้างสะสมทั้งหมด</span>
+              <strong className="font-mono text-blue-700 text-sm">
+                {formatMoney(allTimeReceivablePendingTotal)} ({allTimeReceivablePendingList.length} ใบ)
+              </strong>
+            </div>
+          </div>
+
+          {/* Monthly 12-Month Cheque Table */}
+          <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+              <div>
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-indigo-600" />
+                  <span>ตารางสรุปยอดเช็คจ่ายคู่ค้า & เช็ครับลูกค้า 12 เดือนประจำปี {selectedYear}</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  จำแนกยอดเช็คจ่ายยังไม่จ่าย vs จ่ายแล้ว และยอดเช็ครับลูกค้าครบถ้วนทุกเดือน
+                </p>
+              </div>
+              <div className="text-[11px] font-mono text-slate-500">
+                (ปี พ.ศ. {parseInt(selectedYear) + 543})
+              </div>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-lg">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold">
+                  <tr>
+                    <th className="py-2.5 px-3" rowSpan={2}>เดือน</th>
+                    <th className="py-1 px-3 text-center border-b border-slate-200 bg-amber-50 text-amber-900" colSpan={3}>
+                      เช็คจ่ายคู่ค้า (Payable Cheques)
+                    </th>
+                    <th className="py-1 px-3 text-center border-b border-slate-200 bg-blue-50 text-blue-900" colSpan={3}>
+                      เช็ครับลูกค้า (Receivable Cheques)
+                    </th>
+                    <th className="py-2.5 px-3 text-right bg-slate-100 text-slate-800" rowSpan={2}>
+                      สุทธิตัดจริง
+                    </th>
+                  </tr>
+                  <tr className="bg-slate-100/80 text-[11px] text-slate-600">
+                    <th className="py-1 px-2 text-right text-amber-800 bg-amber-50/50">ยังไม่จ่าย (รอตัด)</th>
+                    <th className="py-1 px-2 text-right text-emerald-800 bg-emerald-50/50">จ่ายแล้ว (ตัดแล้ว)</th>
+                    <th className="py-1 px-2 text-right font-black text-slate-800 bg-amber-50/30">รวมเช็คจ่าย</th>
+                    <th className="py-1 px-2 text-right text-amber-800 bg-blue-50/30">ยังไม่เข้า (รอนำฝาก)</th>
+                    <th className="py-1 px-2 text-right text-emerald-800 bg-emerald-50/30">เข้าแล้ว</th>
+                    <th className="py-1 px-2 text-right font-black text-slate-800 bg-blue-50/50">รวมเช็ครับ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                  {twelveMonthsData.map(m => {
+                    const isSelected = selectedMonth === m.monthCode;
+                    return (
+                      <tr
+                        key={m.monthCode}
+                        className={`hover:bg-slate-50 transition cursor-pointer ${
+                          isSelected ? 'bg-indigo-50/70 font-bold' : ''
+                        }`}
+                        onClick={() => setSelectedMonth(m.monthCode)}
+                        title={`คลิกเพื่อเลือกดูงวดเดือน ${m.monthName}`}
+                      >
+                        <td className="py-2 px-3 font-sans font-bold text-slate-900">
+                          {m.monthName} ({m.monthCode})
+                          {isSelected && <span className="ml-1.5 text-[10px] text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded">งวดที่เลือก</span>}
+                        </td>
+                        <td className="py-2 px-2 text-right text-amber-800">
+                          <div>{formatMoney(m.chequePayablePending)}</div>
+                          {m.chequePayablePendingCount > 0 && (
+                            <div className="text-[10px] text-amber-600 font-sans">({m.chequePayablePendingCount} ใบ)</div>
+                          )}
+                        </td>
+                        <td className="py-2 px-2 text-right text-emerald-800">
+                          <div>{formatMoney(m.chequePayableCleared)}</div>
+                          {m.chequePayableClearedCount > 0 && (
+                            <div className="text-[10px] text-emerald-600 font-sans">({m.chequePayableClearedCount} ใบ)</div>
+                          )}
+                        </td>
+                        <td className="py-2 px-2 text-right font-black text-slate-900 bg-slate-50/50">
+                          {formatMoney(m.chequePayableTotal)}
+                        </td>
+                        <td className="py-2 px-2 text-right text-amber-800">
+                          <div>{formatMoney(m.chequeReceivablePending)}</div>
+                          {m.chequeReceivablePendingCount > 0 && (
+                            <div className="text-[10px] text-amber-600 font-sans">({m.chequeReceivablePendingCount} ใบ)</div>
+                          )}
+                        </td>
+                        <td className="py-2 px-2 text-right text-emerald-800">
+                          <div>{formatMoney(m.chequeReceivableCleared)}</div>
+                          {m.chequeReceivableClearedCount > 0 && (
+                            <div className="text-[10px] text-emerald-600 font-sans">({m.chequeReceivableClearedCount} ใบ)</div>
+                          )}
+                        </td>
+                        <td className="py-2 px-2 text-right font-black text-slate-900 bg-slate-50/50">
+                          {formatMoney(m.chequeReceivableTotal)}
+                        </td>
+                        <td className={`py-2 px-3 text-right font-black ${
+                          m.chequeNetRealized >= 0 ? 'text-emerald-700 bg-emerald-50/30' : 'text-rose-700 bg-rose-50/30'
+                        }`}>
+                          {formatMoney(m.chequeNetRealized)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="bg-slate-100/90 font-mono text-[11px] font-bold border-t-2 border-slate-300">
+                  <tr>
+                    <td className="py-2 px-3 font-sans text-slate-900">รวม 12 เดือน</td>
+                    <td className="py-2 px-2 text-right text-amber-900">
+                      {formatMoney(twelveMonthsData.reduce((s, m) => s + m.chequePayablePending, 0))}
+                    </td>
+                    <td className="py-2 px-2 text-right text-emerald-900">
+                      {formatMoney(twelveMonthsData.reduce((s, m) => s + m.chequePayableCleared, 0))}
+                    </td>
+                    <td className="py-2 px-2 text-right font-black text-slate-950">
+                      {formatMoney(twelveMonthsData.reduce((s, m) => s + m.chequePayableTotal, 0))}
+                    </td>
+                    <td className="py-2 px-2 text-right text-amber-900">
+                      {formatMoney(twelveMonthsData.reduce((s, m) => s + m.chequeReceivablePending, 0))}
+                    </td>
+                    <td className="py-2 px-2 text-right text-emerald-900">
+                      {formatMoney(twelveMonthsData.reduce((s, m) => s + m.chequeReceivableCleared, 0))}
+                    </td>
+                    <td className="py-2 px-2 text-right font-black text-slate-950">
+                      {formatMoney(twelveMonthsData.reduce((s, m) => s + m.chequeReceivableTotal, 0))}
+                    </td>
+                    <td className="py-2 px-3 text-right font-black text-indigo-950">
+                      {formatMoney(twelveMonthsData.reduce((s, m) => s + m.chequeNetRealized, 0))}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          {/* Detailed Cheque Registry Table Drill-down */}
+          <div className="bg-white border border-slate-200 rounded-lg p-4 sm:p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-indigo-600" />
+                  <span>ทะเบียนรายละเอียดเช็ค (Cheque Itemized Registry)</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  ค้นหาและตรวจสอบรายการเช็คตามเลขที่เช็ค, คู่ค้า/ลูกค้า, ธนาคาร, หรือสถานะ
+                </p>
+              </div>
+
+              {/* Filter Controls */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Type Filter */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setChequeTypeFilter('all')}
+                    className={`px-2 py-1 rounded transition ${chequeTypeFilter === 'all' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-600'}`}
+                  >
+                    ทั้งหมด ({filteredCheques.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChequeTypeFilter('payable')}
+                    className={`px-2 py-1 rounded transition ${chequeTypeFilter === 'payable' ? 'bg-amber-100 text-amber-900 shadow-2xs' : 'text-slate-600'}`}
+                  >
+                    เช็คจ่าย ({periodPayablePendingList.length + periodPayableClearedList.length + periodPayableBouncedList.length + periodPayableCancelledList.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChequeTypeFilter('receivable')}
+                    className={`px-2 py-1 rounded transition ${chequeTypeFilter === 'receivable' ? 'bg-blue-100 text-blue-900 shadow-2xs' : 'text-slate-600'}`}
+                  >
+                    เช็ครับ ({periodReceivablePendingList.length + periodReceivableClearedList.length + periodReceivableBouncedList.length + periodReceivableCancelledList.length})
+                  </button>
+                </div>
+
+                {/* Status Filter */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setChequeStatusFilter('all')}
+                    className={`px-2 py-1 rounded transition ${chequeStatusFilter === 'all' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-600'}`}
+                  >
+                    ทุกสถานะ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChequeStatusFilter('pending')}
+                    className={`px-2 py-1 rounded transition ${chequeStatusFilter === 'pending' ? 'bg-amber-100 text-amber-800' : 'text-slate-600'}`}
+                  >
+                    ยังไม่จ่าย/รอเข้า
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChequeStatusFilter('cleared')}
+                    className={`px-2 py-1 rounded transition ${chequeStatusFilter === 'cleared' ? 'bg-emerald-100 text-emerald-800' : 'text-slate-600'}`}
+                  >
+                    จ่ายแล้ว/เข้าแล้ว
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChequeStatusFilter('bounced')}
+                    className={`px-2 py-1 rounded transition ${chequeStatusFilter === 'bounced' ? 'bg-rose-100 text-rose-800' : 'text-slate-600'}`}
+                  >
+                    เช็คเด้ง
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChequeStatusFilter('cancelled')}
+                    className={`px-2 py-1 rounded transition ${chequeStatusFilter === 'cancelled' ? 'bg-slate-200 text-slate-800' : 'text-slate-600'}`}
+                  >
+                    ยกเลิก
+                  </button>
+                </div>
+
+                {/* Search */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="ค้นหาเลขที่เช็ค/คู่ค้า/ธนาคาร..."
+                    value={searchChequeQuery}
+                    onChange={e => setSearchChequeQuery(e.target.value)}
+                    className="bg-slate-50 border border-slate-300 rounded-md pl-8 pr-3 py-1 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none w-48"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Sub-bar: Cheque Display Count Selector */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50 border border-slate-200 rounded-md px-3.5 py-2 text-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-slate-700 font-sans flex items-center gap-1.5">
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>จำนวนรายการเช็คที่แสดง:</span>
+                </span>
+
+                <div className="inline-flex rounded-md shadow-2xs border border-slate-200 bg-white p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setChequeLimit('10')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded transition cursor-pointer ${
+                      chequeLimit === '10'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    10 รายการล่าสุด
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChequeLimit('20')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded transition cursor-pointer ${
+                      chequeLimit === '20'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    20 รายการ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChequeLimit('50')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded transition cursor-pointer ${
+                      chequeLimit === '50'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    50 รายการ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChequeLimit('all')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded transition cursor-pointer ${
+                      chequeLimit === 'all'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    แสดงทั้งหมด ({allFilteredCheques.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChequeLimit('custom')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded transition cursor-pointer ${
+                      chequeLimit === 'custom'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    กำหนดเอง...
+                  </button>
+                </div>
+
+                {chequeLimit === 'custom' && (
+                  <div className="inline-flex items-center gap-1.5 ml-1">
+                    <input
+                      type="number"
+                      min="1"
+                      max="10000"
+                      value={customChequeLimit}
+                      onChange={e => setCustomChequeLimit(e.target.value)}
+                      className="w-20 px-2 py-1 text-xs bg-white border border-indigo-300 rounded font-mono font-bold text-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      placeholder="ระบุจำนวน"
+                    />
+                    <span className="text-slate-500 text-xs font-sans">รายการ</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="text-slate-500 text-xs font-sans flex items-center gap-1.5">
+                <span>กำลังแสดง</span>
+                <strong className="font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                  {displayedCheques.length}
+                </strong>
+                <span>จากทั้งหมด</span>
+                <strong className="font-mono text-slate-800">
+                  {allFilteredCheques.length}
+                </strong>
+                <span>รายการ (เรียงตามกำหนดจ่ายล่าสุด)</span>
+                {chequeLimit !== 'all' && allFilteredCheques.length > displayedCheques.length && (
+                  <button
+                    type="button"
+                    onClick={() => setChequeLimit('all')}
+                    className="text-indigo-600 hover:underline font-bold ml-1 cursor-pointer"
+                  >
+                    (ดูทั้งหมด)
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Cheques Table */}
+            <div className="overflow-x-auto border border-slate-200 rounded-lg">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                  <tr>
+                    <th className="py-2.5 px-3">ลำดับ</th>
+                    <th className="py-2.5 px-3">ประเภท</th>
+                    <th className="py-2.5 px-3">เลขที่เช็ค</th>
+                    <th className="py-2.5 px-3">วันที่หน้าเช็ค / สั่งจ่าย</th>
+                    <th className="py-2.5 px-3">ชื่อคู่ค้า / ลูกค้า</th>
+                    <th className="py-2.5 px-3">ธนาคาร</th>
+                    <th className="py-2.5 px-3">สถานะเช็ค</th>
+                    <th className="py-2.5 px-3 text-right">จำนวนเงิน</th>
+                    <th className="py-2.5 px-3">หมายเหตุ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {displayedCheques.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-slate-400">
+                        ไม่พบรายการเช็คตามเงื่อนไขที่เลือกในงวดนี้
+                      </td>
+                    </tr>
+                  ) : (
+                    displayedCheques.map((ch, idx) => (
+                      <tr key={ch.id || idx} className="hover:bg-slate-50/80 transition">
+                        <td className="py-2.5 px-3 font-mono text-slate-400">{idx + 1}</td>
+                        <td className="py-2.5 px-3">
+                          {ch.type === 'payable' ? (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[10px] inline-flex items-center gap-1">
+                              <ArrowDownLeft className="w-3 h-3 text-amber-600" /> เช็คจ่ายคู่ค้า
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-bold text-[10px] inline-flex items-center gap-1">
+                              <ArrowUpRight className="w-3 h-3 text-blue-600" /> เช็ครับลูกค้า
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
+                          {ch.chequeNumber || '-'}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-600">
+                          <div>ครบกำหนด: <strong className="text-slate-900">{ch.dueDate || '-'}</strong></div>
+                          {ch.issueDate && (
+                            <div className="text-[10px] text-slate-400">ออกเช็ค: {ch.issueDate}</div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-slate-900">
+                          {ch.partnerName || '-'}
+                        </td>
+                        <td className="py-2.5 px-3 font-sans text-slate-700">
+                          <span className="inline-flex items-center gap-1">
+                            <Landmark className="w-3 h-3 text-slate-400" />
+                            <span>{ch.bank || 'ไม่ระบุธนาคาร'}</span>
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {ch.status === 'pending' && (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[10px] inline-flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> {ch.type === 'payable' ? 'ยังไม่จ่าย (รอตัด)' : 'รอนำฝาก (ยังไม่เข้า)'}
+                            </span>
+                          )}
+                          {ch.status === 'cleared' && (
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px] inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> {ch.type === 'payable' ? 'จ่ายแล้ว (ตัดเงินแล้ว)' : 'เข้าบัญชีแล้ว'}
+                            </span>
+                          )}
+                          {ch.status === 'bounced' && (
+                            <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded font-bold text-[10px] inline-flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> เช็คเด้ง / คืน
+                            </span>
+                          )}
+                          {ch.status === 'cancelled' && (
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold text-[10px] inline-flex items-center gap-1">
+                              <XCircle className="w-3 h-3" /> ยกเลิก
+                            </span>
+                          )}
+                        </td>
+                        <td className={`py-2.5 px-3 text-right font-mono font-black ${
+                          ch.type === 'payable' ? 'text-rose-700' : 'text-emerald-700'
+                        }`}>
+                          {formatMoney(ch.amount || 0)}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500 max-w-xs truncate text-[11px]">
+                          {ch.notes || '-'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {allFilteredCheques.length > displayedCheques.length && (
+              <div className="flex items-center justify-between p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-md text-xs text-indigo-900">
+                <span className="font-sans">
+                  กำลังแสดง <strong>{displayedCheques.length}</strong> รายการล่าสุด จากทั้งหมด <strong>{allFilteredCheques.length}</strong> รายการ
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setChequeLimit('all')}
+                  className="px-3 py-1 bg-indigo-600 text-white font-bold rounded shadow-xs hover:bg-indigo-700 transition cursor-pointer"
+                >
+                  ดูทั้งหมด {allFilteredCheques.length} รายการ
+                </button>
+              </div>
+            )}
+
+            {/* Bank Summary Breakdown */}
+            {chequeBankBreakdown.length > 0 && (
+              <div className="pt-4 border-t border-slate-100 space-y-3">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Landmark className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>สรุปยอดเช็คจ่ายจำแนกตามธนาคาร (Cheque Bank Summary Breakdown)</span>
+                </h4>
+                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                      <tr>
+                        <th className="py-2 px-3">ธนาคาร</th>
+                        <th className="py-2 px-3 text-center">จำนวนเช็ค</th>
+                        <th className="py-2 px-3 text-right text-amber-700">เช็คจ่าย: ยังไม่จ่าย (รอตัด)</th>
+                        <th className="py-2 px-3 text-right text-emerald-700">เช็คจ่าย: จ่ายแล้ว (ตัดแล้ว)</th>
+                        <th className="py-2 px-3 text-right text-blue-700">เช็ครับลูกค้า</th>
+                        <th className="py-2 px-3 text-right font-black">รวมยอดเงินทั้งสิ้น</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {chequeBankBreakdown.map((b, bIdx) => (
+                        <tr key={bIdx} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-bold text-slate-900 flex items-center gap-1.5">
+                            <Landmark className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{b.bank}</span>
+                          </td>
+                          <td className="py-2 px-3 text-center font-mono text-slate-600">{b.totalCount} ใบ</td>
+                          <td className="py-2 px-3 text-right font-mono text-amber-800">{formatMoney(b.payablePending)}</td>
+                          <td className="py-2 px-3 text-right font-mono text-emerald-800">{formatMoney(b.payableCleared)}</td>
+                          <td className="py-2 px-3 text-right font-mono text-blue-800">{formatMoney(b.receivablePending + b.receivableCleared)}</td>
+                          <td className="py-2 px-3 text-right font-mono font-black text-slate-900">{formatMoney(b.totalAmount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+          </div>
+
         </div>
       )}
 
