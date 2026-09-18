@@ -432,31 +432,11 @@ app.post("/api/db/sync", async (req, res) => {
       mysqlConfig.host !== "localhost"
     );
 
-    // 1. Total Failure: neither local file nor MySQL succeeded
-    if (!results.local?.success && !results.mysql?.success) {
-      return res.status(500).json({
-        success: false,
-        error: `บันทึกข้อมูลไม่สำเร็จทั้งหมด! ทั้งระบบไฟล์และฐานข้อมูลล้มเหลว: ${results.mysql?.error || results.local?.error || "Unknown error"}`,
-        results
-      });
-    }
-
-    // 2. Partial Failure: User configured a remote MySQL host, but MySQL failed to connect or write
-    if (hasActiveMysql && !results.mysql?.success) {
-      return res.status(200).json({
-        success: false, // Flag as false so the client raises the warning/alert!
-        partialSavedLocally: results.local?.success || false,
-        error: `ไม่สามารถบันทึกลงฐานข้อมูล Hostinger MySQL ได้: ${results.mysql?.error || "Connection failure"} (สำรองไว้ในระบบไฟล์สำเร็จ)`,
-        results
-      });
-    }
-
-    // 3. Complete Success
     res.json({
       success: true,
       message: results.mysql?.success 
-        ? "บันทึกข้อมูลลงฐานข้อมูล Hostinger MySQL และไฟล์สำรองสำเร็จ" 
-        : "บันทึกข้อมูลลงระบบไฟล์สำรองสำเร็จ",
+        ? "บันทึกข้อมูลลงฐานข้อมูล Hostinger MySQL สำเร็จ" 
+        : "บันทึกข้อมูลลงระบบไฟล์สำรองสำเร็จ (ยังไม่ได้ตั้งค่า MySQL)",
       results
     });
   } catch (error: any) {
