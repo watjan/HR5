@@ -81,7 +81,11 @@ import {
   FileCheck,
   ShieldCheck,
   FileText,
-  FileSpreadsheet
+  FileSpreadsheet,
+  AlertTriangle,
+  CheckCircle2,
+  Save,
+  ShieldAlert
 } from 'lucide-react';
 
 // Hostinger MySQL system (u753988669_hr)
@@ -212,6 +216,52 @@ export default function App() {
     }
   };
 
+  // Urgent audible warning tone when saving/database persistence fails
+  const playErrorAlertSound = () => {
+    if (!soundEnabled) return;
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const now = audioCtx.currentTime;
+      // Dissonant 3-pulse urgent warning buzzer (380Hz, 320Hz, 260Hz)
+      const freqs = [380, 320, 260];
+      freqs.forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+        gain.gain.setValueAtTime(0.12, now + idx * 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.16);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + idx * 0.12);
+        osc.stop(now + idx * 0.12 + 0.16);
+      });
+    } catch (e) {
+      console.warn("Web Audio API warning sound failed:", e);
+    }
+  };
+
+  // Pleasant chime when saved successfully after an error
+  const playSuccessChime = () => {
+    if (!soundEnabled) return;
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(523.25, now); // C5
+      osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+      osc.frequency.setValueAtTime(783.99, now + 0.16); // G5
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.35);
+    } catch (e) {}
+  };
+
   // Sync sound preference from local storage changes
   useEffect(() => {
     const handleStorageChange = () => {
@@ -314,6 +364,7 @@ export default function App() {
         dayoffSwaps: payload.dayoffSwaps,
         partnerCompanies: payload.partnerCompanies,
         systemSettings: payload.systemSettings,
+        counterDuties: payload.counterDuties,
         permits: payload.permits,
         officialExpenses: payload.officialExpenses
       });
@@ -661,7 +712,45 @@ export default function App() {
     officialExpenses
   ]);
 
-  const executeManualSync = async () => {
+  // Save status & error notification state (Vulnerability check & alert on save failure)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<{
+    message: string;
+    timestamp: string;
+    retryCount: number;
+  } | null>(null);
+  const [isAlertBannerDismissed, setIsAlertBannerDismissed] = useState<boolean>(false);
+  const autoRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Emergency Backup JSON Downloader
+  const handleDownloadEmergencyBackup = () => {
+    try {
+      const payload = latestPayloadRef.current;
+      if (!payload) return;
+      const jsonStr = JSON.stringify(payload, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10);
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+      a.download = `hrms-emergency-backup-${dateStr}-${timeStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Emergency backup download error:', err);
+    }
+  };
+
+  const executeManualSync = async (isRetry = false) => {
+    if (autoRetryTimeoutRef.current) {
+      clearTimeout(autoRetryTimeoutRef.current);
+      autoRetryTimeoutRef.current = null;
+    }
+
     if (isSyncingRef.current) {
       hasPendingRef.current = true;
       return;
@@ -672,12 +761,14 @@ export default function App() {
 
     // Content-diff comparison to skip sync if no data actually changed from last sync/load
     const currentPayloadStr = getNormalizedPayloadString(currentPayload);
-    if (currentPayloadStr === lastSyncedPayloadRef.current) {
+    if (!isRetry && currentPayloadStr === lastSyncedPayloadRef.current && saveStatus !== 'error') {
       return;
     }
 
     isSyncingRef.current = true;
     setIsSyncingTop(true);
+    setSaveStatus('saving');
+
     try {
       let runSync = true;
       while (runSync) {
@@ -692,21 +783,65 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          const nowStr = new Date().toLocaleTimeString('th-TH');
-          setLastSyncedTime(nowStr);
-          safeStorage.setItem('hr_last_synced', nowStr);
 
-          // Update reference payload upon success
-          lastSyncedPayloadRef.current = payloadStr;
+        let data: any = {};
+        try {
+          data = await res.json();
+        } catch (jsonErr) {
+          throw new Error(`เซิร์ฟเวอร์ตอบกลับด้วยข้อมูลที่ไม่อยู่ในรูปแบบ JSON (HTTP ${res.status})`);
         }
+
+        if (!res.ok || !data.success) {
+          const errMsg = data.error || (res.status === 500 ? 'เกิดข้อผิดพลาดร้ายแรงบนเซิร์ฟเวอร์ (500)' : `HTTP Error ${res.status}`);
+          throw new Error(errMsg);
+        }
+
+        const nowStr = new Date().toLocaleTimeString('th-TH');
+        setLastSyncedTime(nowStr);
+        safeStorage.setItem('hr_last_synced', nowStr);
+
+        // Update reference payload upon success
+        lastSyncedPayloadRef.current = payloadStr;
 
         // Loop again if a state change arrived during the current network request
         runSync = hasPendingRef.current;
       }
-    } catch (e) {
-      console.error('AutoSync failed:', e);
+
+      // If we arrived here, save succeeded 100%!
+      const hadPreviousError = saveStatus === 'error' || saveError !== null;
+      setSaveStatus('saved');
+      setSaveError(null);
+      setIsAlertBannerDismissed(false);
+
+      if (hadPreviousError) {
+        playSuccessChime();
+      }
+    } catch (e: any) {
+      console.error('Save/Sync failed:', e);
+      const errorMsg = e.message || 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์หรือฐานข้อมูลได้ (Connection Error)';
+
+      setSaveStatus('error');
+      setIsAlertBannerDismissed(false); // Make alert banner visible immediately on failure
+
+      setSaveError(prev => {
+        const nextRetry = (prev?.retryCount || 0) + 1;
+
+        // Auto-retry with backoff up to 3 times (3s, 6s, 9s)
+        if (nextRetry <= 3) {
+          const delayMs = nextRetry * 3000;
+          autoRetryTimeoutRef.current = setTimeout(() => {
+            executeManualSync(true);
+          }, delayMs);
+        }
+
+        return {
+          message: errorMsg,
+          timestamp: new Date().toLocaleTimeString('th-TH'),
+          retryCount: nextRetry
+        };
+      });
+
+      playErrorAlertSound();
     } finally {
       isSyncingRef.current = false;
       setIsSyncingTop(false);
@@ -716,6 +851,32 @@ export default function App() {
   useEffect(() => {
     safeStorage.setItem('hr_auto_sync', String(autoSync));
   }, [autoSync]);
+
+  // Page Exit / Tab Close Guard: Protect against closing browser with unsaved or failed changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const currentPayload = latestPayloadRef.current;
+      if (!currentPayload) return;
+      const currentPayloadStr = getNormalizedPayloadString(currentPayload);
+      const isUnsaved = currentPayloadStr !== lastSyncedPayloadRef.current || isSyncingRef.current || saveStatus === 'error';
+
+      if (isUnsaved) {
+        try {
+          const blob = new Blob([JSON.stringify(currentPayload)], { type: 'application/json' });
+          if (navigator.sendBeacon) {
+            navigator.sendBeacon('/api/db/sync', blob);
+          }
+        } catch (beaconErr) {}
+
+        e.preventDefault();
+        e.returnValue = 'มีข้อมูลที่ยังไม่ได้บันทึกลงฐานข้อมูลหรือกำลังบันทึกอยู่ คุณแน่ใจหรือไม่ว่าต้องการออกจากหน้านี้?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [saveStatus]);
 
   // Disaster recovery browser-side auto-save whenever state changes
   useEffect(() => {
@@ -742,7 +903,9 @@ export default function App() {
         dayoffSwaps: dayOffSwaps || [],
         partnerCompanies: partnerCompanies || [],
         systemSettings: [{ id: "current", ...systemSettings }],
-        counterDuties: counterDuties || []
+        counterDuties: counterDuties || [],
+        permits: permits || [],
+        officialExpenses: officialExpenses || []
       };
 
       if (typeof window !== 'undefined' && window.localStorage) {
@@ -769,17 +932,19 @@ export default function App() {
     partnerCompanies,
     systemSettings,
     loadingServer,
-    counterDuties
+    counterDuties,
+    permits,
+    officialExpenses
   ]);
 
   useEffect(() => {
     if (loadingServer) return;
     if (!autoSync) return;
 
-    // Trigger synchronization with a sensible debounce (2500ms) to preserve Firebase Firestore free daily write quotas
+    // Trigger synchronization with an agile debounce (1200ms) for responsive, zero-loss saving
     const delayDebounce = setTimeout(() => {
       executeManualSync();
-    }, 2500);
+    }, 1200);
 
     return () => clearTimeout(delayDebounce);
   }, [
@@ -801,7 +966,9 @@ export default function App() {
     systemSettings,
     autoSync,
     loadingServer,
-    counterDuties
+    counterDuties,
+    permits,
+    officialExpenses
   ]);
 
   // Helper to add audit log
@@ -2057,6 +2224,79 @@ export default function App() {
       {/* MAIN CONTAINER CONTENT */}
       <div className={`flex-1 flex flex-col min-h-screen transition-[padding] duration-300 ease-in-out ${sidebarOpen ? 'md:pl-64' : 'pl-0'}`}>
         
+        {/* CRITICAL SAVE FAILURE ALERT BANNER */}
+        {saveError && !isAlertBannerDismissed && (
+          <div 
+            id="save-failure-alert-banner" 
+            className="bg-rose-600 text-white px-3 sm:px-6 py-3 shadow-lg border-b-2 border-rose-800 sticky top-0 z-50 transition-all animate-in slide-in-from-top duration-300 select-none"
+            role="alert"
+          >
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="p-2 bg-rose-700/80 rounded-full shrink-0 animate-pulse mt-0.5 md:mt-0">
+                  <AlertTriangle className="w-5 h-5 text-amber-300" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-extrabold text-sm tracking-wide flex items-center gap-1.5">
+                      🚨 การบันทึกข้อมูลไม่สำเร็จ! (Save Failed)
+                    </span>
+                    <span className="bg-rose-800/80 text-[10px] font-mono px-2 py-0.5 rounded-full border border-rose-500/50 text-rose-100">
+                      เวลา {saveError.timestamp}
+                    </span>
+                    {saveError.retryCount > 0 && (
+                      <span className="bg-amber-400 text-rose-950 font-bold text-[10px] font-mono px-2 py-0.5 rounded-full">
+                        พยายามบันทึกแล้ว {saveError.retryCount} ครั้ง
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-rose-100 mt-1 leading-relaxed font-sans break-words">
+                    สาเหตุ: <span className="font-semibold text-white">{saveError.message}</span>
+                    {saveError.retryCount <= 3 && (
+                      <span className="ml-2 text-amber-200 animate-pulse font-medium">
+                        (ระบบกำลังพยายามบันทึกซ้ำให้อัตโนมัติ...)
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end md:self-auto shrink-0 pt-1 md:pt-0">
+                <button
+                  id="btn-alert-retry-now"
+                  onClick={() => executeManualSync(true)}
+                  disabled={isSyncingTop}
+                  className="px-3 py-1.5 bg-white text-rose-700 hover:bg-rose-50 rounded-sm text-xs font-bold font-sans shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="ลองส่งข้อมูลบันทึกลงฐานข้อมูลใหม่อีกครั้งทันที"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingTop ? 'animate-spin' : ''}`} />
+                  ลองบันทึกใหม่ทันที
+                </button>
+
+                <button
+                  id="btn-alert-download-backup"
+                  onClick={handleDownloadEmergencyBackup}
+                  className="px-3 py-1.5 bg-rose-800 hover:bg-rose-900 border border-rose-400/50 text-white rounded-sm text-xs font-bold font-sans shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                  title="ดาวน์โหลดข้อมูลทั้งหมดเก็บไว้เป็นไฟล์ JSON บนเครื่องของคุณทันที เพื่อป้องกันข้อมูลสูญหาย 100%"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  สำรองฉุกเฉิน (JSON)
+                </button>
+
+                <button
+                  id="btn-alert-dismiss"
+                  onClick={() => setIsAlertBannerDismissed(true)}
+                  className="p-1.5 text-rose-200 hover:text-white hover:bg-rose-700/60 rounded-sm transition cursor-pointer ml-1"
+                  title="ปิดแถบแจ้งเตือนนี้ชั่วคราว (สถานะเตือนสีแดงจะยังคงอยู่ที่แถบด้านบน)"
+                  aria-label="ปิดแถบแจ้งเตือน"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TOP COMPONENT HEADER */}
         <header id="top-app-header" className="bg-white border-b border-slate-200 h-16 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30 no-print gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -2141,7 +2381,7 @@ export default function App() {
                 <div className="w-px h-3 bg-slate-250 mx-0.5"></div>
 
                 <button
-                  onClick={executeManualSync}
+                  onClick={() => executeManualSync()}
                   disabled={isSyncingTop}
                   className={`p-0.5 hover:bg-slate-200 rounded-xs text-slate-500 hover:text-indigo-600 disabled:opacity-50 transition cursor-pointer flex items-center justify-center ${isSyncingTop ? 'animate-spin text-indigo-600' : ''}`}
                   title={lastSyncedTime ? `ซิงก์ล่าสุดเวลา ${lastSyncedTime}` : 'ซิงโครไนซ์ข้อมูลตอนนี้'}
@@ -2149,6 +2389,48 @@ export default function App() {
                   <RefreshCw className="w-3 h-3" />
                 </button>
               </div>
+
+              {/* Real-time Save Status Pill */}
+              {saveStatus === 'saving' && (
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 border border-amber-300 text-amber-800 text-[10px] rounded-sm font-mono animate-pulse">
+                  <RefreshCw className="w-3 h-3 animate-spin text-amber-600" />
+                  <span className="font-bold hidden sm:inline">กำลังบันทึก...</span>
+                </div>
+              )}
+
+              {saveStatus === 'error' && (
+                <button
+                  id="btn-header-save-error"
+                  onClick={() => {
+                    setIsAlertBannerDismissed(false);
+                    executeManualSync(true);
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] rounded-sm font-mono shadow-xs animate-bounce cursor-pointer transition"
+                  title={saveError?.message || "การบันทึกไม่สำเร็จ คลิกเพื่อลองใหม่"}
+                >
+                  <AlertTriangle className="w-3 h-3 text-amber-300" />
+                  <span className="font-extrabold">⚠️ บันทึกไม่สำเร็จ (คลิกเพื่อบันทึกใหม่)</span>
+                </button>
+              )}
+
+              {saveStatus === 'saved' && (
+                <div className="hidden xl:flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] rounded-sm font-mono">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  <span className="font-bold">บันทึกแล้ว {lastSyncedTime}</span>
+                </div>
+              )}
+
+              {/* Instant Force Save Button */}
+              <button
+                id="btn-force-save-now"
+                onClick={() => executeManualSync(true)}
+                disabled={isSyncingTop}
+                className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-blue-600 text-white rounded-sm text-[10px] font-sans font-bold shadow-xs transition cursor-pointer disabled:opacity-50"
+                title="กดเพื่อบันทึกข้อมูลลงฐานข้อมูลทันที (Force Save Now)"
+              >
+                <Save className="w-3 h-3" />
+                <span className="hidden xs:inline">บันทึกทันที</span>
+              </button>
             </div>
 
             <div className="hidden sm:flex items-center bg-slate-100 px-3 py-1 rounded-sm border border-slate-200 text-slate-600 text-[10px] font-mono tracking-wider font-bold">

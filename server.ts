@@ -415,15 +415,53 @@ app.post("/api/db/ledger/create", async (req, res) => {
 
 // POST DB Sync - synchronize local state to BOTH Hostinger & Firebase
 app.post("/api/db/sync", async (req, res) => {
-  const payload = req.body;
+  let payload = req.body;
+  if (typeof payload === "string") {
+    try {
+      payload = JSON.parse(payload);
+    } catch {}
+  }
   const mysqlConfig = getMySQLConfig();
 
   try {
     const results = await syncToDualDatabases(payload, mysqlConfig);
-    res.json({ success: true, results });
+    const hasActiveMysql = Boolean(
+      mysqlConfig && 
+      mysqlConfig.host && 
+      mysqlConfig.host !== "127.0.0.1" && 
+      mysqlConfig.host !== "localhost"
+    );
+
+    // 1. Total Failure: neither local file nor MySQL succeeded
+    if (!results.local?.success && !results.mysql?.success) {
+      return res.status(500).json({
+        success: false,
+        error: `บันทึกข้อมูลไม่สำเร็จทั้งหมด! ทั้งระบบไฟล์และฐานข้อมูลล้มเหลว: ${results.mysql?.error || results.local?.error || "Unknown error"}`,
+        results
+      });
+    }
+
+    // 2. Partial Failure: User configured a remote MySQL host, but MySQL failed to connect or write
+    if (hasActiveMysql && !results.mysql?.success) {
+      return res.status(200).json({
+        success: false, // Flag as false so the client raises the warning/alert!
+        partialSavedLocally: results.local?.success || false,
+        error: `ไม่สามารถบันทึกลงฐานข้อมูล Hostinger MySQL ได้: ${results.mysql?.error || "Connection failure"} (สำรองไว้ในระบบไฟล์สำเร็จ)`,
+        results
+      });
+    }
+
+    // 3. Complete Success
+    res.json({
+      success: true,
+      message: results.mysql?.success 
+        ? "บันทึกข้อมูลลงฐานข้อมูล Hostinger MySQL และไฟล์สำรองสำเร็จ" 
+        : "บันทึกข้อมูลลงระบบไฟล์สำรองสำเร็จ",
+      results
+    });
   } catch (error: any) {
     console.error("Database Sync Error:", error);
-    res.status(500).json({ error: error.message || "Failed to sync databases" });
+    res.status(500).json({ success: false, error: error.message || "Failed to sync databases" });
   }
 });
 

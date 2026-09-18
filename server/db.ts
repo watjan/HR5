@@ -158,6 +158,7 @@ const COLLECTION_KEYS = [
 // Sync to BOTH Local Database and Firebase Firestore
 export async function syncToDualDatabases(payload: SyncPayload, mysqlConfig?: MySQLConfig) {
   const results = {
+    local: { success: false, error: "" },
     mysql: { success: false, error: "MySQL integration disabled" },
     firebase: { success: false, error: "" }
   };
@@ -181,8 +182,10 @@ export async function syncToDualDatabases(payload: SyncPayload, mysqlConfig?: My
     }
     const localPayload = { ...payload };
     fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify(localPayload, null, 2), "utf8");
+    results.local = { success: true, error: "" };
   } catch (error: any) {
     console.error("Local backup save error:", error);
+    results.local = { success: false, error: error?.message || "ไม่สามารถเขียนไฟล์สำรองบนดิสก์ได้" };
   }
 
   // 3. Skip Firebase Firestore (Disabled per user request)
