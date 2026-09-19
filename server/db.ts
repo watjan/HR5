@@ -1,7 +1,5 @@
 import fs from "fs";
 import path from "path";
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore, doc, setDoc, getDoc, writeBatch, deleteDoc } from "firebase/firestore";
 import mysql from "mysql2/promise";
 
 export function sanitizeMySQLHost(host: string): string {
@@ -17,7 +15,7 @@ export function beautifyMySQLError(error: any, host: string): string {
   const errMsg = error?.message || String(error);
   const cleanHost = sanitizeMySQLHost(host);
   if (errMsg.includes("Access denied for user") || errMsg.includes("ER_ACCESS_DENIED_ERROR")) {
-    return `พบเซิร์ฟเวอร์ Hostinger (${cleanHost}) แล้ว แต่สิทธิ์การเข้าถึงถูกปฏิเสธ (Access Denied): กรุณาเข้าไปที่ Hostinger hPanel > Databases > Remote MySQL แล้วเลือกฐานข้อมูล u753988669_hr จากนั้นในช่อง IP ให้ใส่ % (อนุญาตทุก IP) แล้วกดบันทึก หรือตรวจสอบความถูกต้องของรหัสผ่าน`;
+    return `พบเซิร์ฟเวอร์ Hostinger (${cleanHost}) แล้ว แต่สิทธิ์การเชื่อมต่อจากภายนอกถูกปฏิเสธ (Access Denied): ใน Hostinger hPanel > Databases > Remote MySQL ให้เลือกฐานข้อมูล 'u753988669_hr' แล้วใส่ IP เป็น '%' (เครื่องหมายเปอร์เซ็นต์ เพื่ออนุญาต Cloud IP) หรือตรวจสอบความถูกต้องของรหัสผ่านผู้ใช้งาน`;
   }
   if (errMsg.includes("ECONNREFUSED") || errMsg.includes("ENOTFOUND")) {
     if (cleanHost === "127.0.0.1" || cleanHost === "localhost" || cleanHost === "1270.0.1") {
@@ -31,7 +29,6 @@ export function beautifyMySQLError(error: any, host: string): string {
 
 // Config paths
 const LOCAL_DB_PATH = path.join(process.cwd(), "server", "local_db.json");
-const CONFIG_PATH = path.join(process.cwd(), "firebase-applet-config.json");
 const MYSQL_CONFIG_PATH = path.join(process.cwd(), "server", "mysql_config.json");
 
 export interface MySQLConfig {
@@ -63,43 +60,6 @@ export interface SyncPayload {
   counterDuties?: any[];
   permits?: any[];
   officialExpenses?: any[];
-}
-
-// Load Firebase configuration
-export function getFirebaseConfig() {
-  try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      const configData = fs.readFileSync(CONFIG_PATH, "utf8");
-      return JSON.parse(configData);
-    }
-  } catch (err) {
-    console.error("Error reading firebase config:", err);
-  }
-  return null;
-}
-
-// Initialize Firebase App & Firestore
-let firebaseApp: any = null;
-let firestoreDb: any = null;
-
-function getFirestoreInstance() {
-  if (firestoreDb) return firestoreDb;
-
-  const config = getFirebaseConfig();
-  if (!config || !config.projectId) {
-    throw new Error("Firebase config is missing or invalid");
-  }
-
-  const app = getApps().length === 0 ? initializeApp(config) : getApp();
-  firebaseApp = app;
-
-  if (config.firestoreDatabaseId && config.firestoreDatabaseId !== "(default)") {
-    firestoreDb = getFirestore(app, config.firestoreDatabaseId);
-  } else {
-    firestoreDb = getFirestore(app);
-  }
-
-  return firestoreDb;
 }
 
 export function getMySQLConfig(): MySQLConfig {
@@ -173,12 +133,11 @@ const COLLECTION_KEYS = [
   { key: "officialExpenses", path: "official_expenses/current" }
 ];
 
-// Sync to BOTH Local Database and Firebase Firestore
+// Sync to Local Database file and Hostinger MySQL
 export async function syncToDualDatabases(payload: SyncPayload, mysqlConfig?: MySQLConfig) {
   const results = {
     local: { success: false, error: "" },
-    mysql: { success: false, error: "MySQL integration disabled" },
-    firebase: { success: false, error: "" }
+    mysql: { success: false, error: "MySQL integration disabled" }
   };
 
   // 1. Read existing local database copy to detect what actually changed
@@ -206,10 +165,7 @@ export async function syncToDualDatabases(payload: SyncPayload, mysqlConfig?: My
     results.local = { success: false, error: error?.message || "ไม่สามารถเขียนไฟล์สำรองบนดิสก์ได้" };
   }
 
-  // 3. Skip Firebase Firestore (Disabled per user request)
-  results.firebase = { success: false, error: "Firebase connections canceled by user configuration" };
-
-  // 4. Sync to Hostinger MySQL (if configured)
+  // 3. Sync to Hostinger MySQL (if configured)
   const activeMysqlConfig = mysqlConfig || getMySQLConfig();
   if (activeMysqlConfig && activeMysqlConfig.host) {
     let connection: any = null;
@@ -266,7 +222,7 @@ export async function syncToDualDatabases(payload: SyncPayload, mysqlConfig?: My
       if (activeMysqlConfig.host === "127.0.0.1" || activeMysqlConfig.host === "localhost") {
         console.info(`[MySQL Sync Info] Bypassed or failed local MySQL sync (127.0.0.1). Fallback active.`);
       } else {
-        console.warn("[MySQL Sync] Gracefully caught MySQL sync connection error (falling back):", error.message);
+        console.info("[MySQL Sync Status] Hostinger MySQL currently offline or pending Remote MySQL authorization. Local server storage fallback active.");
       }
       results.mysql.success = false;
       results.mysql.error = beautifyMySQLError(error, activeMysqlConfig.host);
@@ -352,7 +308,7 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
       if (activeMysqlConfig.host === "127.0.0.1" || activeMysqlConfig.host === "localhost") {
         console.info(`[MySQL Load Info] Bypassed or failed local MySQL load (127.0.0.1). Fallback active.`);
       } else {
-        console.warn("[MySQL Load] Gracefully caught MySQL load connection error (falling back):", error.message);
+        console.info("[MySQL Load Status] Hostinger MySQL currently offline or pending Remote MySQL authorization. Local server storage fallback active.");
       }
       data.mysqlError = beautifyMySQLError(error, activeMysqlConfig.host);
     } finally {
@@ -403,31 +359,18 @@ export async function loadFromDualDatabases(mysqlConfig?: MySQLConfig) {
   return data;
 }
 
-// Clear Firestore Database
-export async function clearFirestoreDatabase(): Promise<{ success: boolean; clearedCollections: string[]; error?: string }> {
+// Clear System Database (Local Backup and Hostinger MySQL)
+export async function clearDatabase(): Promise<{ success: boolean; clearedCollections: string[]; error?: string }> {
   try {
-    const db = getFirestoreInstance();
     const cleared: string[] = [];
 
-    // Delete documents in Firestore
-    await Promise.all(
-      COLLECTION_KEYS.map(async (item) => {
-        try {
-          const docRef = doc(db, item.path);
-          await deleteDoc(docRef);
-          cleared.push(item.key);
-        } catch (err) {
-          console.error(`Error deleting key ${item.key} from Firebase:`, err);
-        }
-      })
-    );
-
-    // Also clear the local file backup
+    // 1. Clear the local file backup
     if (fs.existsSync(LOCAL_DB_PATH)) {
       fs.unlinkSync(LOCAL_DB_PATH);
+      cleared.push("local_backup");
     }
 
-    // Also clear Hostinger MySQL database collections table if configured to keep both empty
+    // 2. Clear Hostinger MySQL database collections table if configured
     const activeMysqlConfig = getMySQLConfig();
     if (activeMysqlConfig && activeMysqlConfig.host) {
       let connection: any = null;
@@ -441,6 +384,7 @@ export async function clearFirestoreDatabase(): Promise<{ success: boolean; clea
           connectTimeout: 4000
         });
         await connection.query("TRUNCATE TABLE app_collections");
+        cleared.push("mysql_app_collections");
         console.log("[MySQL Clear] Successfully truncated app_collections table");
       } catch (mysqlErr: any) {
         console.error("[MySQL Clear] Error clearing MySQL:", mysqlErr);
@@ -458,14 +402,16 @@ export async function clearFirestoreDatabase(): Promise<{ success: boolean; clea
       clearedCollections: cleared
     };
   } catch (error: any) {
-    console.error("Firebase Firestore Clear Error:", error);
+    console.error("Database Clear Error:", error);
     return {
       success: false,
       clearedCollections: [],
-      error: error.message || "Failed to clear Firestore database"
+      error: error.message || "Failed to clear database"
     };
   }
 }
+
+export const clearFirestoreDatabase = clearDatabase;
 
 // Relational Table Schemas definition for System Database Ledger
 export interface TableSchema {
@@ -1674,7 +1620,7 @@ export async function getAdminsFromHostinger(mysqlConfig?: MySQLConfig) {
         admins: DEFAULT_ADMINS
       };
     } catch (error: any) {
-      console.warn("[getAdminsFromHostinger] MySQL error (falling back):", error.message);
+      console.info("[getAdminsFromHostinger] Hostinger MySQL admin check offline or pending Remote MySQL authorization. Local server admin fallback active.");
     } finally {
       if (connection) {
         try { await connection.end(); } catch (e) {}

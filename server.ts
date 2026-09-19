@@ -10,9 +10,9 @@ import {
   getMySQLConfig, 
   saveMySQLConfig, 
   sanitizeMySQLHost,
-  getFirebaseConfig, 
   syncToDualDatabases, 
   loadFromDualDatabases,
+  clearDatabase,
   clearFirestoreDatabase,
   getMySQLTableStatus,
   createMySQLTables,
@@ -278,21 +278,16 @@ MYSQL_AUTO_CREATE=true
   }
 });
 
-// GET Database Connection configurations and status (Firebase & MySQL)
+// GET Database Connection configurations and status (Hostinger MySQL & Server Backup)
 app.get("/api/db/config", async (req, res) => {
   try {
-    const firebaseConfig = getFirebaseConfig();
     const mysqlConfig = getMySQLConfig();
 
     const statuses = {
-      mysql: { connected: false, error: "" },
-      firebase: { connected: false, error: "" }
+      mysql: { connected: false, error: "" }
     };
 
-    // 1. Firebase Disabled per user instruction
-    statuses.firebase.error = "Firebase disabled per user instruction";
-
-    // 2. Test Hostinger MySQL Connection
+    // Test Hostinger MySQL Connection
     const cleanHost = sanitizeMySQLHost(mysqlConfig?.host || "");
     if (cleanHost && cleanHost !== "127.0.0.1" && cleanHost !== "localhost") {
       try {
@@ -312,7 +307,7 @@ app.get("/api/db/config", async (req, res) => {
       }
     } else {
       statuses.mysql.connected = false;
-      statuses.mysql.error = "โหมดสำรองเซิร์ฟเวอร์ (ระบบบันทึกไฟล์ JSON อัตโนมัติ หากต้องการเชื่อมต่อ Hostinger โปรดระบุชื่อโฮสต์ เช่น sqlXXX.hostinger.com)";
+      statuses.mysql.error = "โหมดสำรองเซิร์ฟเวอร์ (ระบบบันทึกไฟล์ JSON อัตโนมัติ หากต้องการเชื่อมต่อ Hostinger โปรดระบุชื่อโฮสต์ เช่น apiwatkitchenware.com หรือ sqlXXX.hostinger.com)";
     }
 
     res.json({
@@ -323,22 +318,16 @@ app.get("/api/db/config", async (req, res) => {
         database: mysqlConfig?.database || "",
         autoCreateDb: mysqlConfig?.autoCreateDb || false
       },
-      firebase: {
-        projectId: firebaseConfig?.projectId || "",
-        apiKey: firebaseConfig?.apiKey ? "AIzaSy..." : "",
-        firestoreDatabaseId: firebaseConfig?.firestoreDatabaseId || "(default)",
-        storageBucket: firebaseConfig?.storageBucket || ""
-      },
+      firebase: null,
       status: statuses
     });
   } catch (outerErr: any) {
     console.warn("Gracefully caught error in /api/db/config:", outerErr);
     res.json({
       mysql: { host: "", port: 3306, user: "", database: "", autoCreateDb: false },
-      firebase: { projectId: "", apiKey: "", firestoreDatabaseId: "(default)", storageBucket: "" },
+      firebase: null,
       status: {
-        mysql: { connected: false, error: "MySQL status check failed" },
-        firebase: { connected: false, error: outerErr?.message || "Failed to resolve DB configuration status" }
+        mysql: { connected: false, error: "MySQL status check failed" }
       }
     });
   }
@@ -556,50 +545,24 @@ app.get("/api/db/load", async (req, res) => {
   }
 });
 
-// POST DB Clear - reset the Firebase Firestore database to empty data
+// POST DB Clear - reset the database to empty data
 app.post("/api/db/clear", async (req, res) => {
   try {
-    const result = await clearFirestoreDatabase();
+    const result = await clearDatabase();
     res.json(result);
   } catch (error: any) {
     console.error("Database Clear Error:", error);
-    res.status(500).json({ success: false, error: error.message || "Failed to clear Firestore database" });
+    res.status(500).json({ success: false, error: error.message || "Failed to clear database" });
   }
 });
 
-// POST DB Copy Firebase to MySQL - fetch Firebase Firestore data and copy/migrate it directly to Hostinger MySQL
+// POST DB Copy Firebase to MySQL - notice endpoint
 app.post("/api/db/copy-firebase-to-mysql", async (req, res) => {
-  const mysqlConfig = getMySQLConfig();
-  if (!mysqlConfig || !mysqlConfig.host) {
-    return res.status(400).json({ success: false, error: "Hostinger MySQL ไม่ได้รับการตั้งค่าหรือยังไม่ได้เชื่อมต่อโฮสต์" });
-  }
-
-  try {
-    // 1. Fetch remote dual database payload
-    const remoteData = await loadFromDualDatabases(mysqlConfig);
-    if (!remoteData.firebase) {
-      return res.status(404).json({ success: false, error: "ตรวจไม่พบข้อมูลบนคลาวด์ Firebase Firestore หรือเกิดปัญหาโควตาเต็ม" });
-    }
-
-    // 2. Synchronize the Firebase dataset directly into Hostinger MySQL
-    const syncResults = await syncToDualDatabases(remoteData.firebase, mysqlConfig);
-
-    if (syncResults.mysql.success) {
-      res.json({ 
-        success: true, 
-        message: "คัดลอกข้อมูลจาก Firebase Firestore ไปยัง Hostinger MySQL สำเร็จ!",
-        results: syncResults
-      });
-    } else {
-      res.status(500).json({ 
-        success: false, 
-        error: syncResults.mysql.error || "ไม่สามารถเขียนข้อมูลลงในฐานข้อมูล Hostinger MySQL ได้" 
-      });
-    }
-  } catch (error: any) {
-    console.error("Copy Firebase to MySQL Error:", error);
-    res.status(500).json({ success: false, error: error.message || "Failed to copy Firebase to MySQL" });
-  }
+  res.json({ 
+    success: true, 
+    message: "ระบบได้ยกเลิกและนำ Google Cloud Firestore ออกแล้ว ข้อมูลทั้งหมดถูกจัดเก็บและซิงค์ผ่าน Hostinger MySQL และไฟล์สำรองโดยตรง",
+    results: { local: { success: true, error: "" } }
+  });
 });
 
 // Integrate Vite as Middleware

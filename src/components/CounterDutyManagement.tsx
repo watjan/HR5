@@ -570,14 +570,14 @@ export default function CounterDutyManagement({
   };
 
   // Save active schedule to database list
-  const handleSaveToFirebase = () => {
+  const handleSaveToDatabase = () => {
     if (!currentSchedule) return;
 
     // Filter out previous version of this month and push the new one
     const filtered = counterDuties.filter(s => s.id !== currentSchedule.id);
     const updated = [...filtered, currentSchedule];
 
-    // Persist to parent component state which triggers Auto-Sync to Firestore
+    // Persist to parent component state which triggers Auto-Sync to MySQL
     onUpdateCounterDuties(updated);
     triggerAlert('success', `บันทึกตารางเวรลงฐานข้อมูลสำเร็จแล้ว (Auto-Sync ทำงานอยู่)`);
   };
@@ -896,10 +896,10 @@ export default function CounterDutyManagement({
                 <Printer className="w-4 h-4" /> พิมพ์ตารางเวร
               </button>
               <button 
-                onClick={handleSaveToFirebase}
-                className="px-3 sm:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-sm flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
+                onClick={handleSaveToDatabase}
+                className="px-3 sm:px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-sm flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
               >
-                <Save className="w-4 h-4" /> บันทึก Firebase
+                <Save className="w-4 h-4" /> บันทึกลงฐานข้อมูล
               </button>
             </>
           )}
@@ -1249,7 +1249,7 @@ export default function CounterDutyManagement({
             </div>
 
             {counterDuties.length === 0 ? (
-              <p className="text-[11px] text-slate-400 text-center py-4">ไม่มีตารางเวรประวัติเฝ้าเคาเตอร์ที่บันทึกใน Firebase</p>
+              <p className="text-[11px] text-slate-400 text-center py-4">ไม่มีตารางเวรประวัติเฝ้าเคาเตอร์ที่บันทึกในระบบ</p>
             ) : (
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {counterDuties.map((sch) => (

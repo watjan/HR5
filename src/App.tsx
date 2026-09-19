@@ -263,7 +263,7 @@ export default function App() {
   const [permits, setPermits] = useState<PermitLicense[]>(INITIAL_PERMITS);
   const [officialExpenses, setOfficialExpenses] = useState<OfficialExpense[]>(INITIAL_OFFICIAL_EXPENSES);
 
-  // Reference payload string to prevent redundant Firebase writes
+  // Reference payload string to prevent redundant database writes
   const lastSyncedPayloadRef = useRef<string>("");
 
   // Clean, sort, and normalize any payload to make comparison order-independent
@@ -568,15 +568,14 @@ export default function App() {
     loadFromServer();
   }, []);
 
-  // Core state storage has been disconnected from Local Storage per user request to use Firebase only.
+  // Core state storage has been disconnected from Local Storage per user request to use Hostinger MySQL only.
   useEffect(() => {
     // Local Storage persistence is disabled for the entire project's core data.
   }, []);
 
   // Real-time Auto-Sync to Hostinger MySQL (u753988669_hr)
   const [dbStatuses, setDbStatuses] = useState({
-    mysql: { connected: false, error: '' },
-    firebase: { connected: false, error: 'Firebase disabled' }
+    mysql: { connected: false, error: '' }
   });
   const [activeDbSource, setActiveDbSource] = useState<string>("Hostinger MySQL (u753988669_hr)");
 
@@ -993,12 +992,12 @@ export default function App() {
     try {
       const res = await fetch('/api/db/clear', { method: 'POST' });
       if (!res.ok) {
-        throw new Error('Failed to clear remote Firestore database');
+        throw new Error('Failed to clear remote database');
       }
       
       const result = await res.json();
       if (!result.success) {
-        throw new Error(result.error || 'Failed to clear remote Firestore database');
+        throw new Error(result.error || 'Failed to clear remote database');
       }
 
       setEmployees([]);

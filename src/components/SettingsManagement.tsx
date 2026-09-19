@@ -811,10 +811,10 @@ export default function SettingsManagement({
               <div className="bg-slate-900 border border-slate-800 text-slate-300 rounded-sm p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="space-y-1">
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
-                    <Database className="w-4 h-4 text-indigo-400" /> จัดการความมั่นคงของฐานข้อมูลคลาวด์
+                    <Database className="w-4 h-4 text-emerald-400" /> จัดการความมั่นคงของฐานข้อมูล Hostinger MySQL
                   </h3>
                   <p className="text-[11px] text-slate-400 font-sans">
-                    ระบบทำงานอยู่บนคลาวด์ Firestore ของบริษัทแบบสดตลอดเวลา (Real-time Cloud Database)
+                    ระบบทำงานเชื่อมต่ออยู่กับ Hostinger MySQL Database ของบริษัทแบบสดตลอดเวลา (Real-time MySQL Database)
                   </p>
                 </div>
               </div>
@@ -828,7 +828,7 @@ export default function SettingsManagement({
                     </h3>
                     <p className="text-[11px] text-slate-500 font-sans max-w-lg leading-relaxed">
                       <strong>เปิดใช้งาน:</strong> ระบบจะใช้เบราว์เซอร์ Local Storage ร่วมด้วยในการสำรองแคชข้อมูลเพื่อความรวดเร็วสูงสุด<br />
-                      <strong>ปิดใช้งาน (แนะนำ):</strong> เพื่อความปลอดภัยขั้นสูงสุด ระบบจะยกเลิกการเขียนหรือดึงข้อมูลจากฮาร์ดดิสก์เบราว์เซอร์ โดยเชื่อมต่อและดึงข้อมูลสดผ่านคลาวด์ Firebase / Hostinger ลงสู่หน่วยความจำหลักชั่วคราวเท่านั้น
+                      <strong>ปิดใช้งาน (แนะนำ):</strong> เพื่อความปลอดภัยขั้นสูงสุด ระบบจะยกเลิกการเขียนหรือดึงข้อมูลจากฮาร์ดดิสก์เบราว์เซอร์ โดยเชื่อมต่อและดึงข้อมูลสดผ่าน Hostinger MySQL ลงสู่หน่วยความจำหลักชั่วคราวเท่านั้น
                     </p>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
@@ -941,7 +941,7 @@ export default function SettingsManagement({
                     <FileText className="w-4 h-4 text-indigo-500" /> ดาวน์โหลดไฟล์คอนฟิก .env สำหรับ Hostinger
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-1 font-sans">
-                    ดาวน์โหลดไฟล์ <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[10px] font-bold">.env</code> ที่ถูกกรอกรหัสและข้อมูลพิกัด (Firebase Credential & MySQL config) ล่าสุดของคุณไว้แล้วโดยอัตโนมัติ เพื่อใช้วางและติดตั้งบน Hostinger คอนโทรลพาเนลได้ทันที
+                    ดาวน์โหลดไฟล์ <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[10px] font-bold">.env</code> ที่ถูกกรอกรหัสและข้อมูลพิกัด (Hostinger MySQL config) ล่าสุดของคุณไว้แล้วโดยอัตโนมัติ เพื่อใช้วางและติดตั้งบน Hostinger คอนโทรลพาเนลได้ทันที
                   </p>
                 </div>
 

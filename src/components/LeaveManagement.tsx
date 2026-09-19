@@ -288,7 +288,7 @@ export default function LeaveManagement({
           <p className="text-xs text-slate-500 mt-1 font-sans">ติดตามคำขอหยุดงานประเภทต่างๆ ประมวลผล และอัปเดตสิทธิ์วันลาสะสม</p>
           <div className="flex items-center gap-1.5 mt-2 bg-emerald-50 text-emerald-850 border border-emerald-100 rounded-sm px-2.5 py-1 w-fit">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-            <span className="text-[10px] font-mono font-bold tracking-wide">ดึงข้อมูลและบันทึกตรงไปยัง Google Cloud Firebase Firestore [Real-time Live]</span>
+            <span className="text-[10px] font-mono font-bold tracking-wide">ดึงข้อมูลและบันทึกตรงไปยัง Hostinger MySQL [Real-time Live]</span>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">

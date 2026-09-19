@@ -254,10 +254,8 @@ export default function BackupRestoreManagement({
     database: 'hr_management_system',
     autoCreateDb: true
   });
-  const [firebaseConfig, setFirebaseConfig] = useState<any>(null);
   const [dbStatuses, setDbStatuses] = useState({
-    mysql: { connected: false, error: '' },
-    firebase: { connected: false, error: '' }
+    mysql: { connected: false, error: '' }
   });
 
   const [loadingConfig, setLoadingConfig] = useState(false);
@@ -297,9 +295,6 @@ export default function BackupRestoreManagement({
             ...prev,
             ...data.mysql
           }));
-        }
-        if (data.firebase) {
-          setFirebaseConfig(data.firebase);
         }
         if (data.status) {
           setDbStatuses(data.status);
@@ -365,8 +360,8 @@ export default function BackupRestoreManagement({
         const res = await fetch('/api/db/load');
         const data = await res.json();
         
-        if (res.ok && data.success && data.data && data.data.firebase) {
-          const fbData = data.data.firebase;
+        if (res.ok && data.success && data.data && (data.data.mysql || data.data.local)) {
+          const fbData = data.data.mysql || data.data.local;
           const localDataRaw = onExportAllData();
           const localData = JSON.parse(localDataRaw);
 
@@ -382,7 +377,7 @@ export default function BackupRestoreManagement({
             }
           });
 
-          // Get latest cloud audit log timestamp
+          // Get latest remote audit log timestamp
           const cloudLogs = fbData.auditLogs || [];
           let cloudMaxTime = 0;
           cloudLogs.forEach((log: any) => {
@@ -416,16 +411,15 @@ export default function BackupRestoreManagement({
           const reasons: string[] = [];
 
           // Determine conflict criteria
-          // Check if cloud timestamp is greater than local timestamp and last sync timestamp (with 5 sec margin)
           const isCloudNewer = cloudMaxTime > (lastSyncTimestamp + 5000) && cloudMaxTime > (localMaxTime + 5000);
           const hasSignificantDiff = diffList.length > 0;
 
           if (cloudMaxTime > 0) {
             if (isCloudNewer) {
-              reasons.push(`ข้อมูลบนคลาวด์มีความเคลื่อนไหวหลังจากการซิงค์ครั้งล่าสุดของคุณ (อัปเดตล่าสุดบนคลาวด์: ${new Date(cloudMaxTime).toLocaleString('th-TH')})`);
+              reasons.push(`ข้อมูลบนเซิร์ฟเวอร์/MySQL มีความเคลื่อนไหวหลังจากการซิงค์ครั้งล่าสุดของคุณ (อัปเดตล่าสุด: ${new Date(cloudMaxTime).toLocaleString('th-TH')})`);
             }
             if (lastSyncTimestamp === 0 && hasSignificantDiff) {
-              reasons.push("เครื่องคอมพิวเตอร์ของคุณยังไม่มีประวัติการซิงก์สำเร็จกับระบบคลาวด์นี้ และตรวจพบความแตกต่างระหว่างข้อมูลในเครื่องกับบนคลาวด์");
+              reasons.push("เครื่องคอมพิวเตอร์ของคุณยังไม่มีประวัติการซิงก์สำเร็จกับระบบฐานข้อมูลนี้ และตรวจพบความแตกต่างระหว่างข้อมูลในเครื่องกับฐานข้อมูล");
             }
           }
 
@@ -492,9 +486,9 @@ export default function BackupRestoreManagement({
       if (res.ok && data.success) {
         setSyncResult(data.results);
         
-        const fbSuccess = data.results.firebase.success;
+        const isSuccess = data.results?.mysql?.success || data.results?.local?.success;
 
-        if (fbSuccess) {
+        if (isSuccess) {
           const now = new Date();
           const nowStr = now.toLocaleTimeString('th-TH');
           safeStorage.setItem('hr_last_synced', nowStr);
@@ -502,12 +496,12 @@ export default function BackupRestoreManagement({
           
           setNotification({ 
             type: 'success', 
-            message: 'ซิงโครไนซ์ข้อมูลเสร็จสิ้น! บันทึกลงระบบฐานข้อมูลไฟล์เซิร์ฟเวอร์ (local_db.json) เรียบร้อยครบถ้วน' 
+            message: data.message || 'ซิงโครไนซ์ข้อมูลเสร็จสิ้น! บันทึกลงฐานข้อมูลเรียบร้อยครบถ้วน' 
           });
         } else {
           setNotification({ 
             type: 'error', 
-            message: `ล้มเหลวในการบันทึกลงฐานข้อมูลเซิร์ฟเวอร์: ${data.results.firebase.error}` 
+            message: `ล้มเหลวในการบันทึกลงฐานข้อมูล: ${data.results?.mysql?.error || data.results?.local?.error || 'เกิดข้อผิดพลาด'}` 
           });
         }
         fetchDbConfigs(); // Refresh statuses
@@ -600,79 +594,8 @@ export default function BackupRestoreManagement({
     }
   };
 
-  // Copy Firestore database directly into Hostinger MySQL
-  const handleCopyFirebaseToMysql = async () => {
-    if (!remoteDbData || !remoteDbData.firebase) {
-      alert('ไม่พบข้อมูลที่จะนำเข้าจากคลาวด์ Firebase Firestore');
-      return;
-    }
-
-    if (window.confirm('⚠️ ยืนยันคัดลอกข้อมูลทั้งหมดจาก Google Cloud Firebase Firestore ไปเขียนทับใส่ Hostinger MySQL (ตัวหลัก) หรือไม่?')) {
-      setLoadingDbData(true);
-      try {
-        const response = await fetch('/api/db/copy-firebase-to-mysql', {
-          method: 'POST',
-        });
-        const result = await response.json();
-        
-        if (response.ok && result.success) {
-          // Trigger local state import as well, so that the client matches the copied database!
-          const sourceData = remoteDbData.firebase;
-          const formattedPayload = {
-            hr_employees: sourceData.employees || [],
-            hr_leaves: sourceData.leaves || [],
-            hr_payroll: sourceData.payroll || [],
-            hr_sales: sourceData.sales || [],
-            hr_cashflow: sourceData.cashflow || [],
-            hr_cheques: sourceData.cheques || [],
-            hr_partner_billings: sourceData.partnerBillings || [],
-            hr_audit_logs: sourceData.auditLogs || [],
-            hr_jobs: sourceData.jobs || [],
-            hr_applicants: sourceData.applicants || [],
-            hr_evaluations: sourceData.evaluations || [],
-            hr_attendance: sourceData.attendance || {},
-            hr_dayoff_swaps: sourceData.dayoffSwaps || [],
-            hr_partner_companies: sourceData.partnerCompanies || [],
-            hr_counter_duties: sourceData.counterDuties || [],
-            hr_system_settings: sourceData.systemSettings || {
-              companyName: "บริษัท ซิงโครไนซ์ จำกัด",
-              taxId: "0105566000012",
-              address: "123 อาคารสิริ พญาไท กรุงเทพฯ 10400",
-              payrollDate: 25,
-              socialSecurityRate: 5,
-              taxRate: 3,
-              currency: "THB"
-            }
-          };
-          onImportAllData(JSON.stringify(formattedPayload));
-
-          setNotification({ 
-            type: 'success', 
-            message: '🎉 คัดลอกข้อมูลจาก Firebase Firestore ลง Hostinger MySQL (ตัวหลัก) และเชื่อมพิกัดระบบสำเร็จแล้ว!' 
-          });
-          
-          setTimeout(() => {
-            window.location.reload();
-          }, 1500);
-        } else {
-          setNotification({ 
-            type: 'error', 
-            message: `เกิดข้อผิดพลาด: ${result.error || 'ไม่สามารถบันทึกข้อมูลลง MySQL ได้'}` 
-          });
-        }
-      } catch (error: any) {
-        setNotification({ 
-          type: 'error', 
-          message: `ล้มเหลวในการเชื่อมโยงพิกัดข้อมูล: ${error.message || error}` 
-        });
-      } finally {
-        setLoadingDbData(false);
-      }
-    }
-  };
-
   // Restore/Import selected DB source into browser
-  const handleRestoreFromRemote = (source: 'mysql' | 'firebase') => {
+  const handleRestoreFromRemote = (source: 'mysql' | 'local') => {
     if (!remoteDbData || !remoteDbData[source]) {
       alert('ไม่พบข้อมูลที่จะนำเข้าจากฐานข้อมูลนี้');
       return;
@@ -680,7 +603,7 @@ export default function BackupRestoreManagement({
 
     const sourceData = remoteDbData[source];
     
-    if (window.confirm(`คุณแน่ใจหรือไม่ที่จะกู้คืนระบบจากข้อมูลล่าสุดใน "${source === 'mysql' ? 'Hostinger MySQL' : 'Firebase Firestore'}"? ข้อมูลในบราวเซอร์ของคุณจะถูกเขียนทับทันที`)) {
+    if (window.confirm(`คุณแน่ใจหรือไม่ที่จะกู้คืนระบบจากข้อมูลล่าสุดใน "${source === 'mysql' ? 'Hostinger MySQL' : 'ไฟล์สำรองเซิร์ฟเวอร์'}"? ข้อมูลในบราวเซอร์ของคุณจะถูกเขียนทับทันที`)) {
       
       // Build correct local structure
       const formattedPayload = {
@@ -712,7 +635,7 @@ export default function BackupRestoreManagement({
 
       const success = onImportAllData(JSON.stringify(formattedPayload));
       if (success) {
-        setNotification({ type: 'success', message: `ดึงฐานข้อมูลและนำเข้าจาก ${source === 'mysql' ? 'Hostinger MySQL' : 'Firebase Firestore'} สำเร็จ!` });
+        setNotification({ type: 'success', message: `ดึงฐานข้อมูลและนำเข้าจาก ${source === 'mysql' ? 'Hostinger MySQL' : 'ไฟล์สำรองเซิร์ฟเวอร์'} สำเร็จ!` });
         setTimeout(() => {
           window.location.reload();
         }, 1200);
@@ -980,13 +903,13 @@ export default function BackupRestoreManagement({
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 border border-slate-200 rounded-sm">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="p-1.5 bg-blue-50 text-blue-650 rounded-sm">
-              <Cloud className="w-5 h-5 text-indigo-600" />
+            <span className="p-1.5 bg-emerald-50 text-emerald-650 rounded-sm">
+              <Server className="w-5 h-5 text-emerald-600" />
             </span>
-            <h1 className="text-xl font-black text-slate-900 tracking-tight font-sans">จัดการระบบฐานข้อมูลและการเชื่อมต่อคลาวด์</h1>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight font-sans">จัดการระบบฐานข้อมูล Hostinger MySQL</h1>
           </div>
           <p className="text-xs text-slate-500 font-sans">
-            เชื่อมต่อ ซิงโครไนซ์ และบันทึกข้อมูลระบบลงในฐานข้อมูลคลาวด์: **Firebase Firestore** ของคุณอย่างมั่นคงและปลอดภัย
+            เชื่อมต่อ ซิงโครไนซ์ และบันทึกข้อมูลระบบลงในฐานข้อมูลหลัก: **Hostinger MySQL** ของคุณอย่างมั่นคงและปลอดภัย
           </p>
         </div>
 
@@ -1000,7 +923,7 @@ export default function BackupRestoreManagement({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Cloud className="w-3.5 h-3.5 text-indigo-600" /> ตั้งค่าซิงค์คลาวด์ (Firebase)
+            <Server className="w-3.5 h-3.5 text-emerald-600" /> ตั้งค่าฐานข้อมูล (Hostinger MySQL)
           </button>
           <button
             onClick={() => setActiveSubTab('file')}
@@ -1059,49 +982,19 @@ export default function BackupRestoreManagement({
             <div className="bg-white border border-slate-200 rounded-sm p-5 shadow-2xs space-y-4">
               <div className="flex justify-between items-center pb-2 border-b border-slate-100">
                 <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans flex items-center gap-2">
-                  <Cloud className="w-4 h-4 text-indigo-600 animate-pulse" /> สถานะฐานข้อมูลคลาวด์ (Cloud Firestore Status)
+                  <Server className="w-4 h-4 text-indigo-600" /> สถานะฐานข้อมูลหลัก (Hostinger MySQL Status)
                 </h3>
                 <button
                   onClick={fetchDbConfigs}
                   disabled={loadingConfig}
                   className="p-1 hover:bg-slate-50 border border-slate-200 rounded text-slate-500 hover:text-slate-800 font-sans text-[10px] flex items-center gap-1 cursor-pointer transition disabled:opacity-50"
                 >
-                  <RefreshCcw className={`w-3 h-3 ${loadingConfig ? 'animate-spin' : ''}`} />
+                  <RefreshCcw className={`w-3.5 h-3.5 ${loadingConfig ? 'animate-spin' : ''}`} />
                   โหลดสถานะใหม่
                 </button>
               </div>
 
               <div className="grid grid-cols-1 gap-4">
-                {/* Firebase Connection Status */}
-                <div className={`p-4 border rounded-sm flex items-start gap-3 relative overflow-hidden ${
-                  dbStatuses.firebase.connected ? 'bg-emerald-50/25 border-emerald-200' : 'bg-rose-50/20 border-rose-200'
-                }`}>
-                  <div className={`p-2 rounded-full shrink-0 ${
-                    dbStatuses.firebase.connected ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                  }`}>
-                    <Cloud className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-1 font-sans">
-                    <div className="flex items-center gap-1.5">
-                      <h4 className="font-bold text-xs text-slate-800">ฐานข้อมูลสำรอง Google Cloud Firestore (ตัวสำรอง)</h4>
-                      <span className={`w-2 h-2 rounded-full ${
-                        dbStatuses.firebase.connected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
-                      }`} />
-                    </div>
-                    <p className="text-[10px] text-slate-500">
-                      ชนิดฐานข้อมูล: คลาวด์เรียลไทม์ (NoSQL Firestore)
-                    </p>
-                    <p className={`text-[10px] font-bold ${
-                      dbStatuses.firebase.connected ? 'text-emerald-700' : 'text-rose-700'
-                    }`}>
-                      {dbStatuses.firebase.connected ? '● ออนไลน์ (พร้อมเชื่อมต่อสำรอง)' : `🔴 ออฟไลน์: ${dbStatuses.firebase.error || 'ไม่มีค่าคอนฟิกหรือบล็อกความปลอดภัย'}`}
-                    </p>
-                  </div>
-                  <div className="absolute top-1 right-1 opacity-10">
-                    <Flame className="w-14 h-14 text-orange-500" />
-                  </div>
-                </div>
-
                 {/* Hostinger MySQL Connection Status */}
                 <div className={`p-4 border rounded-sm flex items-start gap-3 relative overflow-hidden ${
                   dbStatuses.mysql.connected ? 'bg-emerald-50/25 border-emerald-200' : 'bg-rose-50/20 border-rose-200'
@@ -1113,7 +1006,7 @@ export default function BackupRestoreManagement({
                   </div>
                   <div className="space-y-1 font-sans">
                     <div className="flex items-center gap-1.5">
-                      <h4 className="font-bold text-xs text-slate-800">ฐานข้อมูลหลัก Hostinger MySQL (ตัวหลัก)</h4>
+                      <h4 className="font-bold text-xs text-slate-800">ฐานข้อมูลหลัก Hostinger MySQL (u753988669_hr)</h4>
                       <span className={`w-2 h-2 rounded-full ${
                         dbStatuses.mysql.connected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
                       }`} />
@@ -1155,16 +1048,20 @@ export default function BackupRestoreManagement({
                   </div>
 
                   {/* Remote MySQL Guide Notice Box */}
-                  <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-sm text-xs font-sans space-y-1.5">
-                    <div className="flex items-center gap-1.5 font-bold text-amber-900 text-[11.5px]">
-                      <span>🌐</span>
-                      <span>ขั้นตอนการอนุญาตเชื่อมต่อ Hostinger Remote MySQL (ทำครั้งเดียว):</span>
+                  <div className="p-4 bg-amber-50/90 border-2 border-amber-350 rounded-sm text-xs font-sans space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-amber-950 text-xs">
+                      <span className="text-base">🌐</span>
+                      <span>ขั้นตอนการเปิดสิทธิ์ Hostinger ให้ระบบเข้าถึงฐานข้อมูล u753988669_hr ได้สำเร็จ (ทำเพียงครั้งเดียว):</span>
                     </div>
-                    <ol className="list-decimal list-inside text-[11px] text-amber-800 space-y-0.5 leading-relaxed pl-1">
-                      <li>เข้าสู่ระบบ <strong>Hostinger hPanel</strong> แล้วไปที่เมนู <strong>Databases &gt; Remote MySQL</strong></li>
-                      <li>เลือกฐานข้อมูล: <code className="bg-amber-100/80 px-1 py-0.5 rounded text-amber-950 font-bold">u753988669_hr</code></li>
-                      <li>ในช่อง <strong>IP (IPv4 or IPv6)</strong>: ให้พิมพ์เครื่องหมาย <code className="bg-amber-100/80 px-1.5 py-0.5 rounded text-rose-700 font-bold">%</code> (เครื่องหมายเปอร์เซ็นต์เพื่ออนุญาตให้ Cloud เชื่อมต่อได้)</li>
-                      <li>กดปุ่ม <strong>Create / บันทึก</strong> จากนั้นกลับมากดปุ่มทดสอบการเชื่อมต่อที่ด้านล่างนี้</li>
+                    <p className="text-[11.5px] text-amber-900 leading-relaxed">
+                      ตามมาตรฐานความปลอดภัยของ <strong>Hostinger</strong> เซิร์ฟเวอร์จะปฏิเสธการเชื่อมต่อจากภายนอกโดยอัตโนมัติ (Access Denied) จนกว่าจะเปิดอนุญาตที่เมนู <strong>Remote MySQL</strong>:
+                    </p>
+                    <ol className="list-decimal list-inside text-[11px] text-amber-900 space-y-1 pl-1 bg-white/70 p-3 rounded border border-amber-200">
+                      <li>เข้าสู่ระบบ <a href="https://hpanel.hostinger.com" target="_blank" rel="noreferrer" className="text-indigo-600 font-bold underline hover:text-indigo-800">Hostinger hPanel</a> แล้วไปที่ <strong>Databases &gt; Remote MySQL</strong></li>
+                      <li>ในช่อง <strong>Database</strong>: เลือกฐานข้อมูล <code className="bg-amber-100 px-1.5 py-0.5 rounded text-amber-950 font-bold">u753988669_hr</code></li>
+                      <li>ในช่อง <strong>IP (IPv4 or IPv6)</strong>: ให้พิมพ์เครื่องหมาย <code className="bg-rose-100 px-2 py-0.5 rounded text-rose-700 font-bold text-sm">%</code> *(เครื่องหมายเปอร์เซ็นต์ เพื่ออนุญาต Cloud IP เชื่อมต่อได้ทุกตำแหน่ง)*</li>
+                      <li>กดปุ่ม <strong>Create / บันทึก</strong></li>
+                      <li>ตรวจสอบว่ารหัสผ่านผู้ใช้งานใน hPanel ตรงกับรหัสผ่านที่กรอกในฟอร์มนี้หรือไม่ จากนั้นกดปุ่ม <strong>"บันทึกค่าและทดสอบการเชื่อมต่อ Hostinger MySQL"</strong> ด้านล่างนี้</li>
                     </ol>
                   </div>
 
@@ -1261,10 +1158,10 @@ export default function BackupRestoreManagement({
             <div className="bg-white border border-slate-200 rounded-sm p-6 shadow-2xs space-y-5">
               <div className="space-y-2">
                 <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" /> ระบบจัดเก็บข้อมูลสองชั้น (Dual-Database Sync Engine)
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" /> ระบบจัดเก็บข้อมูล Hostinger MySQL
                 </h3>
                 <p className="text-[11.5px] text-slate-600 font-sans leading-relaxed">
-                  แอปพลิเคชันได้รับการกำหนดค่าให้ทำงานโดยใช้ <strong>Hostinger MySQL เป็นระบบหลัก</strong> ในการอ่านและดึงข้อมูล และมี <strong>Google Cloud Firebase Firestore เป็นระบบสำรอง</strong> เพื่อรับประกันความสูญหายของข้อมูลในทุกกรณี
+                  แอปพลิเคชันได้รับการกำหนดค่าให้ทำงานโดยใช้ <strong>Hostinger MySQL เป็นระบบฐานข้อมูลหลัก</strong> ในการอ่าน เขียน และซิงค์ข้อมูลทั้งหมด พร้อมระบบสำรองไฟล์เซิร์ฟเวอร์อัตโนมัติ
                 </p>
               </div>
 
@@ -1279,8 +1176,8 @@ export default function BackupRestoreManagement({
                 <div className="flex items-start gap-2.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
                   <div>
-                    <strong className="text-slate-800 block text-[11px]">สำรองข้อมูลเรียลไทม์บน Firebase Firestore</strong>
-                    <span className="text-slate-500 text-[10.5px]">เมื่อใดก็ตามที่มีการซิงก์ข้อมูล ข้อมูลจะถูกเขียนลงทั้ง Hostinger MySQL และ Firebase Firestore ควบคู่กันเพื่อให้ระบบปลอดภัยจากการสูญหาย</span>
+                    <strong className="text-slate-800 block text-[11px]">สำรองข้อมูลอัตโนมัติบนเซิร์ฟเวอร์</strong>
+                    <span className="text-slate-500 text-[10.5px]">เมื่อใดก็ตามที่มีการซิงก์ข้อมูล ข้อมูลจะถูกบันทึกลงทั้ง Hostinger MySQL และไฟล์สำรองเซิร์ฟเวอร์ควบคู่กัน</span>
                   </div>
                 </div>
               </div>
@@ -1294,13 +1191,13 @@ export default function BackupRestoreManagement({
             <div className="bg-slate-900 border border-slate-800 rounded-sm p-6 text-white shadow-md space-y-5">
               <div className="space-y-1">
                 <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-widest bg-emerald-500 text-white rounded-xs">
-                  Firebase Cloud Sync Engine
+                  MySQL Sync Engine
                 </span>
                 <h3 className="text-sm font-black tracking-tight font-sans flex items-center gap-1.5 mt-1">
-                  <ShieldCheck className="w-5 h-5 text-emerald-450" /> เขียนบันทึกคลาวด์ (Push & Sync to Cloud)
+                  <ShieldCheck className="w-5 h-5 text-emerald-450" /> บันทึกลง MySQL (Push & Sync to MySQL)
                 </h3>
                 <p className="text-[11px] text-slate-400 font-sans">
-                  อัปโหลดและเขียนทับข้อมูลจากบราวเซอร์เครื่องนี้ขึ้นฐานข้อมูล Firebase Firestore แบบสดทันที เพื่อเก็บรักษาหรือย้ายไปใช้งานที่เครื่องอื่น
+                  บันทึกและซิงค์ข้อมูลจากบราวเซอร์เครื่องนี้ลงในฐานข้อมูล Hostinger MySQL แบบสดทันที เพื่อเก็บรักษาหรือย้ายไปใช้งานที่เครื่องอื่น
                 </p>
               </div>
 
@@ -1333,38 +1230,40 @@ export default function BackupRestoreManagement({
                   title="ตรวจสอบความขัดแย้งของเวลากับบนคลาวด์ก่อนซิงค์"
                 >
                   <RefreshCcw className={`w-3.5 h-3.5 ${(syncing || checkingConflict) ? 'animate-spin' : ''}`} />
-                  {checkingConflict ? 'กำลังตรวจความขัดแย้งของข้อมูล...' : syncing ? 'กำลังเขียนฐานข้อมูลคลาวด์...' : 'ตรวจความขัดแย้งก่อนซิงค์'}
+                  {checkingConflict ? 'กำลังตรวจความขัดแย้งของข้อมูล...' : syncing ? 'กำลังเขียนฐานข้อมูล...' : 'ตรวจความขัดแย้งก่อนซิงค์'}
                 </button>
 
                 <button
                   onClick={() => {
-                    if (confirm("⚠️ คำเตือน: ยืนยันบังคับเขียนทับข้อมูลบนระบบคลาวด์แบบสดทันที?\n\nข้อมูลปัจจุบันทั้งหมดบน Firebase Firestore จะถูกล้างและแทนที่ด้วยข้อมูลจากบราวเซอร์เครื่องนี้ทันที สำหรับใช้ย้ายเครื่องหรือบันทึกข้อมูลด่วน")) {
+                    if (confirm("⚠️ คำเตือน: ยืนยันบันทึกข้อมูลทับลงในฐานข้อมูล Hostinger MySQL ทันที?\n\nข้อมูลปัจจุบันในฐานข้อมูลจะถูกปรับปรุงให้ตรงกับข้อมูลในเบราว์เซอร์เครื่องนี้")) {
                       handleSyncToDualDbs(true);
                     }
                   }}
                   disabled={syncing || checkingConflict}
-                  className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black rounded-sm flex items-center justify-center gap-2 cursor-pointer transition shadow-sm disabled:opacity-50"
-                  title="เขียนทับข้อมูลทั้งหมดบน Firebase Firestore ทันที"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-sm flex items-center justify-center gap-2 cursor-pointer transition shadow-sm disabled:opacity-50"
+                  title="บันทึกข้อมูลทั้งหมดลงฐานข้อมูล Hostinger MySQL ทันที"
                 >
-                  <Flame className="w-4 h-4 text-amber-300 animate-pulse" />
-                  {syncing ? 'กำลังเขียนข้อมูลขึ้นคลาวด์...' : 'เริ่มเขียนทับฐานข้อมูลคลาวด์แบบสดทันที (Push & Overwrite)'}
+                  <Server className="w-4 h-4 text-emerald-200" />
+                  {syncing ? 'กำลังบันทึกข้อมูลลง MySQL...' : 'เริ่มบันทึกฐานข้อมูล Hostinger MySQL ทันที (Push to MySQL)'}
                 </button>
               </div>
 
               {syncResult && (
                 <div className="p-3 bg-slate-800/40 rounded-sm border border-slate-750 font-sans text-[10.5px] space-y-1 text-slate-300 animate-fade-in">
                   <p className="font-bold text-white text-xs mb-1">ผลการซิงโครไนซ์:</p>
-                  <p className="flex justify-between items-center">
-                    <span>Cloud Firestore Sync Write:</span>
-                    <span className={syncResult.firebase.success ? 'text-emerald-450 font-bold' : 'text-rose-400'}>
-                      {syncResult.firebase.success ? '✓ สำเร็จ' : `❌ ล้มเหลว: ${syncResult.firebase.error}`}
-                    </span>
-                  </p>
                   {syncResult.mysql && (
-                    <p className="flex justify-between items-center mt-1 border-t border-slate-800/60 pt-1">
+                    <p className="flex justify-between items-center">
                       <span>Hostinger MySQL Sync Write:</span>
                       <span className={syncResult.mysql.success ? 'text-emerald-450 font-bold' : 'text-rose-400'}>
                         {syncResult.mysql.success ? '✓ สำเร็จ' : `❌ ล้มเหลว: ${syncResult.mysql.error}`}
+                      </span>
+                    </p>
+                  )}
+                  {syncResult.local && (
+                    <p className="flex justify-between items-center mt-1 border-t border-slate-800/60 pt-1">
+                      <span>Server Local Backup:</span>
+                      <span className={syncResult.local.success ? 'text-emerald-450 font-bold' : 'text-rose-400'}>
+                        {syncResult.local.success ? '✓ สำเร็จ' : `❌ ล้มเหลว: ${syncResult.local.error}`}
                       </span>
                     </p>
                   )}
@@ -1379,7 +1278,7 @@ export default function BackupRestoreManagement({
                   <Download className="w-4 h-4 text-emerald-600" /> ดึงข้อมูลฐานข้อมูลกลับสู่เครื่อง (Pull & Recover)
                 </h3>
                 <p className="text-[11px] text-slate-500 font-sans">
-                  ตรวจสอบและดึงชุดข้อมูลล่าสุดที่ถูกบันทึกไว้ในระบบฐานข้อมูลคลาวด์หรือ Hostinger MySQL กลับมาติดตั้งลงในบราวเซอร์นี้
+                  ตรวจสอบและดึงชุดข้อมูลล่าสุดที่ถูกบันทึกไว้ในฐานข้อมูล Hostinger MySQL หรือไฟล์สำรองเซิร์ฟเวอร์ กลับมาติดตั้งลงในบราวเซอร์นี้
                 </p>
               </div>
 
@@ -1389,48 +1288,11 @@ export default function BackupRestoreManagement({
                 className="w-full py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold rounded-sm flex items-center justify-center gap-2 cursor-pointer transition disabled:opacity-50"
               >
                 <RefreshCcw className={`w-3.5 h-3.5 ${loadingDbData ? 'animate-spin' : ''}`} />
-                {loadingDbData ? 'กำลังตรวจสอบคลาวด์/MySQL...' : 'เรียกค้นข้อมูลสำรองทั้งหมด (Firestore / MySQL)'}
+                {loadingDbData ? 'กำลังตรวจสอบ MySQL...' : 'เรียกค้นข้อมูลสำรองทั้งหมด (Hostinger MySQL / เซิร์ฟเวอร์)'}
               </button>
 
               {remoteDbData && (
                 <div className="space-y-4 pt-1 animate-fade-in font-sans">
-                  {/* Option: Firebase */}
-                  <div className="p-3 border border-slate-200 bg-slate-50/55 rounded-sm space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-xs text-slate-800 flex items-center gap-1">
-                        <Cloud className="w-3.5 h-3.5 text-emerald-500" /> ข้อมูลบนคลาวด์ Firestore
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                        {remoteDbData.firebase ? 'พบข้อมูลบนคลาวด์' : 'ไม่พบข้อมูล'}
-                      </span>
-                    </div>
-                    {remoteDbData.firebase ? (
-                      <div className="text-[10.5px] text-slate-600 space-y-1 font-sans">
-                        <p>👥 พนักงาน: {remoteDbData.firebase.employees?.length || 0} คน | 📅 บันทึกใบลา: {remoteDbData.firebase.leaves?.length || 0} รายการ</p>
-                        <p>💰 จ่ายเงินเดือน: {remoteDbData.firebase.payroll?.length || 0} รายการ | 💵 รับ-จ่าย: {remoteDbData.firebase.cashflow?.length || 0} รายการ</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1.5">
-                          <button
-                            onClick={() => handleRestoreFromRemote('firebase')}
-                            className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10.5px] rounded-xs flex items-center justify-center gap-1 cursor-pointer transition"
-                            title="นำข้อมูลจาก Cloud Firestore ลงมาติดตั้งใช้งานบนเบราว์เซอร์เครื่องนี้"
-                          >
-                            <ArrowRight className="w-3.5 h-3.5" /> ติดตั้งข้อมูลจากคลาวด์ลงเครื่อง
-                          </button>
-                          <button
-                            onClick={handleCopyFirebaseToMysql}
-                            disabled={loadingDbData}
-                            className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10.5px] rounded-xs flex items-center justify-center gap-1 cursor-pointer transition disabled:opacity-50"
-                            title="ดึงข้อมูลจาก Cloud Firebase Firestore ไปเขียนทับลงในฐานข้อมูลหลัก Hostinger MySQL ทันที"
-                          >
-                            <Database className="w-3.5 h-3.5" /> คัดลอกไป Hostinger MySQL (ตัวหลัก)
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-[10.5px] text-slate-400 font-sans">ตรวจไม่พบข้อมูลสำรอง หรือไม่ได้ตั้งสิทธิ์บนเซิร์ฟเวอร์</p>
-                    )}
-                  </div>
-
                   {/* Option: Hostinger MySQL */}
                   <div className="p-3 border border-slate-200 bg-slate-50/55 rounded-sm space-y-2">
                     <div className="flex justify-between items-center">
@@ -1455,6 +1317,34 @@ export default function BackupRestoreManagement({
                     ) : (
                       <p className="text-[10.5px] text-slate-400 font-sans">
                         ตรวจไม่พบข้อมูล หรือไม่ได้เปิดใช้/ตั้งค่าการเชื่อมต่อ Hostinger MySQL สำเร็จ
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Option: Server Local Backup */}
+                  <div className="p-3 border border-slate-200 bg-slate-50/55 rounded-sm space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-xs text-slate-800 flex items-center gap-1">
+                        <Database className="w-3.5 h-3.5 text-indigo-500" /> ข้อมูลไฟล์สำรองบนเซิร์ฟเวอร์ (local_db.json)
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        {remoteDbData.local ? 'พบไฟล์สำรอง' : 'ไม่พบข้อมูล'}
+                      </span>
+                    </div>
+                    {remoteDbData.local ? (
+                      <div className="text-[10.5px] text-slate-600 space-y-1 font-sans">
+                        <p>👥 พนักงาน: {remoteDbData.local.employees?.length || 0} คน | 📅 บันทึกใบลา: {remoteDbData.local.leaves?.length || 0} รายการ</p>
+                        <p>💰 จ่ายเงินเดือน: {remoteDbData.local.payroll?.length || 0} รายการ | 💵 รับ-จ่าย: {remoteDbData.local.cashflow?.length || 0} รายการ</p>
+                        <button
+                          onClick={() => handleRestoreFromRemote('local')}
+                          className="w-full mt-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10.5px] rounded-xs flex items-center justify-center gap-1 cursor-pointer transition"
+                        >
+                          <ArrowRight className="w-3.5 h-3.5" /> ติดตั้งและแทนที่ระบบด้วยข้อมูลจากไฟล์สำรองเซิร์ฟเวอร์
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-[10.5px] text-slate-400 font-sans">
+                        ตรวจไม่พบข้อมูลไฟล์สำรองบนเซิร์ฟเวอร์
                       </p>
                     )}
                   </div>
@@ -1613,7 +1503,7 @@ export default function BackupRestoreManagement({
                     <div className="bg-rose-50 text-rose-800 text-[10.5px] p-2 rounded-sm flex items-start gap-1.5 font-sans leading-relaxed">
                       <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5 animate-bounce" />
                       <div>
-                        <strong>คำเตือน: คุณกำลังจะล้างข้อมูลให้ว่างเปล่า 100%!</strong> ข้อมูลทั้งหมดบน Firebase Firestore และระบบบราวเซอร์จะถูกลบถาวรอย่างสมบูรณ์ ไม่มีพนักงานหลงเหลืออยู่เลย
+                        <strong>คำเตือน: คุณกำลังจะล้างข้อมูลให้ว่างเปล่า 100%!</strong> ข้อมูลทั้งหมดบนฐานข้อมูลเซิร์ฟเวอร์และระบบบราวเซอร์จะถูกลบถาวรอย่างสมบูรณ์ ไม่มีพนักงานหลงเหลืออยู่เลย
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -2404,11 +2294,11 @@ export default function BackupRestoreManagement({
                     </div>
                     <div>
                       <h4 className="font-bold text-sm text-slate-800">2. ไฟล์กำหนดค่าและตัวแปรสภาพแวดล้อม (.env)</h4>
-                      <p className="text-[10px] text-slate-400">สร้างไฟล์เชื่อมโยง Firebase Firestore และข้อมูล Hostinger MySQL</p>
+                      <p className="text-[10px] text-slate-400">สร้างไฟล์เชื่อมโยงการตั้งค่า Hostinger MySQL</p>
                     </div>
                   </div>
                   <p className="text-xs text-slate-650 leading-relaxed pl-1">
-                    แอปพลิเคชันจะทำการสร้างและบันทึกไฟล์ <code className="bg-slate-100 px-1 py-0.5 rounded text-[11px] font-mono">.env</code> ให้แบบไดนามิก โดยนำค่าความปลอดภัยของ Firebase Firestore ที่กำลังใช้บนเครื่องนี้ พร้อมข้อมูล MySQL ที่คุณกรอกไว้ มาร้อยเรียงให้อย่างลงตัวพร้อมใช้งาน
+                    แอปพลิเคชันจะทำการสร้างและบันทึกไฟล์ <code className="bg-slate-100 px-1 py-0.5 rounded text-[11px] font-mono">.env</code> ให้แบบไดนามิก โดยนำข้อมูล Hostinger MySQL ที่คุณกรอกไว้ มาร้อยเรียงให้อย่างลงตัวพร้อมใช้งาน
                   </p>
                 </div>
                 <button
