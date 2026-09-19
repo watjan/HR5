@@ -16,9 +16,12 @@ export function sanitizeMySQLHost(host: string): string {
 export function beautifyMySQLError(error: any, host: string): string {
   const errMsg = error?.message || String(error);
   const cleanHost = sanitizeMySQLHost(host);
+  if (errMsg.includes("Access denied for user") || errMsg.includes("ER_ACCESS_DENIED_ERROR")) {
+    return `พบเซิร์ฟเวอร์ Hostinger (${cleanHost}) แล้ว แต่สิทธิ์การเข้าถึงถูกปฏิเสธ (Access Denied): กรุณาเข้าไปที่ Hostinger hPanel > Databases > Remote MySQL แล้วเลือกฐานข้อมูล u753988669_hr จากนั้นในช่อง IP ให้ใส่ % (อนุญาตทุก IP) แล้วกดบันทึก หรือตรวจสอบความถูกต้องของรหัสผ่าน`;
+  }
   if (errMsg.includes("ECONNREFUSED") || errMsg.includes("ENOTFOUND")) {
     if (cleanHost === "127.0.0.1" || cleanHost === "localhost" || cleanHost === "1270.0.1") {
-      return `ไม่สามารถเชื่อมต่อกับโฮสต์ฐานข้อมูล '${cleanHost}' ได้ (ECONNREFUSED/ENOTFOUND). หากยังไม่ได้กรอกหรือเปิดใช้งาน Hostinger MySQL กรุณากรอกชื่อ Host ภายนอกจริง (เช่น sqlXXX.hostinger.com) ในหน้าจอตั้งค่า โดยข้อมูลทั้งหมดได้รับการสำรองไว้บนไฟล์ระบบเซิร์ฟเวอร์เรียบร้อยแล้ว`;
+      return `ไม่สามารถเชื่อมต่อกับโฮสต์ฐานข้อมูล '${cleanHost}' ได้ (ECONNREFUSED/ENOTFOUND). หากยังไม่ได้กรอกหรือเปิดใช้งาน Hostinger MySQL กรุณากรอกชื่อ Host ภายนอกจริง (เช่น apiwatkitchenware.com หรือ sqlXXX.hostinger.com) ในหน้าจอตั้งค่า โดยข้อมูลทั้งหมดได้รับการสำรองไว้บนไฟล์ระบบเซิร์ฟเวอร์เรียบร้อยแล้ว`;
     }
     return `ไม่สามารถเชื่อมต่อกับฐานข้อมูลโฮสต์ '${cleanHost}' ได้: กรุณาตรวจสอบว่าข้อมูลถูกต้องและเปิดรับการเชื่อมต่อจากภายนอก (Remote MySQL) ในโฮสติ้งแล้ว`;
   }

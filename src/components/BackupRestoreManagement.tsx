@@ -1131,22 +1131,55 @@ export default function BackupRestoreManagement({
 
                 {/* Hostinger MySQL Configuration Form */}
                 <form onSubmit={handleSaveMysqlConfig} className="p-5 border border-slate-200 bg-white rounded-sm space-y-4">
-                  <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                    <Settings className="w-4 h-4 text-emerald-600" />
-                    <h4 className="font-bold text-xs text-slate-800 font-sans uppercase tracking-wider">
-                      ฟอร์มตั้งค่าเชื่อมต่อ Hostinger MySQL
-                    </h4>
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-emerald-600" />
+                      <h4 className="font-bold text-xs text-slate-800 font-sans uppercase tracking-wider">
+                        ฟอร์มตั้งค่าเชื่อมต่อ Hostinger MySQL
+                      </h4>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setMysqlConfig({
+                        ...mysqlConfig,
+                        host: 'apiwatkitchenware.com',
+                        port: 3306,
+                        user: 'u753988669_hr',
+                        database: 'u753988669_hr'
+                      })}
+                      className="text-[10.5px] text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded font-mono transition cursor-pointer"
+                      title="ใช้ค่า Hostinger ประจำโดเมน apiwatkitchenware.com"
+                    >
+                      ⚡ เติมค่าอัตโนมัติ: apiwatkitchenware.com
+                    </button>
+                  </div>
+
+                  {/* Remote MySQL Guide Notice Box */}
+                  <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-sm text-xs font-sans space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-900 text-[11.5px]">
+                      <span>🌐</span>
+                      <span>ขั้นตอนการอนุญาตเชื่อมต่อ Hostinger Remote MySQL (ทำครั้งเดียว):</span>
+                    </div>
+                    <ol className="list-decimal list-inside text-[11px] text-amber-800 space-y-0.5 leading-relaxed pl-1">
+                      <li>เข้าสู่ระบบ <strong>Hostinger hPanel</strong> แล้วไปที่เมนู <strong>Databases &gt; Remote MySQL</strong></li>
+                      <li>เลือกฐานข้อมูล: <code className="bg-amber-100/80 px-1 py-0.5 rounded text-amber-950 font-bold">u753988669_hr</code></li>
+                      <li>ในช่อง <strong>IP (IPv4 or IPv6)</strong>: ให้พิมพ์เครื่องหมาย <code className="bg-amber-100/80 px-1.5 py-0.5 rounded text-rose-700 font-bold">%</code> (เครื่องหมายเปอร์เซ็นต์เพื่ออนุญาตให้ Cloud เชื่อมต่อได้)</li>
+                      <li>กดปุ่ม <strong>Create / บันทึก</strong> จากนั้นกลับมากดปุ่มทดสอบการเชื่อมต่อที่ด้านล่างนี้</li>
+                    </ol>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 text-xs font-sans">
                     <div className="sm:col-span-8 space-y-1">
-                      <label className="font-bold text-[11px] text-slate-600">Database Host (IP / Domain)</label>
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-[11px] text-slate-600">Database Host (IP / Domain)</label>
+                        <span className="text-[10px] text-slate-400 font-mono">ค่าแนะนำ: apiwatkitchenware.com</span>
+                      </div>
                       <input
                         type="text"
                         value={mysqlConfig.host}
                         onChange={(e) => setMysqlConfig({ ...mysqlConfig, host: e.target.value })}
-                        placeholder="เช่น mysql.hostinger.com หรือ 127.0.0.1"
-                        className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-hidden bg-slate-50/50 hover:bg-slate-50 transition"
+                        placeholder="apiwatkitchenware.com หรือ sqlXXX.hostinger.com"
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-hidden bg-slate-50/50 hover:bg-slate-50 transition font-mono"
                         required
                       />
                     </div>
