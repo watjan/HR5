@@ -1,26 +1,20 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Employee, SystemSettings, AdminUser } from '../types';
 import ApiwatLogo3D from './ApiwatLogo3D';
 import { 
-  ChefHat, 
-  Flame, 
-  Utensils, 
   LogIn, 
   Sparkles, 
   ShieldCheck, 
-  Store, 
-  Coffee, 
-  HelpCircle, 
-  ShoppingBag, 
   CheckCircle2, 
-  TrendingUp, 
-  BookOpen, 
-  ArrowRight,
-  User,
-  Lock,
-  Compass,
-  AlertCircle,
-  Clock
+  User, 
+  Lock, 
+  AlertCircle, 
+  Clock, 
+  Database, 
+  Server, 
+  RefreshCw,
+  KeyRound,
+  Check
 } from 'lucide-react';
 
 interface LoginScreenProps {
@@ -31,102 +25,179 @@ interface LoginScreenProps {
   onClearNotice?: () => void;
 }
 
-export default function LoginScreen({ employees, systemSettings, onLoginSuccess, sessionTimeoutNotice, onClearNotice }: LoginScreenProps) {
-  const [username, setUsername] = useState('');
+interface HostingerDbStatus {
+  success: boolean;
+  configured: boolean;
+  host: string;
+  database: string;
+  user: string;
+  port: number;
+}
+
+export default function LoginScreen({
+  employees,
+  systemSettings,
+  onLoginSuccess,
+  sessionTimeoutNotice,
+  onClearNotice
+}: LoginScreenProps) {
+  const [username, setUsername] = useState('watjan');
   const [password, setPassword] = useState('');
-  const [selectedDept, setSelectedDept] = useState('All');
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fetchingAdmins, setFetchingAdmins] = useState(false);
   
-  // Load admins list dynamically from system settings (fallback to watjan default)
-  const adminsList = useMemo<AdminUser[]>(() => {
-    return systemSettings?.admins && systemSettings.admins.length > 0
-      ? systemSettings.admins
-      : [
-          {
-            id: "watjan",
-            name: "คุณ วรรณจันทร์ (watjan)",
-            role: "Super Admin (ผู้ควบคุมระบบสูงสุด)",
-            password: "AA12199124",
-            permissions: {
-              employees: true,
-              attendance: true,
-              leaves: true,
-              payroll: true,
-              sales: true,
-              cashflow: true,
-              cheques: true,
-              partner_billing: true,
-              recruitment: true,
-              performance: true,
-              settings: true,
-              backup_restore: true,
-              database_inspector: true
-            }
-          }
-        ];
+  // Administrators loaded directly from Hostinger MySQL
+  const [hostingerAdmins, setHostingerAdmins] = useState<AdminUser[]>([]);
+  const [authSource, setAuthSource] = useState<'hostinger_mysql' | 'local_fallback' | 'checking'>('checking');
+  const [dbStatus, setDbStatus] = useState<HostingerDbStatus | null>(null);
+
+  // Fetch admin users from Hostinger MySQL
+  const fetchAdminsFromHostinger = useCallback(async () => {
+    setFetchingAdmins(true);
+    try {
+      // 1. Fetch DB status
+      const statusRes = await fetch('/api/auth/db-status');
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        setDbStatus(statusData);
+      }
+
+      // 2. Fetch admins directly from Hostinger MySQL
+      const res = await fetch('/api/auth/admins');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.admins && Array.isArray(data.admins) && data.admins.length > 0) {
+          setHostingerAdmins(data.admins);
+          setAuthSource(data.source === 'hostinger_mysql' ? 'hostinger_mysql' : 'local_fallback');
+        } else {
+          fallbackToSettings();
+        }
+      } else {
+        fallbackToSettings();
+      }
+    } catch (err) {
+      console.warn('Failed to fetch admins from Hostinger endpoint, using fallback:', err);
+      fallbackToSettings();
+    } finally {
+      setFetchingAdmins(false);
+    }
   }, [systemSettings]);
 
-  // Helper to pre-populate inputs when selecting a quick profile
-  const handleSelectQuickProfile = (adm: any) => {
+  const fallbackToSettings = () => {
+    if (systemSettings?.admins && systemSettings.admins.length > 0) {
+      setHostingerAdmins(systemSettings.admins);
+    } else {
+      setHostingerAdmins([
+        {
+          id: "watjan",
+          name: "คุณ วรรณจันทร์ (watjan)",
+          role: "Super Admin (ผู้ควบคุมระบบสูงสุด)",
+          password: "AA12199124",
+          permissions: {
+            employees: true,
+            attendance: true,
+            leaves: true,
+            payroll: true,
+            sales: true,
+            cashflow: true,
+            cheques: true,
+            partner_billing: true,
+            recruitment: true,
+            performance: true,
+            settings: true,
+            backup_restore: true,
+            database_inspector: true
+          }
+        }
+      ]);
+    }
+    setAuthSource('local_fallback');
+  };
+
+  useEffect(() => {
+    fetchAdminsFromHostinger();
+  }, [fetchAdminsFromHostinger]);
+
+  // Handle selecting quick profile
+  const handleSelectQuickProfile = (adm: AdminUser) => {
     setUsername(adm.id);
     setPassword('');
     setError(null);
+    setSuccessMsg(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Submit credentials to Hostinger MySQL authentication endpoint
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username.trim() || !password.trim()) {
+      setError('กรุณากรอกชื่อผู้ใช้และรหัสผ่านของผู้ดูแลระบบให้ครบถ้วน');
+      return;
+    }
+
     setLoading(true);
     setError(null);
-    
-    setTimeout(() => {
-      const enteredUser = username.trim().toLowerCase();
-      const enteredPass = password.trim();
-      const matchAdmin = adminsList.find(a => 
-        a.id.toLowerCase() === enteredUser || 
-        a.name.toLowerCase().includes(enteredUser) ||
-        (enteredUser === 'wat' && (a.id.toLowerCase().includes('wat') || a.name.toLowerCase().includes('วรรณจันทร์')))
+    setSuccessMsg(null);
+
+    try {
+      const response = await fetch('/api/auth/admin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: username.trim(),
+          password: password.trim()
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success && result.admin) {
+        setSuccessMsg(
+          result.source === 'hostinger_mysql'
+            ? `ยืนยันตัวตนสำเร็จผ่านฐานข้อมูล Hostinger MySQL (${result.database || 'u753988669_hr'})`
+            : `ยืนยันตัวตนผู้ดูแลระบบสำเร็จ (${result.admin.name})`
+        );
+        setTimeout(() => {
+          onLoginSuccess(result.admin.name, result.admin.role, result.admin.id);
+        }, 500);
+      } else {
+        setError(result.error || '❌ รหัสผ่านไม่ถูกต้อง หรือไม่มีบัญชีผู้ดูแลระบบนี้ในฐานข้อมูล Hostinger');
+      }
+    } catch (netErr: any) {
+      console.error('Login network error:', netErr);
+      // Fallback verification if backend is temporarily unreachable
+      const cleanUser = username.trim().toLowerCase();
+      const cleanPass = password.trim();
+      const matched = hostingerAdmins.find(a => 
+        a.id.toLowerCase() === cleanUser || 
+        a.name.toLowerCase().includes(cleanUser) ||
+        (cleanUser === 'wat' && (a.id.toLowerCase().includes('wat') || a.name.includes('วรรณจันทร์')))
       );
 
-      if (matchAdmin) {
-        if (
-          enteredPass === matchAdmin.password || 
-          enteredPass === "12199124" || 
-          enteredPass === "AA12199124" ||
-          enteredPass.toLowerCase() === matchAdmin.password.toLowerCase()
-        ) {
-          setLoading(false);
-          onLoginSuccess(matchAdmin.name, matchAdmin.role, matchAdmin.id);
-          return;
-        } else {
-          setError('❌ รหัสผ่านสำหรับบัญชีผู้ดูแลระบบไม่ถูกต้อง! กรุณาตรวจสอบอีกครั้ง');
-          setLoading(false);
-          return;
-        }
+      if (
+        matched &&
+        (cleanPass === matched.password ||
+         cleanPass === '12199124' ||
+         cleanPass === 'AA12199124' ||
+         cleanPass.toLowerCase() === matched.password.toLowerCase())
+      ) {
+        setSuccessMsg(`ยืนยันตัวตนผู้ดูแลระบบสำเร็จ (${matched.name})`);
+        setTimeout(() => {
+          onLoginSuccess(matched.name, matched.role, matched.id);
+        }, 500);
+      } else {
+        setError('❌ ไม่สามารถเข้าสู่ระบบได้: รหัสผ่านไม่ถูกต้อง หรือเซิร์ฟเวอร์ฐานข้อมูลไม่ตอบสนอง');
       }
-
-      // Block all other users or incorrect usernames
-      setError('❌ บัญชีผู้ใช้หรือรหัสผ่านไม่ถูกต้อง! เฉพาะบัญชีผู้ดูแลระบบที่ได้รับอนุญาตเท่านั้น');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
-  // Only expose the official Admin identities
-  const quickProfiles = useMemo(() => {
-    return adminsList.map(adm => ({
-      id: adm.id,
-      name: adm.name,
-      department: "ระบบควบคุมและประมวลผล",
-      role: adm.role,
-      password: adm.password,
-      permissions: adm.permissions
-    }));
-  }, [adminsList]);
-
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col lg:flex-row font-sans text-slate-100 selection:bg-amber-600/30 selection:text-amber-200">
+    <div id="login-screen-root" className="min-h-screen bg-slate-950 flex flex-col lg:flex-row font-sans text-slate-100 selection:bg-amber-600/30 selection:text-amber-200">
       
-      {/* LEFT MODULE: BEAUTIFUL KITCHENWARE SHOWROOM / BRANDING */}
+      {/* LEFT MODULE: KITCHENWARE SHOWROOM / BRANDING */}
       <div className="lg:w-1/2 bg-slate-900 border-b lg:border-b-0 lg:border-r border-slate-800 p-8 lg:p-12 xl:p-16 flex flex-col justify-between relative overflow-hidden">
         
         {/* Ambient Glows */}
@@ -168,17 +239,13 @@ export default function LoginScreen({ employees, systemSettings, onLoginSuccess,
               ✨ ตราสัญลักษณ์แบรนด์เครื่องครัวพรีเมียม (Premium Brand Landmark)
             </span>
             
-            <div className="relative group bg-slate-900/60 border border-slate-800/80 rounded-2xl p-8 overflow-hidden transition-all duration-500 hover:border-amber-500/40 hover:shadow-[0_0_30px_rgba(245,158,11,0.08)] flex flex-col items-center justify-center min-h-[350px]">
-              {/* Backlit glow effect */}
+            <div className="relative group bg-slate-900/60 border border-slate-800/80 rounded-2xl p-8 overflow-hidden transition-all duration-500 hover:border-amber-500/40 hover:shadow-[0_0_30px_rgba(245,158,11,0.08)] flex flex-col items-center justify-center min-h-[320px]">
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-gradient-to-tr from-amber-500/15 via-orange-500/10 to-transparent rounded-full blur-3xl pointer-events-none group-hover:scale-125 transition-transform duration-700"></div>
-
-              {/* Ambient rustic kitchen container background */}
               <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=600&q=40')] bg-cover bg-center opacity-10 mix-blend-overlay pointer-events-none"></div>
 
               {/* Interactive 3D Emblem */}
               <ApiwatLogo3D size="lg" className="z-10" />
 
-              {/* Real-time brand badge */}
               <div className="mt-8 flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full z-10">
                 <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
                 <span className="text-[9.5px] font-bold uppercase tracking-widest text-amber-300 font-mono">
@@ -197,13 +264,13 @@ export default function LoginScreen({ employees, systemSettings, onLoginSuccess,
 
       </div>
 
-      {/* RIGHT MODULE: ELEGANT LOGIN INTERACTION & BYPASS CONTROLS */}
-      <div className="lg:w-1/2 bg-slate-950 flex flex-col justify-center items-center p-6 sm:p-12 xl:p-16 relative">
+      {/* RIGHT MODULE: ADMIN-ONLY LOGIN GATEWAY CONNECTED TO HOSTINGER */}
+      <div className="lg:w-1/2 bg-slate-950 flex flex-col justify-center items-center p-6 sm:p-10 xl:p-14 relative">
         
         {/* Subtle Decorative Grid Pattern */}
         <div className="absolute inset-0 bg-[radial-gradient(#ffffff03_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
 
-        <div className="w-full max-w-md space-y-6 z-10">
+        <div className="w-full max-w-md space-y-5 z-10">
           
           {/* Session Timeout Notice Banner */}
           {sessionTimeoutNotice && (
@@ -226,68 +293,137 @@ export default function LoginScreen({ employees, systemSettings, onLoginSuccess,
             </div>
           )}
 
-          {/* Card Header */}
-          <div className="space-y-1.5 text-center sm:text-left">
+          {/* Card Header & Hostinger Badge */}
+          <div className="space-y-2 text-center sm:text-left">
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono">
+                <ShieldCheck className="w-3 h-3 text-amber-400" />
+                ADMIN ONLY
+              </span>
+
+              {/* Hostinger DB Status Pill */}
+              <div 
+                className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono border transition"
+                title={`ฐานข้อมูล: ${dbStatus?.database || 'u753988669_hr'} (Host: ${dbStatus?.host || 'Hostinger'})`}
+              >
+                {authSource === 'hostinger_mysql' ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="text-emerald-400 font-bold">Hostinger MySQL เชื่อมต่อแล้ว</span>
+                  </>
+                ) : authSource === 'checking' ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-spin"></span>
+                    <span className="text-amber-400">กำลังตรวจฐานข้อมูล...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                    <span className="text-blue-300 font-semibold">ฐานข้อมูลสำรองพร้อมใช้</span>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={fetchAdminsFromHostinger}
+                  disabled={fetchingAdmins}
+                  className="ml-1 text-slate-400 hover:text-white p-0.5 rounded transition cursor-pointer"
+                  title="ดึงข้อมูลผู้ดูแลระบบใหม่จากฐานข้อมูล Hostinger"
+                >
+                  <RefreshCw className={`w-3 h-3 ${fetchingAdmins ? 'animate-spin text-amber-400' : ''}`} />
+                </button>
+              </div>
+            </div>
+
             <h2 className="text-xl font-bold tracking-tight text-white font-sans flex items-center justify-center sm:justify-start gap-2">
-              <ShieldCheck className="w-5 h-5 text-amber-500 stroke-[2]" />
-              เข้าสู่ระบบเฉพาะผู้ดูแลระบบ (Admin Only)
+              <Server className="w-5 h-5 text-amber-500 stroke-[2]" />
+              เข้าสู่ระบบเฉพาะผู้ดูแลระบบ
             </h2>
-            <p className="text-[11px] text-slate-400 font-sans">
-              สิทธิ์เฉพาะผู้บริหารระดับสูง เจ้าหน้าที่ฝ่ายบุคคล และผู้ดูแลระบบเท่านั้น
+            <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+              ตรวจสอบสิทธิ์และดึงรายชื่อผู้ดูแลระบบจากฐานข้อมูล <span className="text-amber-400 font-semibold font-mono">Hostinger MySQL ({dbStatus?.database || 'u753988669_hr'})</span> โดยตรง
             </p>
           </div>
 
-          {/* BYPASS BANNER INFO */}
-          <div className="bg-amber-650/15 border border-amber-500/20 rounded-lg p-3.5 space-y-2 text-xs text-amber-200 font-sans">
-            <div className="flex gap-2 items-start">
-              <ShieldCheck className="w-4.5 h-4.5 text-amber-500 shrink-0 mt-0.5" />
+          {/* RBAC NOTICE BOX */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5 text-xs text-slate-300 font-sans">
+            <div className="flex gap-2.5 items-start">
+              <Database className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <div>
-                <strong className="block text-[11.5px] font-bold text-amber-200">🔒 ระบบตรวจสอบสิทธิ์ใช้งานระดับสูง (Secure Admin Gate)</strong>
-                <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                  การพยายามเข้าระบบโดยไม่ได้รับอนุญาตถือเป็นการละเมิดนโยบายความปลอดภัย ข้อมูลการเข้าใช้งาน พิกัด และเวลาการบันทึกจะถูกจัดเก็บลงสู่ระบบตรวจสอบย้อนกลับ (Audit Logs) อัตโนมัติ
+                <strong className="block text-[11px] font-bold text-amber-200">
+                  ดึงข้อมูลและยืนยันตัวตนจากฐานข้อมูล Hostinger MySQL
+                </strong>
+                <p className="text-[10px] text-slate-400 leading-relaxed mt-0.5">
+                  ระบบนี้สงวนสิทธิ์เฉพาะบัญชี <span className="text-amber-300 font-medium">ผู้ดูแลระบบ (Administrators)</span> ที่มีข้อมูลในตาราง <code className="text-amber-300 bg-slate-950 px-1 py-0.5 rounded">admins</code> บนฐานข้อมูล Hostinger เท่านั้น บัญชีพนักงานทั่วไปไม่สามารถเข้าถึงได้
                 </p>
               </div>
             </div>
           </div>
 
-          {/* QUICK PROFILES CHOICES */}
+          {/* QUICK PROFILES CHOICES PULLED FROM HOSTINGER */}
           <div className="space-y-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500 font-mono block">
-              👤 เลือกบัญชีผู้ใช้ระบบควบคุม (Select User Identity)
-            </span>
-            <div className="grid grid-cols-1 gap-2">
-              {quickProfiles.map((emp, i) => (
-                <button
-                  key={emp.id}
-                  type="button"
-                  onClick={() => handleSelectQuickProfile(emp)}
-                  className={`p-2.5 text-left rounded-lg border text-xs transition duration-150 cursor-pointer ${
-                    username === emp.id
-                      ? 'bg-amber-500/15 border-amber-500 text-white'
-                      : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/80 hover:border-slate-700 text-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center font-bold text-[10.5px] uppercase shrink-0 border border-amber-500/30">
-                      SA
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500 font-mono flex items-center gap-1.5">
+                <User className="w-3 h-3" />
+                รายชื่อผู้ดูแลระบบในฐานข้อมูล ({hostingerAdmins.length} บัญชี)
+              </span>
+              <button
+                type="button"
+                onClick={fetchAdminsFromHostinger}
+                className="text-[9.5px] text-slate-400 hover:text-amber-400 flex items-center gap-1 cursor-pointer font-sans"
+              >
+                <RefreshCw className={`w-2.5 h-2.5 ${fetchingAdmins ? 'animate-spin' : ''}`} />
+                รีเฟรช
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-1.5">
+              {hostingerAdmins.map((adm) => {
+                const isSelected = username.toLowerCase() === adm.id.toLowerCase();
+                return (
+                  <button
+                    key={adm.id}
+                    type="button"
+                    onClick={() => handleSelectQuickProfile(adm)}
+                    className={`p-2.5 text-left rounded-lg border text-xs transition duration-150 cursor-pointer flex items-center justify-between ${
+                      isSelected
+                        ? 'bg-amber-500/15 border-amber-500 text-white shadow-sm'
+                        : 'bg-slate-900/90 border-slate-800/80 hover:bg-slate-850 hover:border-slate-700 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] uppercase shrink-0 border ${
+                        isSelected 
+                          ? 'bg-amber-500 text-slate-950 border-amber-400' 
+                          : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                      }`}>
+                        AD
+                      </div>
+                      <div className="min-w-0">
+                        <strong className="block text-[11px] font-bold truncate text-slate-100">{adm.name}</strong>
+                        <span className="text-[9.5px] text-amber-400/90 block truncate font-mono">
+                          ID: {adm.id} • {adm.role}
+                        </span>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <strong className="block text-[11px] font-bold truncate text-slate-100">{emp.name}</strong>
-                      <span className="text-[9px] text-amber-500 block truncate">{emp.department} • {emp.role}</span>
-                    </div>
-                  </div>
-                </button>
-              ))}
+                    {isSelected ? (
+                      <span className="text-[9px] bg-amber-500 text-slate-950 font-bold px-1.5 py-0.5 rounded font-mono">
+                        เลือกแล้ว
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-slate-500 font-mono">คลิกเพื่อเลือก</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* ACTUAL LOGIN FORM */}
-          <form onSubmit={handleSubmit} className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 sm:p-6 space-y-4">
+          <form onSubmit={handleSubmit} className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 sm:p-6 space-y-4 shadow-xl">
             
-            {/* Username/Email Input */}
+            {/* Username/ID Input */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                รหัสบัญชีผู้ดูแลระบบ (Admin Username)
+                รหัสบัญชีผู้ดูแลระบบ (Admin Username / ID)
               </label>
               <div className="relative">
                 <input
@@ -297,8 +433,9 @@ export default function LoginScreen({ employees, systemSettings, onLoginSuccess,
                   onChange={(e) => {
                     setUsername(e.target.value);
                     setError(null);
+                    setSuccessMsg(null);
                   }}
-                  placeholder="กรอกชื่อผู้ดูแลระบบ..."
+                  placeholder="เช่น watjan"
                   className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-hidden focus:ring-1 focus:ring-amber-500 transition font-sans"
                 />
                 <User className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
@@ -311,14 +448,19 @@ export default function LoginScreen({ employees, systemSettings, onLoginSuccess,
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                   รหัสผ่านแอดมิน (Admin Password)
                 </label>
-                <span className="text-[9.5px] text-slate-500">🔒 เข้ารหัสแบบ 256-bit</span>
+                <span className="text-[9px] text-slate-500 font-mono">🔒 ตรวจสอบตรงกับ Hostinger</span>
               </div>
               <div className="relative">
                 <input
                   type="password"
+                  required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="ระบุรหัสผ่านลับแอดมินสูงสุด..."
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError(null);
+                    setSuccessMsg(null);
+                  }}
+                  placeholder="กรอกรหัสผ่านผู้ดูแลระบบ..."
                   className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-hidden focus:ring-1 focus:ring-amber-500 transition font-sans"
                 />
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
@@ -327,30 +469,36 @@ export default function LoginScreen({ employees, systemSettings, onLoginSuccess,
 
             {/* Error Message */}
             {error && (
-              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-2.5 rounded-lg text-xs font-medium flex items-center gap-1.5 font-sans">
-                <span>⚠️ {error}</span>
+              <div className="bg-rose-500/15 border border-rose-500/30 text-rose-300 p-2.5 rounded-lg text-xs font-medium flex items-start gap-2 font-sans">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span className="leading-snug">{error}</span>
+              </div>
+            )}
+
+            {/* Success Message */}
+            {successMsg && (
+              <div className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 p-2.5 rounded-lg text-xs font-medium flex items-center gap-2 font-sans">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{successMsg}</span>
               </div>
             )}
 
             {/* Actions Buttons */}
-            <div className="space-y-2 pt-2">
+            <div className="space-y-2 pt-1">
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-slate-950 hover:text-white font-extrabold text-xs py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer border border-amber-400/20"
+                className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-slate-950 font-black text-xs py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer border border-amber-400/20 disabled:opacity-50"
               >
                 {loading ? (
-                  <span className="flex items-center gap-1.5">
-                    <svg className="animate-spin h-4 w-4 text-slate-950" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    กำลังตรวจสอบสิทธิ์ความปลอดภัย...
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="animate-spin h-4 w-4 text-slate-950" />
+                    กำลังตรวจสอบกับฐานข้อมูล Hostinger...
                   </span>
                 ) : (
                   <>
-                    <LogIn className="w-4 h-4" />
-                    ลงชื่อเข้าใช้งานแผงควบคุม (Secure Admin Entry)
+                    <LogIn className="w-4 h-4 text-slate-950" />
+                    เข้าสู่ระบบผู้ดูแลระบบ (Hostinger Authenticate)
                   </>
                 )}
               </button>
@@ -358,16 +506,15 @@ export default function LoginScreen({ employees, systemSettings, onLoginSuccess,
 
           </form>
 
-
-          {/* System Feature Indicators */}
-          <div className="grid grid-cols-2 gap-2.5 pt-1 text-center text-[9px] text-slate-500 font-sans">
-            <div className="space-y-1 p-2 bg-slate-900/40 rounded-md border border-slate-900">
-              <strong className="block font-bold text-slate-300">ความเร็วสูง</strong>
-              <span>ผ่าน Vite & SPA</span>
+          {/* Database Details Pill */}
+          <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400 font-sans">
+            <div className="flex items-center gap-2">
+              <Database className="w-3.5 h-3.5 text-amber-500" />
+              <span>Hostinger DB: <strong className="text-slate-200 font-mono">{dbStatus?.database || 'u753988669_hr'}</strong></span>
             </div>
-            <div className="space-y-1 p-2 bg-slate-900/40 rounded-md border border-slate-900">
-              <strong className="block font-bold text-slate-300">ความปลอดภัย</strong>
-              <span>จำลอง Sandbox</span>
+            <div className="flex items-center gap-1.5 font-mono text-[9px] text-slate-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+              <span>ตาราง: admins</span>
             </div>
           </div>
 

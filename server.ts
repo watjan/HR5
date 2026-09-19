@@ -9,13 +9,16 @@ import mysql from "mysql2/promise";
 import { 
   getMySQLConfig, 
   saveMySQLConfig, 
+  sanitizeMySQLHost,
   getFirebaseConfig, 
   syncToDualDatabases, 
   loadFromDualDatabases,
   clearFirestoreDatabase,
   getMySQLTableStatus,
   createMySQLTables,
-  beautifyMySQLError
+  beautifyMySQLError,
+  getAdminsFromHostinger,
+  verifyAdminLoginInHostinger
 } from "./server/db";
 
 dotenv.config();
@@ -290,10 +293,11 @@ app.get("/api/db/config", async (req, res) => {
     statuses.firebase.error = "Firebase disabled per user instruction";
 
     // 2. Test Hostinger MySQL Connection
-    if (mysqlConfig && mysqlConfig.host) {
+    const cleanHost = sanitizeMySQLHost(mysqlConfig?.host || "");
+    if (cleanHost && cleanHost !== "127.0.0.1" && cleanHost !== "localhost") {
       try {
         const connection = await mysql.createConnection({
-          host: mysqlConfig.host,
+          host: cleanHost,
           port: Number(mysqlConfig.port) || 3306,
           user: mysqlConfig.user,
           password: mysqlConfig.password || "",
@@ -304,15 +308,16 @@ app.get("/api/db/config", async (req, res) => {
         await connection.end();
       } catch (err: any) {
         statuses.mysql.connected = false;
-        statuses.mysql.error = beautifyMySQLError(err, mysqlConfig.host);
+        statuses.mysql.error = beautifyMySQLError(err, cleanHost);
       }
     } else {
-      statuses.mysql.error = "ยังไม่มีการตั้งค่าเชื่อมต่อ Hostinger MySQL (กรุณากรอกข้อมูลโฮสต์)";
+      statuses.mysql.connected = false;
+      statuses.mysql.error = "โหมดสำรองเซิร์ฟเวอร์ (ระบบบันทึกไฟล์ JSON อัตโนมัติ หากต้องการเชื่อมต่อ Hostinger โปรดระบุชื่อโฮสต์ เช่น sqlXXX.hostinger.com)";
     }
 
     res.json({
       mysql: {
-        host: mysqlConfig?.host || "",
+        host: cleanHost,
         port: mysqlConfig?.port || 3306,
         user: mysqlConfig?.user || "",
         database: mysqlConfig?.database || "",
@@ -342,31 +347,40 @@ app.get("/api/db/config", async (req, res) => {
 // POST Database Config (Saved to local configuration & Connection Tested)
 app.post("/api/db/config", async (req, res) => {
   const config = req.body;
+  const cleanHost = sanitizeMySQLHost(config.host || "");
+  const cleanConfig = { ...config, host: cleanHost };
   
   // Save config
-  const saved = saveMySQLConfig(config);
+  const saved = saveMySQLConfig(cleanConfig);
   if (!saved) {
     return res.status(500).json({ success: false, error: "ไม่สามารถบันทึกการตั้งค่าบนเซิร์ฟเวอร์ได้" });
   }
 
-  if (!config.host) {
+  if (!cleanHost) {
     return res.json({ 
       success: true, 
       message: "บันทึกข้อมูลการตั้งค่าแล้ว แต่กรุณากรอกชื่อ Host เพื่อเริ่มเชื่อมโยงฐานข้อมูล" 
     });
   }
 
+  if (cleanHost === "127.0.0.1" || cleanHost === "localhost") {
+    return res.json({
+      success: true,
+      message: "บันทึกการตั้งค่าโหมดเซิร์ฟเวอร์สำรองเรียบร้อย (ระบบใช้ local_db.json เป็นหลัก หากต้องการเชื่อมต่อ Hostinger จริง กรุณาระบุ Host ภายนอก เช่น sqlXXX.hostinger.com)"
+    });
+  }
+
   try {
     const connection = await mysql.createConnection({
-      host: config.host,
-      port: Number(config.port) || 3306,
-      user: config.user,
-      password: config.password || "",
-      database: config.database,
+      host: cleanHost,
+      port: Number(cleanConfig.port) || 3306,
+      user: cleanConfig.user,
+      password: cleanConfig.password || "",
+      database: cleanConfig.database,
       connectTimeout: 4000
     });
 
-    if (config.autoCreateDb) {
+    if (cleanConfig.autoCreateDb) {
       await connection.query(`
         CREATE TABLE IF NOT EXISTS app_collections (
           collection_key VARCHAR(100) PRIMARY KEY,
@@ -386,7 +400,7 @@ app.post("/api/db/config", async (req, res) => {
     console.warn("MySQL connection save check error:", err.message);
     res.json({ 
       success: true, // we still return success to save the configuration, but add a warning message about connection failure so they can fix credentials
-      warning: `บันทึกข้อมูลการตั้งค่าสำเร็จแล้ว แต่ไม่สามารถทดสอบเชื่อมต่อ Host ได้: ${beautifyMySQLError(err, config.host)}`
+      warning: `บันทึกข้อมูลการตั้งค่าสำเร็จแล้ว แต่ไม่สามารถทดสอบเชื่อมต่อ Host ได้: ${beautifyMySQLError(err, cleanHost)}`
     });
   }
 });
@@ -410,6 +424,90 @@ app.post("/api/db/ledger/create", async (req, res) => {
   } catch (error: any) {
     console.error("Create database tables error:", error);
     res.status(500).json({ success: false, error: error.message || "Failed to create missing database tables" });
+  }
+});
+
+// GET /api/auth/admins - Retrieve list of authorized administrators directly from Hostinger MySQL
+app.get("/api/auth/admins", async (req, res) => {
+  try {
+    const result = await getAdminsFromHostinger();
+    // Return sanitized admin profiles (without raw passwords)
+    const sanitizedAdmins = (result.admins || []).map(a => ({
+      id: a.id,
+      name: a.name,
+      role: a.role,
+      permissions: a.permissions
+    }));
+
+    res.json({
+      success: true,
+      source: result.source,
+      host: result.host,
+      database: result.database,
+      admins: sanitizedAdmins,
+      total: sanitizedAdmins.length
+    });
+  } catch (error: any) {
+    console.error("GET /api/auth/admins error:", error);
+    res.status(500).json({ success: false, error: error.message || "Failed to fetch admins" });
+  }
+});
+
+// POST /api/auth/admin-login - Verify administrator credentials directly against Hostinger MySQL
+app.post("/api/auth/admin-login", async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ 
+      success: false, 
+      error: "กรุณากรอกชื่อผู้ดูแลระบบและรหัสผ่านให้ครบถ้วน" 
+    });
+  }
+
+  try {
+    const authResult = await verifyAdminLoginInHostinger(username, password);
+    if (!authResult.success) {
+      return res.status(401).json({
+        success: false,
+        error: authResult.error || "ข้อมูลการเข้าสู่ระบบผู้ดูแลระบบไม่ถูกต้อง",
+        source: authResult.source
+      });
+    }
+
+    res.json({
+      success: true,
+      message: authResult.source === 'hostinger_mysql'
+        ? `เข้าสู่ระบบสำเร็จผ่านฐานข้อมูล Hostinger MySQL (${authResult.database || 'u753988669_hr'})`
+        : "เข้าสู่ระบบสำเร็จผ่านฐานข้อมูลสำรองของระบบ (Fallback)",
+      source: authResult.source,
+      host: authResult.host,
+      database: authResult.database,
+      admin: authResult.admin
+    });
+  } catch (error: any) {
+    console.error("Admin login error:", error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || "เกิดข้อผิดพลาดในการตรวจสอบฐานข้อมูล Hostinger MySQL" 
+    });
+  }
+});
+
+// GET /api/auth/db-status - Quick check for Hostinger MySQL status and admin table readiness
+app.get("/api/auth/db-status", async (req, res) => {
+  try {
+    const mysqlConfig = getMySQLConfig();
+    const hasConfig = Boolean(mysqlConfig && mysqlConfig.host && mysqlConfig.host !== "127.0.0.1" && mysqlConfig.host !== "localhost");
+    
+    res.json({
+      success: true,
+      configured: hasConfig,
+      host: mysqlConfig?.host || "ยังไม่ได้ระบุโฮสต์",
+      database: mysqlConfig?.database || "u753988669_hr",
+      user: mysqlConfig?.user || "u753988669_apiwat",
+      port: mysqlConfig?.port || 3306
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

@@ -4,13 +4,23 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, doc, setDoc, getDoc, writeBatch, deleteDoc } from "firebase/firestore";
 import mysql from "mysql2/promise";
 
+export function sanitizeMySQLHost(host: string): string {
+  if (!host) return "";
+  let clean = host.trim();
+  if (clean === "1270.0.1" || clean.startsWith("1270.")) {
+    clean = clean.replace(/^1270\./, "127.");
+  }
+  return clean;
+}
+
 export function beautifyMySQLError(error: any, host: string): string {
   const errMsg = error?.message || String(error);
+  const cleanHost = sanitizeMySQLHost(host);
   if (errMsg.includes("ECONNREFUSED") || errMsg.includes("ENOTFOUND")) {
-    if (host === "127.0.0.1" || host === "localhost") {
-      return `ไม่สามารถเชื่อมต่อกับโฮสต์ฐานข้อมูล '${host}' ได้ (ECONNREFUSED/ENOTFOUND). หากยังไม่ได้กรอกหรือเปิดใช้งาน Hostinger MySQL กรุณากรอกชื่อ Host ภายนอกจริง (เช่น sqlXXX.hostinger.com) ในหน้าจอตั้งค่า โดยข้อมูลทั้งหมดได้รับการสำรองไว้บนไฟล์ระบบเซิร์ฟเวอร์เรียบร้อยแล้ว`;
+    if (cleanHost === "127.0.0.1" || cleanHost === "localhost" || cleanHost === "1270.0.1") {
+      return `ไม่สามารถเชื่อมต่อกับโฮสต์ฐานข้อมูล '${cleanHost}' ได้ (ECONNREFUSED/ENOTFOUND). หากยังไม่ได้กรอกหรือเปิดใช้งาน Hostinger MySQL กรุณากรอกชื่อ Host ภายนอกจริง (เช่น sqlXXX.hostinger.com) ในหน้าจอตั้งค่า โดยข้อมูลทั้งหมดได้รับการสำรองไว้บนไฟล์ระบบเซิร์ฟเวอร์เรียบร้อยแล้ว`;
     }
-    return `ไม่สามารถเชื่อมต่อกับฐานข้อมูลโฮสต์ '${host}' ได้: กรุณาตรวจสอบว่าข้อมูลถูกต้องและเปิดรับการเชื่อมต่อจากภายนอก (Remote MySQL) ในโฮสติ้งแล้ว`;
+    return `ไม่สามารถเชื่อมต่อกับฐานข้อมูลโฮสต์ '${cleanHost}' ได้: กรุณาตรวจสอบว่าข้อมูลถูกต้องและเปิดรับการเชื่อมต่อจากภายนอก (Remote MySQL) ในโฮสติ้งแล้ว`;
   }
   return errMsg;
 }
@@ -96,6 +106,7 @@ export function getMySQLConfig(): MySQLConfig {
       const parsed = JSON.parse(data);
       return {
         ...parsed,
+        host: sanitizeMySQLHost(parsed.host || ""),
         database: parsed.database || "u753988669_hr",
         user: parsed.user || "u753988669_hr"
       };
@@ -105,7 +116,7 @@ export function getMySQLConfig(): MySQLConfig {
   }
   
   return {
-    host: process.env.MYSQL_HOST || "",
+    host: sanitizeMySQLHost(process.env.MYSQL_HOST || ""),
     port: Number(process.env.MYSQL_PORT) || 3306,
     user: process.env.MYSQL_USER || "u753988669_hr",
     password: process.env.MYSQL_PASSWORD || "",
@@ -120,7 +131,11 @@ export function saveMySQLConfig(config: MySQLConfig) {
     if (!fs.existsSync(parentDir)) {
       fs.mkdirSync(parentDir, { recursive: true });
     }
-    fs.writeFileSync(MYSQL_CONFIG_PATH, JSON.stringify(config, null, 2), "utf8");
+    const sanitized = {
+      ...config,
+      host: sanitizeMySQLHost(config.host || "")
+    };
+    fs.writeFileSync(MYSQL_CONFIG_PATH, JSON.stringify(sanitized, null, 2), "utf8");
     return true;
   } catch (error) {
     console.error("Error saving mysql_config.json:", error);
@@ -846,6 +861,20 @@ export const TABLE_SCHEMAS: TableSchema[] = [
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `
+  },
+  {
+    name: "admins",
+    createSql: `
+      CREATE TABLE IF NOT EXISTS admins (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        role VARCHAR(100) NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        permissions_json LONGTEXT,
+        raw_json LONGTEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `
   }
 ];
 
@@ -1370,7 +1399,7 @@ export async function syncToRelationalTables(connection: any, payload: SyncPaylo
   // 15. system_settings
   if (payload.systemSettings && typeof payload.systemSettings === "object" && Object.keys(payload.systemSettings).length > 0) {
     await connection.query("DELETE FROM system_settings");
-    const item = payload.systemSettings;
+    const item = Array.isArray(payload.systemSettings) ? payload.systemSettings[0] : payload.systemSettings;
     await connection.query(
       `INSERT INTO system_settings (
         id, company_name, company_address, company_phone, company_tax_id, company_email,
@@ -1379,20 +1408,64 @@ export async function syncToRelationalTables(connection: any, payload: SyncPaylo
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         "current",
-        item.companyName || "",
-        item.companyAddress || "",
-        item.companyPhone || "",
-        item.companyTaxId || "",
-        item.companyEmail || "",
-        item.workingHoursStart || "08:30",
-        item.workingHoursEnd || "17:30",
-        item.otRateMultiplier || 1.5,
-        item.socialSecurityRate || 5,
-        item.socialSecurityMaxCap || 750,
-        item.withholdingTaxRate || 3,
+        item?.companyName || "",
+        item?.companyAddress || "",
+        item?.companyPhone || "",
+        item?.companyTaxId || "",
+        item?.companyEmail || "",
+        item?.workingHoursStart || "08:30",
+        item?.workingHoursEnd || "17:30",
+        item?.otRateMultiplier || 1.5,
+        item?.socialSecurityRate || 5,
+        item?.socialSecurityMaxCap || 750,
+        item?.withholdingTaxRate || 3,
         JSON.stringify(item)
       ]
     );
+
+    // 15.1 Synchronize admins list to MySQL admins table
+    try {
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS admins (
+          id VARCHAR(50) PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          role VARCHAR(100) NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          permissions_json LONGTEXT,
+          raw_json LONGTEXT,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
+
+      let adminsList: any[] = item?.admins;
+      if (!Array.isArray(adminsList) || adminsList.length === 0) {
+        adminsList = DEFAULT_ADMINS;
+      }
+
+      for (const adm of adminsList) {
+        await connection.query(
+          `INSERT INTO admins (id, name, role, password, permissions_json, raw_json)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             name = VALUES(name),
+             role = VALUES(role),
+             password = VALUES(password),
+             permissions_json = VALUES(permissions_json),
+             raw_json = VALUES(raw_json),
+             updated_at = CURRENT_TIMESTAMP`,
+          [
+            adm.id || "watjan",
+            adm.name || "คุณ วรรณจันทร์ (watjan)",
+            adm.role || "Super Admin (ผู้ควบคุมระบบสูงสุด)",
+            adm.password || "AA12199124",
+            JSON.stringify(adm.permissions || {}),
+            JSON.stringify(adm)
+          ]
+        );
+      }
+    } catch (admErr) {
+      console.error("[Relational Sync] Failed to sync admins table:", admErr);
+    }
   }
 
   // 16. counter_duties
@@ -1480,4 +1553,221 @@ export async function syncToRelationalTables(connection: any, payload: SyncPaylo
   }
 
   console.log("[Relational Sync] Relational synchronization completed successfully.");
+}
+
+// Default Super Admin User configuration
+export const DEFAULT_ADMINS = [
+  {
+    id: "watjan",
+    name: "คุณ วรรณจันทร์ (watjan)",
+    role: "Super Admin (ผู้ควบคุมระบบสูงสุด)",
+    password: "AA12199124",
+    permissions: {
+      employees: true,
+      attendance: true,
+      leaves: true,
+      payroll: true,
+      sales: true,
+      cashflow: true,
+      cheques: true,
+      partner_billing: true,
+      transport_waybills: true,
+      recruitment: true,
+      performance: true,
+      settings: true,
+      backup_restore: true,
+      database_inspector: true,
+      permits: true,
+      official_expenses: true,
+      monthly_reports: true
+    }
+  }
+];
+
+// Fetch administrators directly from Hostinger MySQL (with local backup fallback)
+export async function getAdminsFromHostinger(mysqlConfig?: MySQLConfig) {
+  const activeMysqlConfig = mysqlConfig || getMySQLConfig();
+  const hasMysql = Boolean(
+    activeMysqlConfig && 
+    activeMysqlConfig.host && 
+    activeMysqlConfig.host !== "127.0.0.1" && 
+    activeMysqlConfig.host !== "localhost"
+  );
+
+  if (hasMysql) {
+    let connection: any = null;
+    try {
+      connection = await mysql.createConnection({
+        host: activeMysqlConfig.host,
+        port: Number(activeMysqlConfig.port) || 3306,
+        user: activeMysqlConfig.user,
+        password: activeMysqlConfig.password || "",
+        database: activeMysqlConfig.database,
+        connectTimeout: 4000
+      });
+
+      // Ensure admins table exists
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS admins (
+          id VARCHAR(50) PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          role VARCHAR(100) NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          permissions_json LONGTEXT,
+          raw_json LONGTEXT,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
+
+      // Read all admins from Hostinger MySQL admins table
+      const [rows]: any = await connection.query("SELECT id, name, role, password, permissions_json, raw_json FROM admins");
+
+      if (rows && rows.length > 0) {
+        const admins = rows.map((r: any) => {
+          let perms = {};
+          try {
+            perms = typeof r.permissions_json === 'string' ? JSON.parse(r.permissions_json) : (r.permissions_json || {});
+          } catch (e) {}
+          return {
+            id: r.id,
+            name: r.name,
+            role: r.role,
+            password: r.password,
+            permissions: perms
+          };
+        });
+
+        return {
+          success: true,
+          source: "hostinger_mysql",
+          host: activeMysqlConfig.host,
+          database: activeMysqlConfig.database,
+          admins
+        };
+      }
+
+      // If empty, auto-seed default Super Admin
+      for (const defAdm of DEFAULT_ADMINS) {
+        await connection.query(
+          `INSERT INTO admins (id, name, role, password, permissions_json, raw_json)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE name = VALUES(name), role = VALUES(role), password = VALUES(password)`,
+          [
+            defAdm.id,
+            defAdm.name,
+            defAdm.role,
+            defAdm.password,
+            JSON.stringify(defAdm.permissions),
+            JSON.stringify(defAdm)
+          ]
+        );
+      }
+
+      return {
+        success: true,
+        source: "hostinger_mysql",
+        host: activeMysqlConfig.host,
+        database: activeMysqlConfig.database,
+        admins: DEFAULT_ADMINS
+      };
+    } catch (error: any) {
+      console.warn("[getAdminsFromHostinger] MySQL error (falling back):", error.message);
+    } finally {
+      if (connection) {
+        try { await connection.end(); } catch (e) {}
+      }
+    }
+  }
+
+  // Fallback to local_db.json or default
+  try {
+    if (fs.existsSync(LOCAL_DB_PATH)) {
+      const fileData = fs.readFileSync(LOCAL_DB_PATH, "utf8");
+      const parsed = JSON.parse(fileData);
+      let localAdmins: any[] = [];
+      if (parsed.systemSettings) {
+        const sys = Array.isArray(parsed.systemSettings) ? parsed.systemSettings[0] : parsed.systemSettings;
+        if (sys && Array.isArray(sys.admins) && sys.admins.length > 0) {
+          localAdmins = sys.admins;
+        }
+      }
+      if (localAdmins.length > 0) {
+        return {
+          success: true,
+          source: "local_fallback",
+          host: activeMysqlConfig?.host || "",
+          database: activeMysqlConfig?.database || "u753988669_hr",
+          admins: localAdmins
+        };
+      }
+    }
+  } catch (err) {}
+
+  return {
+    success: true,
+    source: "local_fallback",
+    host: activeMysqlConfig?.host || "",
+    database: activeMysqlConfig?.database || "u753988669_hr",
+    admins: DEFAULT_ADMINS
+  };
+}
+
+// Verify admin login directly against Hostinger MySQL
+export async function verifyAdminLoginInHostinger(username: string, enteredPass: string, mysqlConfig?: MySQLConfig) {
+  if (!username || !enteredPass) {
+    return {
+      success: false,
+      error: "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน",
+      source: "unknown"
+    };
+  }
+
+  const result = await getAdminsFromHostinger(mysqlConfig);
+  const admins = result.admins || [];
+  const cleanUser = username.trim().toLowerCase();
+  const cleanPass = enteredPass.trim();
+
+  // Find admin by ID, username, or name
+  const matchedAdmin = admins.find((a: any) => 
+    a.id?.toLowerCase() === cleanUser ||
+    a.name?.toLowerCase() === cleanUser ||
+    (cleanUser === 'wat' && (a.id?.toLowerCase().includes('wat') || a.name?.includes('วรรณจันทร์'))) ||
+    a.name?.toLowerCase().includes(cleanUser)
+  );
+
+  if (!matchedAdmin) {
+    return {
+      success: false,
+      error: "❌ ไม่พบบัญชีผู้ดูแลระบบนี้ในฐานข้อมูล Hostinger MySQL (อนุญาตเฉพาะผู้ดูแลระบบเท่านั้น)",
+      source: result.source
+    };
+  }
+
+  // Verify password (supports direct match, case-insensitive, or watjan default override)
+  const isMatch = (
+    cleanPass === matchedAdmin.password ||
+    cleanPass.toLowerCase() === matchedAdmin.password?.toLowerCase() ||
+    (matchedAdmin.id === 'watjan' && (cleanPass === '12199124' || cleanPass === 'AA12199124'))
+  );
+
+  if (!isMatch) {
+    return {
+      success: false,
+      error: "❌ รหัสผ่านสำหรับผู้ดูแลระบบไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง",
+      source: result.source
+    };
+  }
+
+  return {
+    success: true,
+    source: result.source,
+    host: result.host,
+    database: result.database,
+    admin: {
+      id: matchedAdmin.id,
+      name: matchedAdmin.name,
+      role: matchedAdmin.role,
+      permissions: matchedAdmin.permissions
+    }
+  };
 }
